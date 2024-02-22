@@ -3,6 +3,30 @@ import qutip as qt
 from scipy.linalg import expm
 from joblib import Parallel, delayed
 
+def make_noise_mat_arr(act, **kwargs):
+    spec_vec = kwargs.get('spec_vec')
+    t_vec = kwargs.get('t_vec')
+    w_grain = kwargs.get('w_grain')
+    wmax = kwargs.get('wmax')
+    truncate = kwargs.get('truncate')
+    gamma = kwargs.get('gamma')
+    gamma_12 = kwargs.get('gamma_12')
+    if act == 'load':
+        return np.load('noise_mats.npy', allow_pickle=True)
+    elif act == 'make':
+        S, C = make_noise_mat(spec_vec[0], t_vec, w_grain = w_grain, wmax = wmax, trunc_n = truncate, gamma = 0)
+        Sg, Cg = make_noise_mat(spec_vec[0], t_vec, w_grain = w_grain, wmax = wmax, trunc_n = truncate, gamma = gamma)
+        S_12, C_12 = make_noise_mat(spec_vec[1], t_vec, w_grain = w_grain, wmax = wmax, trunc_n = truncate, gamma = 0)
+        Sg_12, Cg_12 = make_noise_mat(spec_vec[1], t_vec, w_grain = w_grain, wmax = wmax, trunc_n = truncate,
+                                      gamma = gamma_12)
+        return np.array([[S, C], [Sg, Cg], [S_12, C_12], [Sg_12, Cg_12]])
+    elif act == 'save':
+        mats = make_noise_mat_arr('make', **kwargs)
+        np.save('noise_mats.npy', mats)
+        return mats
+    else:
+        raise Exception("Invalid action input")
+
 def make_noise_mat(spec_vec, t_vec, **kwargs):
     w_grain = kwargs.get('w_grain')
     wmax = kwargs.get('wmax')
@@ -87,7 +111,27 @@ def cpmg(t, n):
     return f(t, tk)
 
 def cdd1(t, n):
-    return
+    ct = np.linspace(0., t[-1]/n, int(t.shape[0]/n))
+    n = int(t[-1]/ct[-1])
+    tk = [(k+1)*(t[-1])/(2*n) for k in range(int(2*n-1))]
+    tk.append(t[-1])
+    tk.insert(0,0.)
+    return f(t, tk)
+
+def prim_cycle(ct):
+    t = ct
+    tk1 = [(k+0.5)*t[-1]/(4*m) for k in range(int(2))]
+    tk1.insert(0,0.)
+    tk1 = np.array(tk1)
+    tk2 = tk1 + t[-1]/2
+    tk2 = np.concatenate((tk2, [t[-1]]))
+    tk = np.concatenate((tk1, tk2))
+    return -f(t,tk)
+
+def cdd3(t, m):
+    if m == 1:
+        return prim_cycle(t)
+    return np.tile(prim_cycle(t[:int(t.shape[0]/m)]), m)
 
 def make_y(t_b, pulse, **kwargs):
     ctime = kwargs.get('ctime')
@@ -96,13 +140,13 @@ def make_y(t_b, pulse, **kwargs):
     y = np.zeros((3,3,np.size(t_b)))
     for i in range(2):
         if pulse[i] == 'CPMG':
-            y[i,i] = cpmg(t_b, n)
+            y[i, i] = cpmg(t_b, n)
         elif pulse[i] == 'CDD1':
-            pass
+            y[i, i] = cdd1(t_b, n)
         elif pulse[i] == 'CDD3':
-            pass
+            y[i, i] = cdd3(t_b, n)
         elif pulse[i] == 'FID':
-            y[i,i] = np.ones(np.size(t_b))
+            y[i, i] = np.ones(np.size(t_b))
         else:
             raise Exception("Invalid pulse input")
     y[2,2] = np.multiply(y[1,1], y[0,0])
@@ -139,24 +183,47 @@ def make_propagator(H_t, t_vec):
     U = expm(np.trapz(integrand, t_vec, axis=0))
     return U
 
+def single_shot_prop(noise_mats, t_vec, y_uv, rho0, rho_B):
+    S, C = noise_mats[0,0], noise_mats[0,1]
+    Sg, Cg = noise_mats[1,0], noise_mats[1,1]
+    S_12, C_12 = noise_mats[2,0], noise_mats[2,1]
+    Sg_12, Cg_12 = noise_mats[3,0], noise_mats[3,1]
+    b_t, b_t_g = make_noise_traj([S, Sg], [C, Cg])
+    b_t_12, b_t_g_12 = make_noise_traj([S_12, Sg_12], [C_12, Cg_12])
+    rho = qt.tensor(rho0, rho_B)
+    H_t = make_Hamiltonian(y_uv, [b_t, b_t_g, b_t_12, b_t_g_12])
+    U = make_propagator(H_t, t_vec)
+    rho_MT = U @ rho.full() @ U.conjugate().transpose()
+    return qt.Qobj(rho_MT, dims = [[2,2,2],[2,2,2]])
+
+# def solver_prop(y_uv, noise_mats, t_vec, **kwargs):
+#     n_shots = kwargs.get('n_shots')
+#     state = kwargs.get('state')
+#     a_sp = kwargs.get('a_sp')
+#     c = kwargs.get('c')
+#     S, C = noise_mats[0,0], noise_mats[0,1]
+#     Sg, Cg = noise_mats[1,0], noise_mats[1,1]
+#     S_12, C_12 = noise_mats[2,0], noise_mats[2,1]
+#     Sg_12, Cg_12 = noise_mats[3,0], noise_mats[3,1]
+#     rho0 = make_init_state(a_sp, c, state = state)
+#     rho_B = qt.basis(2, 0) * qt.basis(2, 0).dag()
+#     output = []
+#     for i in range(n_shots):
+#         b_t, b_t_g = make_noise_traj([S, Sg], [C, Cg])
+#         b_t_12, b_t_g_12 = make_noise_traj([S_12, Sg_12], [C_12, Cg_12])
+#         rho = qt.tensor(rho0, rho_B)
+#         H_t = make_Hamiltonian(y_uv, [b_t, b_t_g, b_t_12, b_t_g_12])
+#         U = make_propagator(H_t, t_vec)
+#         rho_MT = U @ rho.full() @ U.conjugate().transpose()
+#         output.append(qt.Qobj(rho_MT, dims = [[2,2,2],[2,2,2]]))
+#     return output
+
 def solver_prop(y_uv, noise_mats, t_vec, **kwargs):
     n_shots = kwargs.get('n_shots')
     state = kwargs.get('state')
     a_sp = kwargs.get('a_sp')
     c = kwargs.get('c')
-    S, C = noise_mats[0,0], noise_mats[0,1]
-    Sg, Cg = noise_mats[1,0], noise_mats[1,1]
-    S_12, C_12 = noise_mats[2,0], noise_mats[2,1]
-    Sg_12, Cg_12 = noise_mats[3,0], noise_mats[3,1]
     rho0 = make_init_state(a_sp, c, state = state)
     rho_B = qt.basis(2, 0) * qt.basis(2, 0).dag()
-    output = []
-    for i in range(n_shots):
-        b_t, b_t_g = make_noise_traj([S, Sg], [C, Cg])
-        b_t_12, b_t_g_12 = make_noise_traj([S_12, Sg_12], [C_12, Cg_12])
-        rho = qt.tensor(rho0, rho_B)
-        H_t = make_Hamiltonian(y_uv, [b_t, b_t_g, b_t_12, b_t_g_12])
-        U = make_propagator(H_t, t_vec)
-        rho_MT = U @ rho @ U.conjugate().transpose()
-        output.append(qt.Qobj(rho_MT))
+    output = Parallel(n_jobs = 24, verbose=0)(delayed(single_shot_prop)(noise_mats, t_vec, y_uv, rho0, rho_B) for i in range(n_shots))
     return output
