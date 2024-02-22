@@ -1,6 +1,6 @@
 import numpy as np
 import qutip as qt
-from trajectories import solver, make_y
+from trajectories import make_y
 
 def E_X(qubit, state, a_m, delta):
     rho_s = []
@@ -59,7 +59,7 @@ def D(pm, expec):
     else:
         raise Exception("Invalid pm input")
 
-def make_C_12_0_MT(pulse, noise_mats, t_vec, c_times, **kwargs):
+def make_C_12_0_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     n_shots = kwargs.get('n_shots')
     M = kwargs.get('M')
     t_b = kwargs.get('t_b')
@@ -68,22 +68,22 @@ def make_C_12_0_MT(pulse, noise_mats, t_vec, c_times, **kwargs):
     C_12_0_MT = np.zeros(np.size(c_times))
     for i in range(np.size(c_times)):
         y_uv = make_y(t_b, pulse, ctime=c_times[i], M=M)
-        sol = solver(y_uv, noise_mats, t_vec, **kwargs)
+        sol = solver_ftn(y_uv, noise_mats, t_vec, **kwargs)
         state_vec = np.array([sol[i].states[-1] for i in range(n_shots)])
         EX1X2 = E_XX(state_vec, a_m, delta)
-        sol = solver(y_uv, noise_mats, t_vec, **kwargs)
+        sol = solver_ftn(y_uv, noise_mats, t_vec, **kwargs)
         state_vec = np.array([sol[i].states[-1] for i in range(n_shots)])
         EY1Y2 = E_YY(state_vec, a_m, delta)
-        sol = solver(y_uv, noise_mats, t_vec, **kwargs)
+        sol = solver_ftn(y_uv, noise_mats, t_vec, **kwargs)
         state_vec = np.array([sol[i].states[-1] for i in range(n_shots)])
         EX1Y2 = E_XY(state_vec, a_m, delta)
-        sol = solver(y_uv, noise_mats, t_vec, **kwargs)
+        sol = solver_ftn(y_uv, noise_mats, t_vec, **kwargs)
         state_vec = np.array([sol[i].states[-1] for i in range(n_shots)])
         EY1X2 = E_YX(state_vec, a_m, delta)
         C_12_0_MT[i] = D('+', (EX1X2, EY1Y2, EX1Y2, EY1X2)) + D('-', (EX1X2, EY1Y2, EX1Y2, EY1X2))
     return C_12_0_MT
 
-def make_C_12_12_MT(pulse, noise_mats, t_vec, c_times, **kwargs):
+def make_C_12_12_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     n_shots = kwargs.get('n_shots')
     M = kwargs.get('M')
     t_b = kwargs.get('t_b')
@@ -92,22 +92,22 @@ def make_C_12_12_MT(pulse, noise_mats, t_vec, c_times, **kwargs):
     C_12_12_MT = np.zeros(np.size(c_times))
     for i in range(np.size(c_times)):
         y_uv = make_y(t_b, pulse, ctime=c_times[i], M=M)
-        sol = solver(y_uv, noise_mats, t_vec, **kwargs)
+        sol = solver_ftn(y_uv, noise_mats, t_vec, **kwargs)
         state_vec = np.array([sol[i].states[-1] for i in range(n_shots)])
         EX1X2 = E_XX(state_vec, a_m, delta)
-        sol = solver(y_uv, noise_mats, t_vec, **kwargs)
+        sol = solver_ftn(y_uv, noise_mats, t_vec, **kwargs)
         state_vec = np.array([sol[i].states[-1] for i in range(n_shots)])
         EY1Y2 = E_YY(state_vec, a_m, delta)
-        sol = solver(y_uv, noise_mats, t_vec, **kwargs)
+        sol = solver_ftn(y_uv, noise_mats, t_vec, **kwargs)
         state_vec = np.array([sol[i].states[-1] for i in range(n_shots)])
         EX1Y2 = E_XY(state_vec, a_m, delta)
-        sol = solver(y_uv, noise_mats, t_vec, **kwargs)
+        sol = solver_ftn(y_uv, noise_mats, t_vec, **kwargs)
         state_vec = np.array([sol[i].states[-1] for i in range(n_shots)])
         EY1X2 = E_YX(state_vec, a_m, delta)
         C_12_12_MT[i] = D('+', (EX1X2, EY1Y2, EX1Y2, EY1X2)) - D('-', (EX1X2, EY1Y2, EX1Y2, EY1X2))
     return C_12_12_MT
 
-def make_C_a_b_MT(pulse, noise_mats, t_vec, c_times, **kwargs):
+def make_C_a_b_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     M = kwargs.get('M')
     t_b = kwargs.get('t_b')
     a_m = kwargs.get('a_m')
@@ -127,24 +127,24 @@ def make_C_a_b_MT(pulse, noise_mats, t_vec, c_times, **kwargs):
     C_a_b_MT = np.zeros(np.size(c_times))
     for i in range(np.size(c_times)):
         y_uv = make_y(t_b, pulse, ctime=c_times[i], M=M)
-        sol = solver(y_uv, noise_mats, t_vec, state=state_p, a_sp=a_sp, c=c, n_shots=n_shots)
+        sol = solver_ftn(y_uv, noise_mats, t_vec, state=state_p, a_sp=a_sp, c=c, n_shots=n_shots)
         state_vec = np.array([sol[i].states[-1] for i in range(n_shots)])
         EXlp = E_X(l, state_vec, a_m, delta)
-        sol = solver(y_uv, noise_mats, t_vec, state=state_p, a_sp=a_sp, c=c, n_shots=n_shots)
+        sol = solver_ftn(y_uv, noise_mats, t_vec, state=state_p, a_sp=a_sp, c=c, n_shots=n_shots)
         state_vec = np.array([sol[i].states[-1] for i in range(n_shots)])
         EYlp = E_Y(l, state_vec, a_m, delta)
-        sol = solver(y_uv, noise_mats, t_vec, state=state_m, a_sp=a_sp, c=c, n_shots=n_shots)
+        sol = solver_ftn(y_uv, noise_mats, t_vec, state=state_m, a_sp=a_sp, c=c, n_shots=n_shots)
         state_vec = np.array([sol[i].states[-1] for i in range(n_shots)])
         Ap = A([EXlp, EYlp])
         EXlm = E_X(l, state_vec, a_m, delta)
-        sol = solver(y_uv, noise_mats, t_vec, state=state_m, a_sp=a_sp, c=c, n_shots=n_shots)
+        sol = solver_ftn(y_uv, noise_mats, t_vec, state=state_m, a_sp=a_sp, c=c, n_shots=n_shots)
         state_vec = np.array([sol[i].states[-1] for i in range(n_shots)])
         EYlm = E_Y(l, state_vec, a_m, delta)
         Am = A([EXlm, EYlm])
         C_a_b_MT[i] = Ap + Am
     return C_a_b_MT
 
-def make_C_a_0_MT(pulse, noise_mats, t_vec, c_times, **kwargs):
+def make_C_a_0_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     M = kwargs.get('M')
     t_b = kwargs.get('t_b')
     a_m = kwargs.get('a_m')
@@ -164,17 +164,17 @@ def make_C_a_0_MT(pulse, noise_mats, t_vec, c_times, **kwargs):
     C_a_0_MT = np.zeros(np.size(c_times))
     for i in range(np.size(c_times)):
         y_uv = make_y(t_b, pulse, ctime=c_times[i], M=M)
-        sol = solver(y_uv, noise_mats, t_vec, state=state_p, a_sp=a_sp, c=c, n_shots=n_shots)
+        sol = solver_ftn(y_uv, noise_mats, t_vec, state=state_p, a_sp=a_sp, c=c, n_shots=n_shots)
         state_vec = np.array([sol[i].states[-1] for i in range(n_shots)])
         EXlp = E_X(l, state_vec, a_m, delta)
-        sol = solver(y_uv, noise_mats, t_vec, state=state_p, a_sp=a_sp, c=c, n_shots=n_shots)
+        sol = solver_ftn(y_uv, noise_mats, t_vec, state=state_p, a_sp=a_sp, c=c, n_shots=n_shots)
         state_vec = np.array([sol[i].states[-1] for i in range(n_shots)])
         EYlp = E_Y(l, state_vec, a_m, delta)
-        sol = solver(y_uv, noise_mats, t_vec, state=state_m, a_sp=a_sp, c=c, n_shots=n_shots)
+        sol = solver_ftn(y_uv, noise_mats, t_vec, state=state_m, a_sp=a_sp, c=c, n_shots=n_shots)
         state_vec = np.array([sol[i].states[-1] for i in range(n_shots)])
         Ap = A([EXlp, EYlp])
         EXlm = E_X(l, state_vec, a_m, delta)
-        sol = solver(y_uv, noise_mats, t_vec, state=state_m, a_sp=a_sp, c=c, n_shots=n_shots)
+        sol = solver_ftn(y_uv, noise_mats, t_vec, state=state_m, a_sp=a_sp, c=c, n_shots=n_shots)
         state_vec = np.array([sol[i].states[-1] for i in range(n_shots)])
         EYlm = E_Y(l, state_vec, a_m, delta)
         Am = A([EXlm, EYlm])

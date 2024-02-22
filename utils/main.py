@@ -4,6 +4,7 @@ from observables import (make_C_12_0_MT,
                          make_C_12_12_MT,
                          make_C_a_b_MT,
                          make_C_a_0_MT)
+from trajectories import solver, solver_prop
 import matplotlib.pyplot as plt
 import qutip as qt
 
@@ -46,49 +47,55 @@ noise_mats = np.array([[S, C], [Sg, Cg], [S_12, C_12], [Sg_12, Cg_12]])
 
 # Step 1.1) CPMG on both qubits and evaluate $$C_{12,0}^{1,k}(MT)$$
 pulse = ['CPMG', 'CPMG']
-C_12_0_MT_1 = make_C_12_0_MT(pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m, delta=delta,
-                             state='pp')
+C_12_0_MT_1 = make_C_12_0_MT(solver_prop, pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m,
+                             delta=delta, state='pp', a_sp=a_sp, c=c)
 
 # Step 1.2) CDD3 on qubit 1 and CPMG on qubit 2 and evaluate $$C_{12,0}^{2,k}(MT)$$
 pulse = ['CDD3', 'CPMG']
-C_12_0_MT_2 = make_C_12_0_MT(pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m, delta=delta,
-                             state='pp')
+C_12_0_MT_2 = make_C_12_0_MT(solver_prop, pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m,
+                             delta=delta, state='pp', a_sp=a_sp, c=c)
 
 # Step 1.3) CPMG on qubit 1 and CDD3 on qubit 2 and evaluate $$C_{12,0}^{3,k}(MT)$$
 pulse = ['CPMG', 'CDD3']
-C_12_0_MT_3 = make_C_12_0_MT(pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m, delta=delta,
-                             state='pp')
+C_12_0_MT_3 = make_C_12_0_MT(solver_prop, pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m,
+                             delta=delta, state='pp', a_sp=a_sp, c=c)
 
 # Step 2.1) CDD3 on qubit 1 and CDD1 on qubit 2 and evaluate $$C_{12,12}^{1,k}(MT)$$
 pulse = ['CDD3', 'CDD1']
-C_12_12_MT_1 = make_C_12_12_MT(pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m, delta=delta,
-                               state='pp')
+C_12_12_MT_1 = make_C_12_12_MT(solver_prop, pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m,
+                               delta=delta, state='pp', a_sp=a_sp, c=c)
 
 # Step 2.2) CDD3 on qubit 1 and CP on qubit 2 and evaluate $$C_{12,12}^{2,k}(MT)$$
 pulse = ['CDD3', 'CPMG']
-C_12_12_MT_2 = make_C_12_12_MT(pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m, delta=delta,
-                               state='pp')
+C_12_12_MT_2 = make_C_12_12_MT(solver_prop, pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m,
+                               delta=delta, state='pp', a_sp=a_sp, c=c)
 
 # Step 3.1) CDD3 on qubit 1 and CPMG on qubit 2 and evaluate $$C_{1,0}^{1,k}(MT)$$
 pulse = ['CDD3', 'CPMG']
-C_1_0_MT_1 = make_C_a_0_MT(pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m, delta=delta, l=1)
+C_1_0_MT_1 = make_C_a_0_MT(solver_prop, pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m,
+                           delta=delta, l=1, a_sp=a_sp, c=c)
 
 # Step 3.2) CDD3 on qubit 1 and CPMG on qubit 2 and evaluate $$C_{2,0}^{2,k}(MT)$$
 pulse = ['CDD3', 'CPMG']
-C_2_0_MT_1 = make_C_a_0_MT(pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m, delta=delta, l=2)
+C_2_0_MT_1 = make_C_a_0_MT(solver_prop, pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m,
+                           delta=delta, l=2, a_sp=a_sp, c=c)
 
 # Step 4.1) CPMG on both qubits and evaluate $$C_{1,2}^{1,k}(MT)$$
 pulse = ['CPMG', 'CPMG']
-C_1_2_MT_1 = make_C_a_b_MT(pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m, delta=delta, l=1)
+C_1_2_MT_1 = make_C_a_b_MT(solver_prop, pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m,
+                           delta=delta, l=1, a_sp=a_sp, c=c)
 
 # Step 4.2) CDD3 on qubit 1 and CDD3 on qubit 2 and evaluate $$C_{1,2}^{2,k}(MT)$$
 pulse = ['CDD3', 'CDD3']
-C_1_2_MT_2 = make_C_a_b_MT(pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m, delta=delta, l=1)
+C_1_2_MT_2 = make_C_a_b_MT(solver_prop, pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m,
+                           delta=delta, l=1, a_sp=a_sp, c=c)
 
 # Step 5.1) CPMG on both qubits and evaluate $$C_{2,1}^{1,k}(MT)$$
 pulse = ['CPMG', 'CPMG']
-C_2_1_MT_1 = make_C_a_b_MT(pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m, delta=delta, l=2)
+C_2_1_MT_1 = make_C_a_b_MT(solver_prop, pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m,
+                           delta=delta, l=2, a_sp=a_sp, c=c)
 
 # Step 5.2) CDD3 on qubit 1 and CDD3 on qubit 2 and evaluate $$C_{2,1}^{2,k}(MT)$$
 pulse = ['CDD3', 'CDD3']
-C_2_1_MT_2 = make_C_a_b_MT(pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m, delta=delta, l=2)
+C_2_1_MT_2 = make_C_a_b_MT(solver_prop, pulse, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m,
+                           delta=delta, l=2, a_sp=a_sp, c=c)

@@ -1,5 +1,6 @@
 import numpy as np
 import qutip as qt
+from scipy.linalg import expm
 from joblib import Parallel, delayed
 
 def make_noise_mat(spec_vec, t_vec, **kwargs):
@@ -127,7 +128,35 @@ def solver(y_uv, noise_mats, t_vec, **kwargs):
         H_t = make_Hamiltonian(y_uv, [b_t, b_t_g, b_t_12, b_t_g_12])
         sol = qt.mesolve(H_t, rho, t_vec)
         output.append(sol)
-    return output
+    rho_MT = []
+    for i in range(n_shots):
+        rho_MT.append(output[i].states[-1])
+    return rho_MT
 
-def solver_prop():
-    return
+def make_propagator(H_t, t_vec):
+    integrand = np.array([(-1j)*(np.array([H_t[i][1][j] * (H_t[i][0]).full() for j in range(H_t[i][1].shape[0])])) for i in range(len(H_t))])
+    integrand = np.sum(integrand, axis=0)
+    U = expm(np.trapz(integrand, t_vec, axis=0))
+    return U
+
+def solver_prop(y_uv, noise_mats, t_vec, **kwargs):
+    n_shots = kwargs.get('n_shots')
+    state = kwargs.get('state')
+    a_sp = kwargs.get('a_sp')
+    c = kwargs.get('c')
+    S, C = noise_mats[0,0], noise_mats[0,1]
+    Sg, Cg = noise_mats[1,0], noise_mats[1,1]
+    S_12, C_12 = noise_mats[2,0], noise_mats[2,1]
+    Sg_12, Cg_12 = noise_mats[3,0], noise_mats[3,1]
+    rho0 = make_init_state(a_sp, c, state = state)
+    rho_B = qt.basis(2, 0) * qt.basis(2, 0).dag()
+    output = []
+    for i in range(n_shots):
+        b_t, b_t_g = make_noise_traj([S, Sg], [C, Cg])
+        b_t_12, b_t_g_12 = make_noise_traj([S_12, Sg_12], [C_12, Cg_12])
+        rho = qt.tensor(rho0, rho_B)
+        H_t = make_Hamiltonian(y_uv, [b_t, b_t_g, b_t_12, b_t_g_12])
+        U = make_propagator(H_t, t_vec)
+        rho_MT = U @ rho @ U.conjugate().transpose()
+        output.append(qt.Qobj(rho_MT))
+    return output
