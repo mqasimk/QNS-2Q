@@ -3,6 +3,7 @@ import qutip as qt
 from scipy.linalg import expm
 from joblib import Parallel, delayed
 
+
 def make_noise_mat_arr(act, **kwargs):
     spec_vec = kwargs.get('spec_vec')
     t_vec = kwargs.get('t_vec')
@@ -27,6 +28,7 @@ def make_noise_mat_arr(act, **kwargs):
     else:
         raise Exception("Invalid action input")
 
+
 def make_noise_mat(spec_vec, t_vec, **kwargs):
     w_grain = kwargs.get('w_grain')
     wmax = kwargs.get('wmax')
@@ -43,16 +45,18 @@ def make_noise_mat(spec_vec, t_vec, **kwargs):
             C[i,j] = np.sqrt(dw*spec_vec(j*dw)/np.pi)*np.cos(j*dw*(t_vec[i] + gamma))
     return S, C
 
+
 def make_noise_traj(S_list, C_list):
     S = S_list[0]
     C = C_list[0]
     Sg = S_list[1]
     Cg = C_list[1]
-    A = np.random.normal(0, 1, (np.size(S,1), 1))
-    B = np.random.normal(0, 1, (np.size(C,1), 1))
+    A = np.array(np.random.normal(0, 1, (np.size(S,1), 1)))
+    B = np.array(np.random.normal(0, 1, (np.size(C,1), 1)))
     traj = np.ndarray.flatten(np.matmul(S, A) + np.matmul(C, B))
     traj_g = np.ndarray.flatten(np.matmul(Sg, A) + np.matmul(Cg, B))
-    return traj, traj_g
+    return np.array(traj), np.array(traj_g)
+
 
 def make_init_state(a_sp, c, **kwargs):
     zp = qt.basis(2, 0)
@@ -81,6 +85,7 @@ def make_init_state(a_sp, c, **kwargs):
     else:
         raise Exception("Invalid state input")
 
+
 def make_Hamiltonian(y_uv, b_t):
     b_t_1 = b_t[0]
     b_t_1_g = b_t[1]
@@ -101,14 +106,17 @@ def make_Hamiltonian(y_uv, b_t):
             h_t.append([qt.tensor(z_vec[i], B[j][1]), y_uv[i,j]*b_vec[j][1]])
     return h_t
 
+
 def f(t, tk):
     return sum([((-1)**i)*np.heaviside(t-tk[i],1)*np.heaviside(tk[i+1]-t,1) for i in range(np.size(tk)-1)])
+
 
 def cpmg(t, n):
     tk = [(k+0.50)*t[-1]/(2*n) for k in range(int(2*n))]
     tk.append(t[-1])
     tk.insert(0,0.)
     return f(t, tk)
+
 
 def cdd1(t, n):
     ct = np.linspace(0., t[-1]/n, int(t.shape[0]/n))
@@ -118,7 +126,9 @@ def cdd1(t, n):
     tk.insert(0,0.)
     return f(t, tk)
 
+
 def prim_cycle(ct):
+    m = 1
     t = ct
     tk1 = [(k+0.5)*t[-1]/(4*m) for k in range(int(2))]
     tk1.insert(0,0.)
@@ -126,12 +136,17 @@ def prim_cycle(ct):
     tk2 = tk1 + t[-1]/2
     tk2 = np.concatenate((tk2, [t[-1]]))
     tk = np.concatenate((tk1, tk2))
-    return -f(t,tk)
+    return f(t,tk)
+
 
 def cdd3(t, m):
     if m == 1:
         return prim_cycle(t)
-    return np.tile(prim_cycle(t[:int(t.shape[0]/m)]), m)
+    out = np.tile(prim_cycle(t[:int(t.shape[0]/m)]), m)
+    if t.shape[0] > out.shape[0]:
+        out = np.concatenate((out, -1*np.ones(t.shape[0]-out.shape[0])))
+    return out
+
 
 def make_y(t_b, pulse, **kwargs):
     ctime = kwargs.get('ctime')
@@ -141,15 +156,20 @@ def make_y(t_b, pulse, **kwargs):
     for i in range(2):
         if pulse[i] == 'CPMG':
             y[i, i] = cpmg(t_b, n)
+            #y = y.at[i, i].set(cpmg(t_b, n))
         elif pulse[i] == 'CDD1':
             y[i, i] = cdd1(t_b, n)
+            #y = y.at[i, i].set(cdd1(t_b, n))
         elif pulse[i] == 'CDD3':
             y[i, i] = cdd3(t_b, n)
+            #y = y.at[i, i].set(cdd3(t_b, n))
         elif pulse[i] == 'FID':
             y[i, i] = np.ones(np.size(t_b))
+            #y = y.at[i, i].set(np.ones(np.size(t_b)))
         else:
             raise Exception("Invalid pulse input")
     y[2,2] = np.multiply(y[1,1], y[0,0])
+    #y = y.at[2, 2].set(np.multiply(y[1,1], y[0,0]))
     return np.tile(y, M)
 
 
@@ -177,11 +197,13 @@ def solver(y_uv, noise_mats, t_vec, **kwargs):
         rho_MT.append(output[i].states[-1])
     return rho_MT
 
+
 def make_propagator(H_t, t_vec):
     integrand = np.array([(-1j)*(np.array([H_t[i][1][j] * (H_t[i][0]).full() for j in range(H_t[i][1].shape[0])])) for i in range(len(H_t))])
     integrand = np.sum(integrand, axis=0)
     U = expm(np.trapz(integrand, t_vec, axis=0))
     return U
+
 
 def single_shot_prop(noise_mats, t_vec, y_uv, rho0, rho_B):
     S, C = noise_mats[0,0], noise_mats[0,1]
@@ -217,6 +239,7 @@ def single_shot_prop(noise_mats, t_vec, y_uv, rho0, rho_B):
 #         rho_MT = U @ rho.full() @ U.conjugate().transpose()
 #         output.append(qt.Qobj(rho_MT, dims = [[2,2,2],[2,2,2]]))
 #     return output
+
 
 def solver_prop(y_uv, noise_mats, t_vec, **kwargs):
     n_shots = kwargs.get('n_shots')

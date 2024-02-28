@@ -2,6 +2,7 @@ import numpy as np
 import qutip as qt
 from trajectories import make_y
 
+
 def E_X(qubit, state, a_m, delta):
     rho_s = []
     if qubit == 1:
@@ -11,6 +12,7 @@ def E_X(qubit, state, a_m, delta):
         for i in range(state.shape[0]):
             rho_s.append(state[i].ptrace(1))
     return np.sum(np.array([(rho_s[i]*qt.sigmax()).tr() for i in range(state.shape[0])]))/state.shape[0]
+
 
 def E_Y(qubit, state, a_m, delta):
     rho_s = []
@@ -22,11 +24,13 @@ def E_Y(qubit, state, a_m, delta):
             rho_s.append(state[i].ptrace(1))
     return np.sum(np.array([(rho_s[i]*qt.sigmay()).tr() for i in range(state.shape[0])]))/state.shape[0]
 
+
 def E_XX(state, a_m, delta):
     rho_s = []
     for i in range(state.shape[0]):
         rho_s.append(state[i].ptrace([0,1]))
     return np.sum(np.array([(rho_s[i]*qt.tensor(qt.sigmax(),qt.sigmax())).tr() for i in range(state.shape[0])]))/state.shape[0]
+
 
 def E_XY(state, a_m, delta):
     rho_s = []
@@ -34,11 +38,13 @@ def E_XY(state, a_m, delta):
         rho_s.append(state[i].ptrace([0,1]))
     return np.sum(np.array([(rho_s[i]*qt.tensor(qt.sigmax(),qt.sigmay())).tr() for i in range(state.shape[0])]))/state.shape[0]
 
+
 def E_YX(state, a_m, delta):
     rho_s = []
     for i in range(state.shape[0]):
         rho_s.append(state[i].ptrace([0,1]))
     return np.sum(np.array([(rho_s[i]*qt.tensor(qt.sigmay(),qt.sigmax())).tr() for i in range(state.shape[0])]))/state.shape[0]
+
 
 def E_YY(state, a_m, delta):
     rho_s = []
@@ -46,9 +52,11 @@ def E_YY(state, a_m, delta):
         rho_s.append(state[i].ptrace([0,1]))
     return np.sum(np.array([(rho_s[i]*qt.tensor(qt.sigmay(),qt.sigmay())).tr() for i in range(state.shape[0])]))/state.shape[0]
 
+
 def A(expec):
     # send expec as (EX, EY) created with the appropriate $$\psi^{\pm}_l$$
     return -0.25*np.log(np.square(expec[0])+np.square(expec[1]))
+
 
 def D(pm, expec):
     # send expec as (EX1X2, EY1Y2, EX1Y2, EY1X2) created with the state $$\psi_{12}$$
@@ -58,6 +66,7 @@ def D(pm, expec):
         return -0.25*np.log(np.square(expec[2]-expec[3])+np.square(expec[0]+expec[1]))
     else:
         raise Exception("Invalid pm input")
+
 
 def make_C_12_0_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     n_shots = kwargs.get('n_shots')
@@ -83,6 +92,7 @@ def make_C_12_0_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
         C_12_0_MT[i] = D('+', (EX1X2, EY1Y2, EX1Y2, EY1X2)) + D('-', (EX1X2, EY1Y2, EX1Y2, EY1X2))
     return C_12_0_MT
 
+
 def make_C_12_12_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     n_shots = kwargs.get('n_shots')
     M = kwargs.get('M')
@@ -106,6 +116,7 @@ def make_C_12_12_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
         EY1X2 = E_YX(state_vec, a_m, delta)
         C_12_12_MT[i] = D('+', (EX1X2, EY1Y2, EX1Y2, EY1X2)) - D('-', (EX1X2, EY1Y2, EX1Y2, EY1X2))
     return C_12_12_MT
+
 
 def make_C_a_b_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     M = kwargs.get('M')
@@ -143,6 +154,7 @@ def make_C_a_b_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
         Am = A([EXlm, EYlm])
         C_a_b_MT[i] = Ap + Am
     return C_a_b_MT
+
 
 def make_C_a_0_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     M = kwargs.get('M')
