@@ -2,7 +2,8 @@ import numpy as np
 import qutip as qt
 from scipy.linalg import expm
 from joblib import Parallel, delayed
-
+import jax
+import jax.numpy as jnp
 
 def make_noise_mat_arr(act, **kwargs):
     spec_vec = kwargs.get('spec_vec')
@@ -205,17 +206,16 @@ def make_propagator(H_t, t_vec):
     return U
 
 
-def single_shot_prop(noise_mats, t_vec, y_uv, rho0, rho_B):
-    S, C = noise_mats[0,0], noise_mats[0,1]
-    Sg, Cg = noise_mats[1,0], noise_mats[1,1]
-    S_12, C_12 = noise_mats[2,0], noise_mats[2,1]
-    Sg_12, Cg_12 = noise_mats[3,0], noise_mats[3,1]
-    b_t, b_t_g = make_noise_traj([S, Sg], [C, Cg])
-    b_t_12, b_t_g_12 = make_noise_traj([S_12, Sg_12], [C_12, Cg_12])
-    rho = qt.tensor(rho0, rho_B)
+def single_shot_prop(noise_mats, t_vec, y_uv, rho0):
+    # S, C = noise_mats[0,0], noise_mats[0,1]
+    # Sg, Cg = noise_mats[1,0], noise_mats[1,1]
+    # S_12, C_12 = noise_mats[2,0], noise_mats[2,1]
+    # Sg_12, Cg_12 = noise_mats[3,0], noise_mats[3,1]
+    b_t, b_t_g = make_noise_traj([noise_mats[0,0], noise_mats[1,0]], [noise_mats[0,1], noise_mats[1,1]])
+    b_t_12, b_t_g_12 = make_noise_traj([noise_mats[2,0], noise_mats[3,0]], [noise_mats[2,1], noise_mats[3,1]])
     H_t = make_Hamiltonian(y_uv, [b_t, b_t_g, b_t_12, b_t_g_12])
     U = make_propagator(H_t, t_vec)
-    rho_MT = U @ rho.full() @ U.conjugate().transpose()
+    rho_MT = U @ rho0 @ U.conjugate().transpose()
     return qt.Qobj(rho_MT, dims = [[2,2,2],[2,2,2]])
 
 # def solver_prop(y_uv, noise_mats, t_vec, **kwargs):
@@ -248,5 +248,6 @@ def solver_prop(y_uv, noise_mats, t_vec, **kwargs):
     c = kwargs.get('c')
     rho0 = make_init_state(a_sp, c, state = state)
     rho_B = qt.basis(2, 0) * qt.basis(2, 0).dag()
-    output = Parallel(n_jobs = 24, verbose=0)(delayed(single_shot_prop)(noise_mats, t_vec, y_uv, rho0, rho_B) for i in range(n_shots))
+    rho = (qt.tensor(rho0, rho_B)).full()
+    output = Parallel(n_jobs = 24, verbose=0)(delayed(single_shot_prop)(noise_mats, t_vec, y_uv, rho) for i in range(n_shots))
     return output
