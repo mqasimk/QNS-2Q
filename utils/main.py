@@ -42,7 +42,7 @@ gamma = 0
 gamma_12 = 0
 t_vec = np.linspace(0, M*T, M*np.size(t_b))
 c_times = [T/n for n in range(1, truncate+1)]
-n_shots = 2000
+n_shots = 100
 
 # make noise matrices
 noise_mats = make_noise_mat_arr('load', spec_vec=spec_vec, t_vec=t_vec, w_grain=w_grain, wmax=wmax, truncate=truncate,
