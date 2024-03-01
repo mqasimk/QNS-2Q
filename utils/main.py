@@ -43,6 +43,16 @@ gamma_12 = 0
 t_vec = np.linspace(0, M*T, M*np.size(t_b))
 c_times = [T/n for n in range(1, truncate+1)]
 n_shots = 100
+import os
+# create a folder in the parent directory
+parent_dir = os.pardir
+path = os.path.join(parent_dir, "Run_1")
+os.mkdir(path)
+
+# save all the variables in the folder
+np.savez(os.path.join(path, "params.npz"), t_vec=t_vec, w_grain=w_grain, wmax=wmax,
+         truncate=truncate, gamma=gamma, gamma_12=gamma_12, t_b=t_b, a_m=a_m, delta=delta, c_times=c_times,
+         n_shots=n_shots, M=M, a_sp=a_sp, c=c, T=T)
 
 # make noise matrices
 noise_mats = make_noise_mat_arr('load', spec_vec=spec_vec, t_vec=t_vec, w_grain=w_grain, wmax=wmax, truncate=truncate,
@@ -116,14 +126,8 @@ print("Experiment 5.2 complete")
 
 print("--- %s seconds ---" % (time.time() - start_time))
 
-np.save('C_12_0_MT_1.npy', C_12_0_MT_1)
-np.save('C_12_0_MT_2.npy', C_12_0_MT_2)
-np.save('C_12_0_MT_3.npy', C_12_0_MT_3)
-np.save('C_12_12_MT_1.npy', C_12_12_MT_1)
-np.save('C_12_12_MT_2.npy', C_12_12_MT_2)
-np.save('C_1_0_MT_1.npy', C_1_0_MT_1)
-np.save('C_2_0_MT_1.npy', C_2_0_MT_1)
-np.save('C_1_2_MT_1.npy', C_1_2_MT_1)
-np.save('C_1_2_MT_2.npy', C_1_2_MT_2)
-np.save('C_2_1_MT_1.npy', C_2_1_MT_1)
-np.save('C_2_1_MT_2.npy', C_2_1_MT_2)
+
+# save all the results in the folder created earlier
+np.savez(os.path.join(path, "results.npz"), C_12_0_MT_1=C_12_0_MT_1, C_12_0_MT_2=C_12_0_MT_2, C_12_0_MT_3=C_12_0_MT_3,
+         C_12_12_MT_1=C_12_12_MT_1, C_12_12_MT_2=C_12_12_MT_2, C_1_0_MT_1=C_1_0_MT_1, C_2_0_MT_1=C_2_0_MT_1,
+         C_1_2_MT_1=C_1_2_MT_1, C_1_2_MT_2=C_1_2_MT_2, C_2_1_MT_1=C_2_1_MT_1, C_2_1_MT_2=C_2_1_MT_2)
