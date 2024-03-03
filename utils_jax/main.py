@@ -25,7 +25,7 @@ def S_11(w):
 def S_12(w):
     tc=0.5/(1*10**6)
     S0 = 10**3
-    w0=1*10**6
+    w0=4*10**6
     return S0*(1/(1+(tc**2)*(jnp.abs(w)-w0)**2))
 
 T = 10**(-5)
@@ -47,7 +47,7 @@ n_shots = 2000
 import os
 # create a folder in the parent directory
 parent_dir = os.pardir
-fname = "Run_jax_1"
+fname = "Run_jax_2"
 if not os.path.exists(os.path.join(parent_dir, fname)):
     path = os.path.join(parent_dir, fname)
     os.mkdir(path)
@@ -60,9 +60,9 @@ np.savez(os.path.join(path, "params.npz"), t_vec=t_vec, w_grain=w_grain, wmax=wm
          n_shots=n_shots, M=M, a_sp=a_sp, c=c, T=T)
 
 # make noise matrices
-noise_mats = jnp.array(make_noise_mat_arr('load', spec_vec=spec_vec, t_vec=t_vec, w_grain=w_grain, wmax=wmax,
+noise_mats = jnp.array(make_noise_mat_arr('save', spec_vec=spec_vec, t_vec=t_vec, w_grain=w_grain, wmax=wmax,
                                           truncate=truncate, gamma=gamma, gamma_12=gamma_12))
-
+print("Starting experiments")
 # Step 1.1) CPMG on both qubits and evaluate $$C_{12,0}^{1,k}(MT)$$
 pulse_1_1 = ['CPMG', 'CPMG']
 C_12_0_MT_1 = make_C_12_0_MT(solver_prop, pulse_1_1, noise_mats, t_vec, c_times, n_shots=n_shots, M=M, t_b=t_b, a_m=a_m,

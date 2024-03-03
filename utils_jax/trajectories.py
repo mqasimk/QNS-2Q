@@ -30,22 +30,25 @@ def make_noise_mat_arr(act, **kwargs):
     else:
         raise Exception("Invalid action input")
 
+def sinM(spec, w, t, dw, gamma):
+    return jnp.sqrt(dw*spec(w)/np.pi)*jnp.sin(w*(t + gamma))
 
-def make_noise_mat(spec_vec, t_vec, **kwargs):
+
+def cosM(spec, w, t, dw, gamma):
+    return jnp.sqrt(dw*spec(w)/np.pi)*jnp.cos(w*(t + gamma))
+
+def make_noise_mat(spec, t_vec, **kwargs):
     w_grain = kwargs.get('w_grain')
     wmax = kwargs.get('wmax')
-    trunc_n = kwargs.get('trunc_n')
+    #trunc_n = kwargs.get('trunc_n')
     gamma = kwargs.get('gamma')
-    size_t = np.size(t_vec)
-    size_w = int(trunc_n*w_grain)
-    S = np.zeros((size_t, size_w))
-    C = np.zeros((size_t, size_w))
+    #size_t = np.size(t_vec)
+    size_w = int(2*w_grain)
+    w = jnp.linspace(0, 2*wmax, size_w)
     dw = wmax/w_grain
-    for i in range(size_t):
-        for j in range(size_w):
-            S[i,j] = np.sqrt(dw*spec_vec(j*dw)/np.pi)*np.sin(j*dw*(t_vec[i] + gamma))
-            C[i,j] = np.sqrt(dw*spec_vec(j*dw)/np.pi)*np.cos(j*dw*(t_vec[i] + gamma))
-    return S, C
+    Sf = jax.vmap(jax.vmap(sinM, in_axes=(None, 0, None, None, None)), in_axes=(None, None, 0, None, None))
+    Cf = jax.vmap(jax.vmap(cosM, in_axes=(None, 0, None, None, None)), in_axes=(None, None, 0, None, None))
+    return Sf(spec, w, t_vec, dw, gamma), Cf(spec, w, t_vec, dw, gamma)
 
 @jax.jit
 def make_noise_traj(S_arr, C_arr):
