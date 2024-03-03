@@ -35,10 +35,10 @@ truncate = 16
 wmax = 2*np.pi*truncate/T
 w_grain = 1000
 spec_vec = [S_11, S_12]
-a_sp = jnp.array([1., 1.])
-c = jnp.array([jnp.array(0.+0.*1j), jnp.array(0.+0.*1j)])
-a_m = jnp.array([1., 1.])
-delta = jnp.array([0., 0.])
+a_sp = np.array([1., 1.])
+c = np.array([np.array(0.+0.*1j), np.array(0.+0.*1j)])
+a_m = np.array([1., 1.])
+delta = np.array([0., 0.])
 gamma = 0.
 gamma_12 = 0.
 t_vec = jnp.linspace(0, M*T, M*jnp.size(t_b))
@@ -60,7 +60,7 @@ np.savez(os.path.join(path, "params.npz"), t_vec=t_vec, w_grain=w_grain, wmax=wm
          n_shots=n_shots, M=M, a_sp=a_sp, c=c, T=T)
 
 # make noise matrices
-noise_mats = jnp.array(make_noise_mat_arr('save', spec_vec=spec_vec, t_vec=t_vec, w_grain=w_grain, wmax=wmax,
+noise_mats = jnp.array(make_noise_mat_arr('load', spec_vec=spec_vec, t_vec=t_vec, w_grain=w_grain, wmax=wmax,
                                           truncate=truncate, gamma=gamma, gamma_12=gamma_12))
 print("Starting experiments")
 # Step 1.1) CPMG on both qubits and evaluate $$C_{12,0}^{1,k}(MT)$$
