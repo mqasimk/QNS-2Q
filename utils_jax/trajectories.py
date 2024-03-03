@@ -4,7 +4,6 @@ from scipy.linalg import expm
 from joblib import Parallel, delayed
 import jax
 import jax.numpy as jnp
-import functools
 
 def make_noise_mat_arr(act, **kwargs):
     spec_vec = kwargs.get('spec_vec')
@@ -71,9 +70,9 @@ def make_init_state(a_sp, c, **kwargs):
     asp_1 = a_sp[1]
     c_0 = c[0]
     c_1 = c[1]
-    basis2q = [qt.tensor(zp, zp), qt.tensor(zp, zm), qt.tensor(zm, zp), qt.tensor(zm, zm)]
-    rho0_0 = 0.5*(1.+asp_0)*zp*zp.dag() + 0.5*(1.-asp_0)*zm*zm.dag() + 0.5*c_0*zp*zm.dag() + 0.5*c_0.conj()*zm*zp.dag()
-    rho0_1 = 0.5*(1.+asp_1)*zp*zp.dag() + 0.5*(1.-asp_1)*zm*zm.dag() + 0.5*c_1*zp*zm.dag() + 0.5*c_1.conj()*zm*zp.dag()
+    #basis2q = [qt.tensor(zp, zp), qt.tensor(zp, zm), qt.tensor(zm, zp), qt.tensor(zm, zm)]
+    rho0_0 = 0.5*(1.+asp_0)*zp*zp.dag() + 0.5*(1.-asp_0)*zm*zm.dag() + 0.5*c_0*zp*zm.dag() + 0.5*np.conj(c_0)*zm*zp.dag()
+    rho0_1 = 0.5*(1.+asp_1)*zp*zp.dag() + 0.5*(1.-asp_1)*zm*zm.dag() + 0.5*c_1*zp*zm.dag() + 0.5*np.conj(c_1)*zm*zp.dag()
     rho0 = qt.tensor(rho0_0, rho0_1)
     ry = [qt.tensor(np.cos(np.pi/4)*qt.identity(2) - 1j*np.sin(np.pi/4)*qt.sigmay(), qt.identity(2)),
           qt.tensor(qt.identity(2), np.cos(np.pi/4)*qt.identity(2) - 1j*np.sin(np.pi/4)*qt.sigmay())]
