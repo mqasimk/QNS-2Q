@@ -1,7 +1,5 @@
 import numpy as np
 import qutip as qt
-from scipy.linalg import expm
-from joblib import Parallel, delayed
 import jax
 import jax.numpy as jnp
 
@@ -16,23 +14,23 @@ def make_noise_mat_arr(act, **kwargs):
     if act == 'load':
         return np.load('noise_mats.npy', allow_pickle=True)
     elif act == 'make':
-        S, C = make_noise_mat(spec_vec[0], t_vec, w_grain = w_grain, wmax = wmax, trunc_n = truncate, gamma = 0)
+        S, C = make_noise_mat(spec_vec[0], t_vec, w_grain = w_grain, wmax = wmax, trunc_n = truncate, gamma = 0.)
         Sg, Cg = make_noise_mat(spec_vec[0], t_vec, w_grain = w_grain, wmax = wmax, trunc_n = truncate, gamma = gamma)
-        S_12, C_12 = make_noise_mat(spec_vec[1], t_vec, w_grain = w_grain, wmax = wmax, trunc_n = truncate, gamma = 0)
+        S_12, C_12 = make_noise_mat(spec_vec[1], t_vec, w_grain = w_grain, wmax = wmax, trunc_n = truncate, gamma = 0.)
         Sg_12, Cg_12 = make_noise_mat(spec_vec[1], t_vec, w_grain = w_grain, wmax = wmax, trunc_n = truncate,
                                       gamma = gamma_12)
-        return np.array([[S, C], [Sg, Cg], [S_12, C_12], [Sg_12, Cg_12]])
+        return jnp.array([[S, C], [Sg, Cg], [S_12, C_12], [Sg_12, Cg_12]])
     elif act == 'save':
         mats = make_noise_mat_arr('make', **kwargs)
         np.save('noise_mats.npy', mats)
         return mats
     else:
         raise Exception("Invalid action input")
-
+# @jax.jit
 def sinM(spec, w, t, dw, gamma):
     return jnp.sqrt(dw*spec(w)/np.pi)*jnp.sin(w*(t + gamma))
 
-
+# @jax.jit
 def cosM(spec, w, t, dw, gamma):
     return jnp.sqrt(dw*spec(w)/np.pi)*jnp.cos(w*(t + gamma))
 
@@ -50,16 +48,13 @@ def make_noise_mat(spec, t_vec, **kwargs):
     return Sf(spec, w, t_vec, dw, gamma), Cf(spec, w, t_vec, dw, gamma)
 
 @jax.jit
-def make_noise_traj(S_arr, C_arr):
-    # S = S_list[0]
-    # C = C_list[0]
-    # Sg = S_list[1]
-    # Cg = C_list[1]
-    A = jnp.array(np.random.normal(0, 1, (jnp.size(S_arr[0],1), 1)))
-    B = jnp.array(np.random.normal(0, 1, (jnp.size(C_arr[0],1), 1)))
-    traj = jnp.ravel(jnp.matmul(S_arr[0], A) + jnp.matmul(C_arr[0], B))
-    traj_g = jnp.ravel(jnp.matmul(S_arr[1], A) + jnp.matmul(C_arr[1], B))
-    return traj, traj_g
+def make_noise_traj(S, C, key):
+    key1 = jax.random.PRNGKey(key[0])
+    A = jax.random.normal(key1, (jnp.size(S, 1), 1))
+    key2 = jax.random.PRNGKey(key[1])
+    B = jax.random.normal(key2, (np.size(S, 1), 1))
+    traj = jnp.ravel(jnp.matmul(S, A) + jnp.matmul(C, B))
+    return traj
 
 
 def make_init_state(a_sp, c, **kwargs):
@@ -89,17 +84,13 @@ def make_init_state(a_sp, c, **kwargs):
     else:
         raise Exception("Invalid state input")
 
-@jax.jit
+# @jax.jit
 def make_Hamiltonian(y_uv, b_t):
     paulis = jnp.array([[[1., 0.], [0., 1.]], [[0., 1.], [1., 0.]], [[0., -1j], [1j, 0.]], [[1., 0.], [0., -1.]]])
     z_vec = jnp.array([jnp.kron(paulis[0], paulis[0]), jnp.kron(paulis[3], paulis[0]), jnp.kron(paulis[0], paulis[3]),
                        jnp.kron(paulis[3], paulis[3])])
-    B = jnp.array([[paulis[1], paulis[2]], [paulis[1], paulis[2]], [paulis[1], paulis[2]]])
     b_vec = jnp.array([[b_t[0], b_t[1]], [b_t[0], b_t[1]], [b_t[2], b_t[3]]])
-    h_t_ops = jnp.array([[jnp.kron(z_vec[i+1], B[i, 0]), jnp.kron(z_vec[i+1], B[i, 1])] for i in range(3)])
-    h_t = jnp.sum(jnp.array([jnp.tensordot(y_uv[i, j]*b_vec[i, 0], h_t_ops[i, 0], 0) +
-                             jnp.tensordot(y_uv[i, j]*b_vec[i, 1], h_t_ops[i, 1], 0)
-                             for i in range(3) for j in range(3)]), axis=0)
+    h_t = jnp.tensordot(y_uv[0, 0]*b_vec[0, 0], jnp.kron(z_vec[1], paulis[0]), 0) + jnp.tensordot(y_uv[1, 1]*b_vec[1, 0], jnp.kron(z_vec[2], paulis[0]), 0)
     return h_t
 
 def f(t, tk):
@@ -164,86 +155,27 @@ def make_y(t_b, pulse, **kwargs):
         else:
             raise Exception("Invalid pulse input")
     y[2,2] = np.multiply(y[1,1], y[0,0])
-    #y = y.at[2, 2].set(np.multiply(y[1,1], y[0,0]))
     return np.tile(y, M)
-
-
-def solver(y_uv, noise_mats, t_vec, **kwargs):
-    n_shots = kwargs.get('n_shots')
-    state = kwargs.get('state')
-    a_sp = kwargs.get('a_sp')
-    c = kwargs.get('c')
-    S, C = noise_mats[0,0], noise_mats[0,1]
-    Sg, Cg = noise_mats[1,0], noise_mats[1,1]
-    S_12, C_12 = noise_mats[2,0], noise_mats[2,1]
-    Sg_12, Cg_12 = noise_mats[3,0], noise_mats[3,1]
-    rho0 = make_init_state(a_sp, c, state = state)
-    rho_B = qt.basis(2, 0) * qt.basis(2, 0).dag()
-    output = []
-    for i in range(n_shots):
-        b_t, b_t_g = make_noise_traj([S, Sg], [C, Cg])
-        b_t_12, b_t_g_12 = make_noise_traj([S_12, Sg_12], [C_12, Cg_12])
-        rho = qt.tensor(rho0, rho_B)
-        H_t = make_Hamiltonian(y_uv, [b_t, b_t_g, b_t_12, b_t_g_12])
-        sol = qt.mesolve(H_t, rho, t_vec)
-        output.append(sol)
-    rho_MT = []
-    for i in range(n_shots):
-        rho_MT.append(output[i].states[-1])
-    return rho_MT
 
 @jax.jit
 def make_propagator(H_t, t_vec):
-    #integrand = jnp.array([(-1j)*(jnp.array([H_t[i, 1, j] * (H_t[i][0]).full() for j in range(H_t[i][1].shape[0])])) for i in range(len(H_t))])
-    #integrand = jnp.sum(H_t, axis=0)
-    U = jax.scipy.linalg.expm(jax.scipy.integrate.trapezoid(H_t, t_vec, axis=0))
+    U = jax.scipy.linalg.expm(-1j*jax.scipy.integrate.trapezoid(H_t, t_vec, axis=0))
     return U
 
 @jax.jit
-def single_shot_prop(noise_mats, t_vec, y_uv, rho0, n_shots):
-    # S, C = noise_mats[0,0], noise_mats[0,1]
-    # Sg, Cg = noise_mats[1,0], noise_mats[1,1]
-    # S_12, C_12 = noise_mats[2,0], noise_mats[2,1]
-    # Sg_12, Cg_12 = noise_mats[3,0], noise_mats[3,1]
-    b_t, b_t_g = make_noise_traj(jnp.array([noise_mats[0,0], noise_mats[1,0]]), jnp.array([noise_mats[0,1], noise_mats[1,1]]))
-    b_t_12, b_t_g_12 = make_noise_traj(jnp.array([noise_mats[2,0], noise_mats[3,0]]), jnp.array([noise_mats[2,1], noise_mats[3,1]]))
-    H_t = make_Hamiltonian(y_uv, jnp.array([b_t, b_t_g, b_t_12, b_t_g_12]))
+def single_shot_prop(noise_mats, t_vec, y_uv, rho0, key):
+    bvec = make_noise_traj(noise_mats[0, 0], noise_mats[0, 1], key)
+    H_t = make_Hamiltonian(y_uv, jnp.array([bvec, bvec, bvec, bvec]))
     U = make_propagator(H_t, t_vec)
     rho_MT = jnp.matmul(jnp.matmul(U, rho0), U.conjugate().transpose())
     return rho_MT
 
-# def solver_prop(y_uv, noise_mats, t_vec, **kwargs):
-#     n_shots = kwargs.get('n_shots')
-#     state = kwargs.get('state')
-#     a_sp = kwargs.get('a_sp')
-#     c = kwargs.get('c')
-#     S, C = noise_mats[0,0], noise_mats[0,1]
-#     Sg, Cg = noise_mats[1,0], noise_mats[1,1]
-#     S_12, C_12 = noise_mats[2,0], noise_mats[2,1]
-#     Sg_12, Cg_12 = noise_mats[3,0], noise_mats[3,1]
-#     rho0 = make_init_state(a_sp, c, state = state)
-#     rho_B = qt.basis(2, 0) * qt.basis(2, 0).dag()
-#     output = []
-#     for i in range(n_shots):
-#         b_t, b_t_g = make_noise_traj([S, Sg], [C, Cg])
-#         b_t_12, b_t_g_12 = make_noise_traj([S_12, Sg_12], [C_12, Cg_12])
-#         rho = qt.tensor(rho0, rho_B)
-#         H_t = make_Hamiltonian(y_uv, [b_t, b_t_g, b_t_12, b_t_g_12])
-#         U = make_propagator(H_t, t_vec)
-#         rho_MT = U @ rho.full() @ U.conjugate().transpose()
-#         output.append(qt.Qobj(rho_MT, dims = [[2,2,2],[2,2,2]]))
-#     return output
-
-
 
 def solver_prop(y_uv, noise_mats, t_vec, rho, n_shots):
-    #output = Parallel(n_jobs = 1, verbose=0)(delayed(single_shot_prop)(noise_mats, t_vec, y_uv, rho) for i in range(n_shots))
-    #map = jax.vmap(single_shot_prop, in_axes=[None, None, None, None, 0])
-    #n = jnp.arange(n_shots-1)
-    #result = map(noise_mats, t_vec, y_uv, rho, n)
-    result = jax.vmap(single_shot_prop, in_axes=[None, None, None, None, 0])(noise_mats, t_vec, y_uv,
-                                                                                     rho, jnp.arange(n_shots))
+    y_uv = jnp.array(y_uv)
+    n_arr = jnp.array(np.random.randint(0, 100000, (n_shots, 2)))
+    result = jax.vmap(single_shot_prop, in_axes=[None, None, None, None, 0])(noise_mats, t_vec, y_uv, rho, n_arr)
     output = []
     for i in range(n_shots):
-        output.append(qt.Qobj(np.array(result[i]), dims = [[2,2,2],[2,2,2]]))
+        output.append(qt.Qobj(np.array(result[i]), dims=[[2,2,2], [2,2,2]]))
     return output

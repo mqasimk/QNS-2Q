@@ -3,44 +3,25 @@ from trajectories import make_y
 from matplotlib import pyplot as plt
 
 def f1_cpmg(ct, T, w):
-    n = int(T/ct)
-    lims = []
-    for i in range(n):
-        lims.append([[i*T/n, i*T/n + T/(4*n)], [i*T/n + T/(4*n), i*T/n + 3*T/(4*n)], [i*T/n + 3*T/(4*n), i*T/n + T/n]])
-    lims = np.array(lims)
-    ft = 0. + 0.*1j
-    for i in range(n):
-        for j in range(3):
-            ft += -1j*((-1)**j)*(np.exp(1j*w*lims[i, j, 1])-np.exp(1j*w*lims[i, j, 0]))/w
-    return ft
+    y = make_y(np.linspace(0, T, 10**5), ['CPMG', 'CPMG'], ctime=ct, M=1)
+    t_vec = np.linspace(0, T, 10**5)
+    return np.trapz(y[0, 0]*np.exp(1j*w*t_vec), t_vec)
 
 def f1_fid(ct, T, w):
-    return 2.*np.exp(1j*w*T/2.)*np.sin(w*T/2.)/w
+    t_vec = np.linspace(0, T, 10**5)
+    return np.trapz(np.exp(1j*w*t_vec), t_vec)
 
 def f1_cdd1(ct, T, w):
-    n = int(T/ct)
-    lims = []
-    for i in range(n):
-        lims.append([[i*T/n, i*T/n + T/(2*n)], [i*T/n + T/(2*n), i*T/n + T/n]])
-    lims = np.array(lims)
-    ft = 0. + 0.*1j
-    for i in range(n):
-        for j in range(2):
-            ft += -1j*((-1)**j)*(np.exp(1j*w*lims[i, j, 1])-np.exp(1j*w*lims[i, j, 0]))/w
-    return ft
+    y = make_y(np.linspace(0, T, 10**5), ['CDD1', 'CDD1'], ctime=ct, M=1)
+    t_vec = np.linspace(0, T, 10**5)
+    return np.trapz(y[0, 0]*np.exp(1j*w*t_vec), t_vec)
 
 def f1_cdd3(ct, T, w):
-    n = int(T/ct)
-    lims = []
-    for i in range(n):
-        lims.append([[i*T/n, i*T/n + T/(8*n)], [i*T/n + T/(8*n), i*T/n + 3*T/(8*n)], [i*T/n + 3*T/(8*n), i*T/n + T/(2*n)],
-                     [i*T/n + T/(2*n), i*T/n + 5*T/(8*n)], [i*T/n + 5*T/(8*n), i*T/n + 7*T/(8*n)], [i*T/n + 7*T/(8*n), i*T/n + T/n]])
-    lims = np.array(lims)
-    ft = 0. + 0.*1j
-    for i in range(n):
-        for j in range(6):
-            ft += -1j*((-1)**j)*(np.exp(1j*w*lims[i, j, 1])-np.exp(1j*w*lims[i, j, 0]))/w
-    return ft
+    if w == 0:
+        return 0
+    y = make_y(np.linspace(0, T, 10**5), ['CDD3', 'CDD3'], ctime=ct, M=1)
+    t_vec = np.linspace(0, T, 10**5)
+    return np.trapz(y[0, 0]*np.exp(1j*w*t_vec), t_vec)
 
 def Gp(ffs, w, T, ct):
     return ffs[0](ct, T, w)*ffs[1](ct, T, -w)
@@ -52,12 +33,13 @@ def recon_S_11(coefs, **kwargs):
     C_12_0_MT_1 = coefs[0]
     C_12_0_MT_2 = coefs[1]
     wk = np.array([2*np.pi*(n+1)/T for n in range(np.size(c_times))])
-    U = np.zeros((np.size(c_times), np.size(c_times)))
+    U_1 = np.zeros((np.size(c_times), np.size(c_times)), dtype=np.complex128)
     for i in range(np.size(c_times)):
         n = int(T/c_times[i])
         for j in range(np.size(c_times)):
-            U[i, j] = (n*M/T)*(Gp([f1_cpmg, f1_cpmg], wk[j], T, c_times[i]) - Gp([f1_cdd3, f1_cpmg], wk[j], T, c_times[i]))
-    S_11_k = np.linalg.inv(U)@np.transpose(C_12_0_MT_1-C_12_0_MT_2)
+            U_1[i, j] = ((n*M/T**2)*(np.square(np.absolute(f1_cpmg(c_times[i], T, wk[j]))) - np.square(np.absolute(f1_cdd3(c_times[i], T, wk[j])))))
+    # U = U.round(20)
+    S_11_k = np.matmul(np.linalg.inv(U_1), np.reshape(C_12_0_MT_1-C_12_0_MT_2, (C_12_0_MT_1.shape[0], 1)))
     return S_11_k
 
 def recon_S_22(coefs, **kwargs):
@@ -105,18 +87,32 @@ def recon_S_12_12(coefs, **kwargs):
     return
 
 
-# T = 1
-# ct = 1/20
+# T = 1e-5
+# ct = T/16
 # n = int(T/ct)
 # M = 20
 # t_b = np.linspace(0, T, 1000)
 # t_vec = np.linspace(0, M*T, M*np.size(t_b))
-# y = make_y(t_b, ['CDD1', 'CPMG'], ctime=ct, M=M)
+# y = make_y(t_b, ['CDD3', 'CDD3'], ctime=ct, M=M)
 # wk = np.array([2*np.pi*k/T for k in range(160)])
-# ft = []
-# for w in wk:
-#     ft.append(np.trapz(y[2,2]*np.exp(1j*w*t_vec), t_vec))
-# ft = np.array(ft)
-# plt.plot(wk, np.real(ft))
-# plt.plot(wk, np.imag(ft))
+# plt.plot(wk, [int(T/ct)*(M/T)*(np.square(np.absolute(f1_cpmg(ct, T, wk[i]))) - np.square(np.absolute(f1_cdd3(ct, T, wk[i])))) for i in range(np.size(wk))])
 # plt.show()
+# plt.plot(wk, [int(T/ct)*(M/T)*np.square(np.absolute(f1_cdd3(ct, T, wk[i]))) for i in range(np.size(wk))])
+# plt.plot(wk, [int(T/ct)*(M/T)*np.square(np.absolute(f1_cpmg(ct, T, wk[i]))) for i in range(np.size(wk))])
+# plt.legend(['CDD3', 'CPMG'])
+# plt.show()
+
+# def S_11(w):
+#     tc=1/(1*10**6)
+#     S0 = 1
+#     w0=4*10**6
+#     return S0*(1/(1+(tc**2)*(np.abs(w)-w0)**2))
+#
+# T = 1e-5
+# wk = np.array([2*np.pi*(n+1)/T for n in range(16)])
+# S_11_k = S_11(wk)
+# w = np.linspace(0, 2*np.pi*16/T, 1000)
+# plt.plot(wk, S_11_k, 'ro')
+# plt.plot(w, S_11(w))
+# plt.show()
+# print(S_11_k[-1])
