@@ -5,9 +5,8 @@ from observables import (make_C_12_0_MT,
                          make_C_a_b_MT,
                          make_C_a_0_MT)
 from trajectories import solver_prop
-from reconstruction import recon_S_11, recon_S_22
-import matplotlib.pyplot as plt
-import qutip as qt
+# import matplotlib.pyplot as plt
+# import qutip as qt
 import jax.numpy as jnp
 
 #time the code
@@ -16,22 +15,23 @@ start_time = time.time()
 
 
 def S_11(w):
-    tc=0.5/(1*10**6)
-    S0 = 10**3
-    w0=4*10**6
+    tc=1/(1*10**6)
+    S0 = 1e3
+    w0=0*10**6
     return S0*(1/(1+(tc**2)*(jnp.abs(w)-w0)**2))
 
 
 def S_12(w):
     tc=0.5/(1*10**6)
-    S0 = 10**3
-    w0=4*10**6
-    return S0*(1/(1+(tc**2)*(jnp.abs(w)-w0)**2))
+    S0 = 1
+    w0=0*10**6
+    return 0.#S0*(1/(1+(tc**2)*(jnp.abs(w)-w0)**2))
 
 T = 10**(-5)
 M = 10
-t_b = jnp.linspace(0, T, 100)
-truncate = 16
+t_grain = int(1e3)
+t_b = jnp.linspace(0, T, t_grain)
+truncate = 8
 wmax = 2*np.pi*truncate/T
 w_grain = 1000
 spec_vec = [S_11, S_12]
@@ -47,7 +47,7 @@ n_shots = 2000
 import os
 # create a folder in the parent directory
 parent_dir = os.pardir
-fname = "Run_jax_2"
+fname = "Run_jax_debug_1"
 if not os.path.exists(os.path.join(parent_dir, fname)):
     path = os.path.join(parent_dir, fname)
     os.mkdir(path)
