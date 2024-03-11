@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from trajectories import make_y
 import matplotlib.gridspec as gridspec
 from trajectories import make_noise_mat_arr, make_noise_traj, make_Hamiltonian
+from reconstruction import recon_S_11, recon_S_22, recon_S_1_2
 from observables import E_X
 import jax.numpy as jnp
 import scipy
@@ -26,7 +27,7 @@ def ff(y, t, w):
 T = 10**(-5)
 ct = T
 trunc = 8
-M = 20
+M = 10
 
 wmax = 2*np.pi*trunc/T
 wk = np.array([2*np.pi*(n+1)/10**(-5) for n in range(trunc)])
@@ -47,110 +48,69 @@ y_arr = [make_y(tb, ['CPMG', 'CDD3'], ctime=c_times[n], M=1) for n in range(np.s
 for i in range(np.size(c_times)):
     n = int(T/c_times[i])
     for j in range(np.size(c_times)):
-        U[i, j] = ((2*M/T)*(np.absolute(ff(y_arr[i][0,0], tb, wk[j]))**2 - np.absolute(ff(y_arr[i][1,1], tb, wk[j]))**2)).round(10)
-
+        U[i, j] = ((M/T)*(np.absolute(ff(y_arr[i][0,0], tb, wk[j]))**2 - np.absolute(ff(y_arr[i][1,1], tb, wk[j]))**2)).round(10)
 print(np.linalg.cond(U))
 # print((np.linalg.inv(U)@U))
+y_arr = np.array([make_y(tb, ['CDD3', 'CDD1'], ctime=ct, M=1) for ct in ct_arr])
+U_1 = np.zeros((np.size(ct_arr), np.size(ct_arr)), dtype=np.complex128)
+for i in range(np.size(c_times)):
+    for j in range(np.size(c_times)):
+        U_1[i, j] = ((2*M/T)*(ff(y_arr[i][0, 0], tb, wk[j])*ff(y_arr[i][1, 1], tb, -wk[j]))).round(10)
+print(np.linalg.cond(U_1))
+
+y_arr = np.array([make_y(tb, ['CDD3', 'CPMG'], ctime=ct, M=1) for ct in ct_arr])
+U_2 = np.zeros((np.size(ct_arr), np.size(ct_arr)), dtype=np.complex128)
+for i in range(np.size(c_times)):
+    for j in range(np.size(c_times)):
+        U_2[i, j] = ((2*M/T)*(ff(y_arr[i][0, 0], tb, wk[j])*ff(y_arr[i][1, 1], tb, -wk[j]))).round(10)
+print(np.linalg.cond(U_2))
+
+y_arr = np.array([make_y(tb, ['CDD3', 'CPMG'], ctime=ct, M=1) for ct in ct_arr])
+U_3 = np.zeros((np.size(ct_arr), np.size(ct_arr)), dtype=np.complex128)
+for i in range(np.size(c_times)):
+    for j in range(np.size(c_times)):
+        U_3[i, j] = ((M/T)*(ff(y_arr[i][0, 0]*y_arr[i][1, 1], tb, 4*wk[j])).round(10))
+print(np.linalg.cond(U_3))
+# print((np.linalg.inv(U_3)@U_3).round(10))
 
 import os
 
 pdir = os.pardir
-fname = "Run_jax_debug_1"
+fname = "Run_jax_2"
 observed = np.load(os.path.join(pdir, fname, "results.npz"))
 C_12_0_MT_1 = observed['C_12_0_MT_1']
 C_12_0_MT_2 = observed['C_12_0_MT_2']
 C_12_0_MT_3 = observed['C_12_0_MT_3']
+C_12_12_MT_1 = observed['C_12_12_MT_1']
+C_12_12_MT_2 = observed['C_12_12_MT_2']
+C_1_0_MT_1 = observed['C_1_0_MT_1']
+C_2_0_MT_1 = observed['C_2_0_MT_1']
 
-# plt.plot(wk, C_12_0_MT_1, 'r.')
-plt.plot(wk, np.matmul(np.linalg.inv(U), (C_12_0_MT_1 - C_12_0_MT_2)), 'r.')
-plt.plot(wk, np.matmul(np.linalg.inv(U), (C_12_0_MT_1 - C_12_0_MT_3)), 'bx')
-plt.plot(w, S_11(w), 'g-')
+plt.plot(wk, np.linalg.inv(U_3)@(C_1_0_MT_1+C_2_0_MT_1-C_12_0_MT_2), 'r.')
 plt.show()
+
+# print(recon_S_1_2([C_12_12_MT_1, C_12_12_MT_2], M=M, T=T, c_times=c_times))
 # ax2.plot(wk, np.matmul(U, S_k), 'gx')
 # ind = 0
 # plt.plot(tb, y_base[ind][0, 0])
 # plt.plot(tb/2, y_base[ind][0, 0])
 # plt.show()
+# y_base = np.array([make_y(tb, ['CDD3', 'CDD1'], ctime=ct, M=1) for ct in ct_arr])
 # yax = np.zeros(np.size(wk))
-# plt.plot(w, [np.absolute(ff(y_base[0][0, 0], tb, wi))**2 for wi in w])
-# plt.plot(w, [np.absolute(ff(y_base[0][0, 0], tb/2, wi))**2 for wi in w])
-# plt.plot(w, [np.absolute(ff(y_base[0][0, 0], tb/3, wi))**2 for wi in w])
+# plt.plot(w, [np.real(ff(y_base[0][0, 0], tb, wi)*ff(y_base[0][1, 1], tb, -wi)) for wi in w])
+# plt.plot(w, [np.imag(ff(y_base[0][0, 0], tb, wi)*ff(y_base[0][1, 1], tb, -wi)) for wi in w])
 # plt.plot(wk, yax, 'r.')
 # plt.show()
-# print(U)
-# plt.plot(wk, U@S_k)
+# y_base = np.array([make_y(tb, ['CDD3', 'CPMG'], ctime=ct, M=1) for ct in ct_arr])
+# yax = np.zeros(np.size(wk))
+# ctn = [2*T/n for n in range(1, (trunc+1))]
+# y1_arr = np.array([make_y(tb, ['CDD3', 'CPMG'], ctime=ct, M=1) for ct in ct_arr])
+# y2_arr = np.array([make_y(tb, ['CDD1', 'CDD3'], ctime=ct, M=1) for ct in ct_arr])
+# plt.plot(w, [np.real(ff(y1_arr[0][0, 0]*y1_arr[0][1, 1], tb, wi)) for wi in w], 'r')
+# plt.plot(w, [np.imag(ff(y_arr[0][0, 0]*y_arr[0][1, 1], tb, wi)) for wi in w], 'b')
+# plt.plot(tb, y1_arr[1][0, 0]*y1_arr[1][1, 1], 'r')
+# plt.plot(tb, y2_arr[7][0, 0], 'b--')
+# plt.plot(w, [np.abs(ff(y1_arr[1][0, 0]*y1_arr[1][1, 1], tb, wi))**2 for wi in w], 'b')
+# plt.plot(w, [np.abs(ff(y1_arr[3][0, 0], tb, wi))**2 for wi in w], 'r')
+# plt.plot(wk, yax, 'k.')
 # plt.show()
-# S_11_k = np.linalg.inv(U)@np.reshape(C_12_0_MT_1-C_12_0_MT_2, (C_12_0_MT_1.shape[0], 1))
-# plt.plot(wk, S_11_k)
-# plt.plot(wk, S_k)
-# plt.show()
-# plt.plot(wk, [ff(y_arr[3][0,0], tb, wk[k]) for k in range(np.size(wk))], 'r.')
-# plt.show()
-
-# fig = gridspec.GridSpec(8, 1)
-# ax1 = plt.subplot(fig[0,0])
-# ax2 = plt.subplot(fig[1,0])
-# ax3 = plt.subplot(fig[2,0])
-# ax4 = plt.subplot(fig[3,0])
-# ax5 = plt.subplot(fig[4,0])
-# ax6 = plt.subplot(fig[5,0])
-# ax7 = plt.subplot(fig[6,0])
-# ax8 = plt.subplot(fig[7,0])
-#
-# ax1.plot(w, [ff(y_base[0][0, 0], tb, wi) for wi in w])
-# ax2.plot(w, [ff(y_base[1][0, 0], tb, wi) for wi in w])
-# ax3.plot(w, [ff(y_base[2][0, 0], tb, wi) for wi in w])
-# ax4.plot(w, [ff(y_base[3][0, 0], tb, wi) for wi in w])
-# ax5.plot(w, [ff(y_base[4][0, 0], tb, wi) for wi in w])
-# ax6.plot(w, [ff(y_base[5][0, 0], tb, wi) for wi in w])
-# ax7.plot(w, [ff(y_base[6][0, 0], tb, wi) for wi in w])
-# ax8.plot(w, [ff(y_base[7][0, 0], tb, wi) for wi in w])
-# # plt.show()
-#
-# print(np.linalg.inv(U)@U)
-
-# y_arr = np.array([make_y(tb, ['CPMG', 'CDD3'], ctime=c_times[n], M=M)[0, 0] for n in range(np.size(c_times))])
-# ff_arr = np.array([np.array([ff(y_arr[n], t_vec, w[k]) for k in range(np.size(w))]) for n in range(np.size(c_times))])
-# S_w = np.array([S_11(wi) for wi in w])
-# C12_0 = np.array([(1/(2*np.pi))*np.trapz(S_w*np.abs(ff_arr[n])**2, w) for n in range(np.size(c_times))])
-# np.save(os.path.join(pdir, fname, "C12_0.npy"), C12_0)
-# #
-# C12_0 = np.load(os.path.join(pdir, fname, "C12_0.npy"))
-# plt.plot(wk, np.linalg.inv(U)@C12_0, 'r.')
-# plt.plot(wk, np.linalg.inv(U)@C_12_0_MT_1/5, 'b.')
-# plt.plot(w, S_11(w), 'g-')
-# plt.plot(wk, C12_0, 'r.')
-# plt.plot(wk, C_12_0_MT_1, 'b.')
-# plt.show()
-
-# noise_mats = np.array(make_noise_mat_arr('make', spec_vec=[S_11, S_12], t_vec=t_vec, w_grain=w_grain, wmax=wmax, truncate=trunc, gamma=0., gamma_12=0.))
-# dw = wmax/w_grain
-# size_w = 2*w_grain
-# size_t = np.size(t_vec)
-# S = np.zeros((np.size(t_vec), size_w))
-# C = np.zeros((np.size(t_vec), size_w))
-# for i in range(size_t):
-#     if i%10 == 0:
-#         print(i)
-#     for j in range(size_w):
-#         S[i, j] = np.sqrt(dw*S_11(j*dw)/np.pi)*np.sin(j*dw*(t_vec[i]))
-#         C[i, j] = np.sqrt(dw*S_11(j*dw)/np.pi)*np.cos(j*dw*(t_vec[i]))
-# np.savez(os.path.join(pdir, fname, "noise_mats_og.npz"), S=S, C=C)
-
-# S = np.load(os.path.join(pdir, fname, "noise_mats_og.npz"))['S']
-# C = np.load(os.path.join(pdir, fname, "noise_mats_og.npz"))['C']
-#
-# plt.plot(t_vec, S[99, :])
-# plt.plot(t_vec, noise_mats[0, 0, 99, :])
-# plt.show()
-# y = make_y(tb, ['CPMG', 'CDD3'], ctime=T/5, M=20)
-# bt = make_noise_traj(noise_mats[0, 0], noise_mats[0, 1])
-# h = make_Hamiltonian(y, jnp.array([bt, bt, bt, bt]))
-# print(h.shape)
-# int = jax.scipy.integrate.trapezoid(h, t_vec, axis=0)
-# U=jax.scipy.linalg.expm(-1j*int)
-#
-# rho = jnp.kron(jnp.kron(0.5*(jnp.array([[1, 0], [0, 1]])+jnp.array([[0, 1], [1, 0]])), 0.5*(jnp.array([[1, 0], [0, 1]])+jnp.array([[0, 1], [1, 0]]))), 0.5*jnp.array([[1, 0], [0, 1]]))
-# ex1 = jnp.kron(jnp.kron(jnp.array([[0, 1], [1, 0]]), jnp.array([[1, 0], [0, 1]])), jnp.array([[1, 0], [0, 1]]))
-# res = (U@rho@U.conjugate().transpose()@ex1).trace().real
-# print(res)

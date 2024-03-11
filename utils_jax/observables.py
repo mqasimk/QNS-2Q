@@ -99,7 +99,7 @@ def make_C_12_0_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     rho0 = make_init_state(a_sp, c, state = state)
     rho_B = 0.5*qt.identity(2)#qt.basis(2, 0) * qt.basis(2, 0).dag()
     rho = np.array((qt.tensor(rho0, rho_B)).full())
-    C_12_0_MT = Parallel(n_jobs=4)(delayed(C_12_0_MT_i)(solver_ftn, t_b, pulse, noise_mats, t_vec, rho,
+    C_12_0_MT = Parallel(n_jobs=1)(delayed(C_12_0_MT_i)(solver_ftn, t_b, pulse, noise_mats, t_vec, rho,
                                                          c_times[i], n_shots=n_shots, M=M, a_m=a_m,
                                                          delta=delta) for i in range(np.size(c_times)))
     return C_12_0_MT
@@ -138,7 +138,7 @@ def make_C_12_12_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     rho0 = make_init_state(a_sp, c, state = state)
     rho_B = 0.5*qt.identity(2) #qt.basis(2, 0) * qt.basis(2, 0).dag()
     rho = jnp.array((qt.tensor(rho0, rho_B)).full())
-    return Parallel(n_jobs=4)(delayed(C_12_12_MT_i)(solver_ftn, t_b, pulse, noise_mats, t_vec, rho, c_times[i],
+    return Parallel(n_jobs=1)(delayed(C_12_12_MT_i)(solver_ftn, t_b, pulse, noise_mats, t_vec, rho, c_times[i],
                                                            n_shots=n_shots, M=M, a_m=a_m,
                                                            delta=delta) for i in range(np.size(c_times)))
 
@@ -192,7 +192,7 @@ def make_C_a_b_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     rho0m = make_init_state(a_sp, c, state = state_m)
     rho_B = 0.5*qt.identity(2)
     rhom = jnp.array((qt.tensor(rho0m, rho_B)).full())
-    return Parallel(n_jobs=4)(delayed(C_a_b_MT_i)(solver_ftn, t_b, pulse, noise_mats, t_vec, [rhop, rhom], c_times[i],
+    return Parallel(n_jobs=1)(delayed(C_a_b_MT_i)(solver_ftn, t_b, pulse, noise_mats, t_vec, [rhop, rhom], c_times[i],
                                                    n_shots=n_shots, M=M, a_m=a_m, l=l,
                                                    delta=delta) for i in range(np.size(c_times)))
 
@@ -211,9 +211,9 @@ def C_a_0_MT_i(solver_ftn, t_b, pulse, noise_mats, t_vec, rho, ct, **kwargs):
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhop, n_shots)
     sol = frame_correct(sol, pulse)
     EYlp = E_Y(l, sol, a_m, delta)
+    Ap = A([EXlp, EYlp])
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhom, n_shots)
     sol = frame_correct(sol, pulse)
-    Ap = A([EXlp, EYlp])
     EXlm = E_X(l, sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhom, n_shots)
     sol = frame_correct(sol, pulse)
@@ -238,14 +238,13 @@ def make_C_a_0_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
         state_m = '1p'
     else:
         raise Exception("Invalid state input")
-    C_a_0_MT = np.zeros(np.size(c_times))
     rho0p = make_init_state(a_sp, c, state = state_p)
     rho_B = 0.5*qt.identity(2)
     rhop = jnp.array((qt.tensor(rho0p, rho_B)).full())
     rho0m = make_init_state(a_sp, c, state = state_m)
     rho_B = 0.5*qt.identity(2)
     rhom = jnp.array((qt.tensor(rho0m, rho_B)).full())
-    return Parallel(n_jobs=4)(delayed(C_a_0_MT_i)(solver_ftn, t_b, pulse, noise_mats, t_vec, [rhop, rhom], c_times[i],
+    return Parallel(n_jobs=1)(delayed(C_a_0_MT_i)(solver_ftn, t_b, pulse, noise_mats, t_vec, [rhop, rhom], c_times[i],
                                                    n_shots=n_shots, M=M, a_m=a_m, l=l,
                                                    delta=delta) for i in range(np.size(c_times)))
 

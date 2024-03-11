@@ -39,7 +39,7 @@ a_sp = np.array([1., 1.])
 c = np.array([np.array(0.+0.*1j), np.array(0.+0.*1j)])
 a_m = np.array([1., 1.])
 delta = np.array([0., 0.])
-gamma = 0.
+gamma = T/5
 gamma_12 = 0.
 t_vec = jnp.linspace(0, M*T, M*jnp.size(t_b))
 c_times = jnp.array([T/n for n in range(1, truncate+1)])
@@ -47,7 +47,7 @@ n_shots = 2000
 import os
 # create a folder in the parent directory
 parent_dir = os.pardir
-fname = "Run_jax_debug_1"
+fname = "Run_jax_3"
 if not os.path.exists(os.path.join(parent_dir, fname)):
     path = os.path.join(parent_dir, fname)
     os.mkdir(path)
@@ -60,7 +60,7 @@ np.savez(os.path.join(path, "params.npz"), t_vec=t_vec, w_grain=w_grain, wmax=wm
          n_shots=n_shots, M=M, a_sp=a_sp, c=c, T=T)
 
 # make noise matrices
-noise_mats = jnp.array(make_noise_mat_arr('load', spec_vec=spec_vec, t_vec=t_vec, w_grain=w_grain, wmax=wmax,
+noise_mats = jnp.array(make_noise_mat_arr('save', spec_vec=spec_vec, t_vec=t_vec, w_grain=w_grain, wmax=wmax,
                                           truncate=truncate, gamma=gamma, gamma_12=gamma_12))
 print("Starting experiments")
 # Step 1.1) CPMG on both qubits and evaluate $$C_{12,0}^{1,k}(MT)$$
