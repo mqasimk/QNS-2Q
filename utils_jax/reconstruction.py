@@ -2,6 +2,9 @@ import numpy as np
 from trajectories import make_y
 from matplotlib import pyplot as plt
 
+def ff(y, t, w):
+    return np.trapz(np.exp(1j*w*t)*y, t)
+
 def f1_cpmg(ct, T, w):
     y = make_y(np.linspace(0, T, 10**5), ['CPMG', 'CPMG'], ctime=ct, M=1)
     t_vec = np.linspace(0, T, 10**5)
@@ -33,13 +36,13 @@ def recon_S_11(coefs, **kwargs):
     C_12_0_MT_1 = coefs[0]
     C_12_0_MT_2 = coefs[1]
     wk = np.array([2*np.pi*(n+1)/T for n in range(np.size(c_times))])
-    U_1 = np.zeros((np.size(c_times), np.size(c_times)), dtype=np.complex128)
+    tb = np.linspace(0, T, 10**4)
+    y_arr = [make_y(tb, ['CPMG', 'CDD3'], ctime=c_times[i], M=1) for i in range(np.size(c_times))]
+    U = np.zeros((np.size(c_times), np.size(c_times)), dtype=np.complex128)
     for i in range(np.size(c_times)):
-        n = int(T/c_times[i])
         for j in range(np.size(c_times)):
-            U_1[i, j] = ((n*M/T**2)*(np.square(np.absolute(f1_cpmg(c_times[i], T, wk[j]))) - np.square(np.absolute(f1_cdd3(c_times[i], T, wk[j])))))
-    # U = U.round(20)
-    S_11_k = np.matmul(np.linalg.inv(U_1), np.reshape(C_12_0_MT_1-C_12_0_MT_2, (C_12_0_MT_1.shape[0], 1)))
+            U[i, j] = ((M/T)*(np.square(np.absolute(ff(y_arr[i][0, 0], tb, wk[j]))) - np.square(np.absolute(ff(y_arr[i][1, 1], tb, wk[j]))))).round(10)
+    S_11_k = np.matmul(np.linalg.inv(U), np.reshape(C_12_0_MT_1-C_12_0_MT_2, (C_12_0_MT_1.shape[0], 1)))
     return S_11_k
 
 def recon_S_22(coefs, **kwargs):
@@ -47,14 +50,15 @@ def recon_S_22(coefs, **kwargs):
     M = kwargs.get('M')
     T = kwargs.get('T')
     C_12_0_MT_1 = coefs[0]
-    C_12_0_MT_3 = coefs[1]
-    wk = np.array([2*np.pi*(n+1)/T for n in range(1, np.size(c_times))])
-    U = np.zeros((np.size(c_times), np.size(c_times)))
+    C_12_0_MT_2 = coefs[1]
+    wk = np.array([2*np.pi*(n+1)/T for n in range(np.size(c_times))])
+    tb = np.linspace(0, T, 10**4)
+    y_arr = [make_y(tb, ['CPMG', 'CDD3'], ctime=c_times[i], M=1) for i in range(np.size(c_times))]
+    U = np.zeros((np.size(c_times), np.size(c_times)), dtype=np.complex128)
     for i in range(np.size(c_times)):
-        n = int(T/c_times[i])
         for j in range(np.size(c_times)):
-            U[i, j] = (n*M/T)*(Gp([f1_cpmg, f1_cpmg], wk[j], T, c_times[i]) - Gp([f1_cpmg, f1_cdd3], wk[j], T, c_times[i]))
-    S_22_k = np.linalg.inv(U)@np.transpose(C_12_0_MT_1-C_12_0_MT_3)
+            U[i, j] = ((M/T)*(np.square(np.absolute(ff(y_arr[i][0, 0], tb, wk[j]))) - np.square(np.absolute(ff(y_arr[i][1, 1], tb, wk[j]))))).round(10)
+    S_22_k = np.matmul(np.linalg.inv(U), np.reshape(C_12_0_MT_1-C_12_0_MT_2, (C_12_0_MT_1.shape[0], 1)))
     return S_22_k
 
 def recon_S_1_2(coefs, **kwargs):
@@ -63,17 +67,19 @@ def recon_S_1_2(coefs, **kwargs):
     T = kwargs.get('T')
     C_12_12_MT_1 = coefs[0]
     C_12_12_MT_2 = coefs[1]
-    wk = np.array([2*np.pi*(n+1)/T for n in range(1, np.size(c_times))])
-    U_1 = np.zeros((np.size(c_times), np.size(c_times)))
-    U_2 = np.zeros((np.size(c_times), np.size(c_times)))
+    tb = np.linspace(0, T, 10**4)
+    y1_arr = np.array([make_y(tb, ['CDD3', 'CDD1'], ctime=c_times[i], M=1) for i in range(np.size(c_times))])
+    y2_arr = np.array([make_y(tb, ['CDD3', 'CPMG'], ctime=c_times[i], M=1) for i in range(np.size(c_times))])
+    wk = np.array([2*np.pi*(n+1)/T for n in range(np.size(c_times))])
+    U_1 = np.zeros((np.size(c_times), np.size(c_times)), dtype=np.complex128)
+    U_2 = np.zeros((np.size(c_times), np.size(c_times)), dtype=np.complex128)
     for i in range(np.size(c_times)):
-        n = int(T/c_times[i])
         for j in range(np.size(c_times)):
-            U_1[i, j] = (n*M/T)*(Gp([f1_cdd3, f1_cdd1], wk[j], T, c_times[i]))
-            U_2[i, j] = (n*M/T)*(Gp([f1_cdd3, f1_cpmg], wk[j], T, c_times[i]))
-    Re_S_1_2_k = np.linalg.inv(U_1)@np.transpose(C_12_12_MT_1)
-    Im_S_1_2_k = np.linalg.inv(U_2)@np.transpose(C_12_12_MT_2)
-    return Re_S_1_2_k, Im_S_1_2_k
+            U_1[i, j] = (2*M/T)*(ff(y1_arr[i][0, 0], tb, wk[j])*ff(y1_arr[i][1, 1], tb, -wk[j])).round(15)
+            U_2[i, j] = -1j*(2*M/T)*(ff(y2_arr[i][0, 0], tb, wk[j])*ff(y2_arr[i][1, 1], tb, -wk[j])).round(15)
+    Re_S_1_2_k = np.real(np.linalg.inv(U_1)@C_12_12_MT_1)
+    Im_S_1_2_k = np.real(np.linalg.inv(U_2)@C_12_12_MT_2)
+    return Re_S_1_2_k + 1j*Im_S_1_2_k
 
 def recon_S_12_12(coefs, **kwargs):
     c_times = kwargs.get('c_times')
@@ -82,9 +88,14 @@ def recon_S_12_12(coefs, **kwargs):
     C_1_0_MT = coefs[0]
     C_2_0_MT = coefs[1]
     C_12_0_MT_2 = coefs[2]
-    wk = np.array([2*np.pi*(n+1)/T for n in range(1, np.size(c_times))])
-    U = np.zeros((np.size(c_times), np.size(c_times)))
-    return
+    wk = np.array([2*np.pi*(n+1)/T for n in range( np.size(c_times))])
+    U = np.zeros((np.size(c_times), np.size(c_times)), dtype=np.complex128)
+    tb = np.linspace(0, T, 10**4)
+    y_arr = np.array([make_y(tb, ['CDD3', 'CPMG'], ctime=c_times[i], M=1) for i in range(np.size(c_times))])
+    for i in range(np.size(c_times)):
+        for j in range(np.size(c_times)):
+            U[i, j] = ((M/T)*(ff(y_arr[i][0, 0]*y_arr[i][1, 1], tb, 4*wk[j]))).round(15)
+    return np.linalg.inv(U)@(C_1_0_MT+C_2_0_MT-C_12_0_MT_2)*0.5
 
 
 # T = 1e-5
