@@ -89,7 +89,9 @@ def make_Hamiltonian(y_uv, b_t):
     paulis = jnp.array([[[1., 0.], [0., 1.]], [[0., 1.], [1., 0.]], [[0., -1j], [1j, 0.]], [[1., 0.], [0., -1.]]])
     z_vec = jnp.array([jnp.kron(paulis[0], paulis[0]), jnp.kron(paulis[3], paulis[0]), jnp.kron(paulis[0], paulis[3]),
                        jnp.kron(paulis[3], paulis[3])])
-    h_t = jnp.tensordot(y_uv[0, 0]*b_t[0]*0.5, jnp.kron(z_vec[1], paulis[0]), 0) + jnp.tensordot(y_uv[1, 1]*b_t[1]*0.5, jnp.kron(z_vec[2], paulis[0]), 0)
+    h_t = (jnp.tensordot(y_uv[0, 0]*b_t[0], jnp.kron(z_vec[1], paulis[0]), 0)
+           + jnp.tensordot(y_uv[1, 1]*b_t[1], jnp.kron(z_vec[2], paulis[0]), 0)
+           + jnp.tensordot(y_uv[2, 2]*b_t[2], jnp.kron(z_vec[3], paulis[0]), 0))
     return h_t
 
 def f(t, tk):
@@ -161,11 +163,12 @@ def make_propagator(H_t, t_vec):
     U = jax.scipy.linalg.expm(-1j*jax.scipy.integrate.trapezoid(H_t, t_vec, axis=0))
     return U
 
-@jax.jit
+# @jax.jit
 def single_shot_prop(noise_mats, t_vec, y_uv, rho0, key):
     bvec = make_noise_traj(noise_mats[0, 0], noise_mats[0, 1], key)
     bvec_g = make_noise_traj(noise_mats[1, 0], noise_mats[1, 1], key)
-    H_t = make_Hamiltonian(y_uv, jnp.array([bvec, bvec_g]))
+    bvec_12 = make_noise_traj(noise_mats[2, 0], noise_mats[2, 1], key)
+    H_t = make_Hamiltonian(y_uv, jnp.array([bvec, bvec_g, bvec_12]))
     U = make_propagator(H_t, t_vec)
     rho_MT = jnp.matmul(jnp.matmul(U, rho0), U.conjugate().transpose())
     return rho_MT
