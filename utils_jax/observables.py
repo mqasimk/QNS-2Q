@@ -98,8 +98,8 @@ def make_C_12_0_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     state = kwargs.get('state')
     rho0 = make_init_state(a_sp, c, state = state)
     rho_B = 0.5*qt.identity(2)#qt.basis(2, 0) * qt.basis(2, 0).dag()
-    rho = np.array((qt.tensor(rho0, rho_B)).full())
-    C_12_0_MT = Parallel(n_jobs=1)(delayed(C_12_0_MT_i)(solver_ftn, t_b, pulse, noise_mats, t_vec, rho,
+    rho = jnp.array((qt.tensor(rho0, rho_B)).full())
+    C_12_0_MT = Parallel(n_jobs=2)(delayed(C_12_0_MT_i)(solver_ftn, t_b, pulse, noise_mats, t_vec, rho,
                                                          c_times[i], n_shots=n_shots, M=M, a_m=a_m,
                                                          delta=delta) for i in range(np.size(c_times)))
     return C_12_0_MT
@@ -110,7 +110,7 @@ def C_12_12_MT_i(solver_ftn, t_b, pulse, noise_mats, t_vec, rho, ct, **kwargs):
     M = kwargs.get('M')
     a_m = kwargs.get('a_m')
     delta = kwargs.get('delta')
-    y_uv = np.array(make_y(t_b, pulse, ctime=ct, M=M))
+    y_uv = jnp.array(make_y(t_b, pulse, ctime=ct, M=M))
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     sol = frame_correct(sol, pulse)
     EX1X2 = E_XX(sol, a_m, delta)
@@ -138,7 +138,7 @@ def make_C_12_12_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     rho0 = make_init_state(a_sp, c, state = state)
     rho_B = 0.5*qt.identity(2) #qt.basis(2, 0) * qt.basis(2, 0).dag()
     rho = jnp.array((qt.tensor(rho0, rho_B)).full())
-    return Parallel(n_jobs=1)(delayed(C_12_12_MT_i)(solver_ftn, t_b, pulse, noise_mats, t_vec, rho, c_times[i],
+    return Parallel(n_jobs=2)(delayed(C_12_12_MT_i)(solver_ftn, t_b, pulse, noise_mats, t_vec, rho, c_times[i],
                                                            n_shots=n_shots, M=M, a_m=a_m,
                                                            delta=delta) for i in range(np.size(c_times)))
 
@@ -151,7 +151,7 @@ def C_a_b_MT_i(solver_ftn, t_b, pulse, noise_mats, t_vec, rho, ct, **kwargs):
     delta = kwargs.get('delta')
     rhop = rho[0]
     rhom = rho[1]
-    y_uv = np.array(make_y(t_b, pulse, ctime=ct, M=M))
+    y_uv = jnp.array(make_y(t_b, pulse, ctime=ct, M=M))
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhop, n_shots)
     sol = frame_correct(sol, pulse)
     EXlp = E_X(l, sol, a_m, delta)
@@ -192,7 +192,7 @@ def make_C_a_b_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     rho0m = make_init_state(a_sp, c, state = state_m)
     rho_B = 0.5*qt.identity(2)
     rhom = jnp.array((qt.tensor(rho0m, rho_B)).full())
-    return Parallel(n_jobs=1)(delayed(C_a_b_MT_i)(solver_ftn, t_b, pulse, noise_mats, t_vec, [rhop, rhom], c_times[i],
+    return Parallel(n_jobs=2)(delayed(C_a_b_MT_i)(solver_ftn, t_b, pulse, noise_mats, t_vec, [rhop, rhom], c_times[i],
                                                    n_shots=n_shots, M=M, a_m=a_m, l=l,
                                                    delta=delta) for i in range(np.size(c_times)))
 
@@ -204,7 +204,7 @@ def C_a_0_MT_i(solver_ftn, t_b, pulse, noise_mats, t_vec, rho, ct, **kwargs):
     delta = kwargs.get('delta')
     rhop = rho[0]
     rhom = rho[1]
-    y_uv = np.array(make_y(t_b, pulse, ctime=ct, M=M))
+    y_uv = jnp.array(make_y(t_b, pulse, ctime=ct, M=M))
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhop, n_shots)
     sol = frame_correct(sol, pulse)
     EXlp = E_X(l, sol, a_m, delta)
@@ -244,7 +244,7 @@ def make_C_a_0_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     rho0m = make_init_state(a_sp, c, state = state_m)
     rho_B = 0.5*qt.identity(2)
     rhom = jnp.array((qt.tensor(rho0m, rho_B)).full())
-    return Parallel(n_jobs=1)(delayed(C_a_0_MT_i)(solver_ftn, t_b, pulse, noise_mats, t_vec, [rhop, rhom], c_times[i],
+    return Parallel(n_jobs=2)(delayed(C_a_0_MT_i)(solver_ftn, t_b, pulse, noise_mats, t_vec, [rhop, rhom], c_times[i],
                                                    n_shots=n_shots, M=M, a_m=a_m, l=l,
                                                    delta=delta) for i in range(np.size(c_times)))
 

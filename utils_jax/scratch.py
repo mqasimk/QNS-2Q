@@ -16,10 +16,10 @@ def S_11(w):
     return S0*(1/(1+(tc**2)*(jnp.abs(w)-w0)**2))
 
 def S_12(w):
-    tc=1/(1*10**6)
-    S0 = 1
+    tc=0.5/(1*10**6)
+    S0 = 1e3
     w0=0*10**6
-    return 0.#S0*(1/(1+(tc**2)*(jnp.abs(w)-w0)**2))
+    return S0*(1/(1+(tc**2)*(jnp.abs(w)-w0)**2))
 
 def ff(y, t, w):
     return np.trapz(np.exp(1j*w*t)*y, t)
@@ -69,14 +69,14 @@ y_arr = np.array([make_y(tb, ['CDD3', 'CPMG'], ctime=ct, M=1) for ct in ct_arr])
 U_3 = np.zeros((np.size(ct_arr), np.size(ct_arr)), dtype=np.complex128)
 for i in range(np.size(c_times)):
     for j in range(np.size(c_times)):
-        U_3[i, j] = ((M/T)*(ff(y_arr[i][0, 0]*y_arr[i][1, 1], tb, 4*wk[j])).round(10))
+        U_3[i, j] = ((M/T)*(np.square(np.absolute(ff(y_arr[i][2, 2], tb, 4*wk[j]))))).round(25)
 print(np.linalg.cond(U_3))
 # print((np.linalg.inv(U_3)@U_3).round(10))
 
 import os
 
 pdir = os.pardir
-fname = "Run_jax_2"
+fname = "Run_jax_3"
 observed = np.load(os.path.join(pdir, fname, "results.npz"))
 C_12_0_MT_1 = observed['C_12_0_MT_1']
 C_12_0_MT_2 = observed['C_12_0_MT_2']
@@ -85,16 +85,20 @@ C_12_12_MT_1 = observed['C_12_12_MT_1']
 C_12_12_MT_2 = observed['C_12_12_MT_2']
 C_1_0_MT_1 = observed['C_1_0_MT_1']
 C_2_0_MT_1 = observed['C_2_0_MT_1']
-
-plt.plot(wk, np.linalg.inv(U_3)@(C_1_0_MT_1+C_2_0_MT_1-C_12_0_MT_2), 'r.')
+print(C_1_0_MT_1+C_2_0_MT_1-C_12_0_MT_2)
+yax = np.zeros(np.size(wk))
+plt.plot(4*wk, -np.linalg.inv(U_3)@np.real(C_1_0_MT_1+C_2_0_MT_1-C_12_0_MT_2)/np.sqrt(8), 'r.')
+plt.plot(4*w, S_12(4*w), 'r--')
+plt.plot(4*wk, S_12(4*wk), 'k.')
+plt.xlim([0, 4*wk[-1]])
 plt.show()
-
+# print(S_12(4*wk)-(-np.linalg.inv(U_3)@(C_1_0_MT_1+C_2_0_MT_1-C_12_0_MT_2)))
 # print(recon_S_1_2([C_12_12_MT_1, C_12_12_MT_2], M=M, T=T, c_times=c_times))
 # ax2.plot(wk, np.matmul(U, S_k), 'gx')
 # ind = 0
 # plt.plot(tb, y_base[ind][0, 0])
 # plt.plot(tb/2, y_base[ind][0, 0])
-# plt.show()
+plt.show()
 # y_base = np.array([make_y(tb, ['CDD3', 'CDD1'], ctime=ct, M=1) for ct in ct_arr])
 # yax = np.zeros(np.size(wk))
 # plt.plot(w, [np.real(ff(y_base[0][0, 0], tb, wi)*ff(y_base[0][1, 1], tb, -wi)) for wi in w])
@@ -104,13 +108,21 @@ plt.show()
 # y_base = np.array([make_y(tb, ['CDD3', 'CPMG'], ctime=ct, M=1) for ct in ct_arr])
 # yax = np.zeros(np.size(wk))
 # ctn = [2*T/n for n in range(1, (trunc+1))]
-# y1_arr = np.array([make_y(tb, ['CDD3', 'CPMG'], ctime=ct, M=1) for ct in ct_arr])
-# y2_arr = np.array([make_y(tb, ['CDD1', 'CDD3'], ctime=ct, M=1) for ct in ct_arr])
-# plt.plot(w, [np.real(ff(y1_arr[0][0, 0]*y1_arr[0][1, 1], tb, wi)) for wi in w], 'r')
+y1_arr = np.array([make_y(tb, ['CDD3', 'CPMG'], ctime=ct, M=1) for ct in ct_arr])
+# ct_arr1 = np.array([2*np.pi*(n+1)/T for n in range(32)])
+y2_arr = np.array([make_y(tb, ['CDD1', 'CDD3'], ctime=ct, M=1) for ct in ct_arr])
+# g11_1212 = np.array([np.abs(ff(y1_arr[2][0, 0]*y1_arr[2][1, 1], tb, 4*wi))**2 for wi in w])
+g11_1212_1 = np.array([np.abs(ff(y1_arr[1][2, 2], tb, 4*wi))**2 for wi in w])
+# plt.plot(4*w, np.real(g11_1212), 'r')
+# plt.plot(4*w, np.imag(g11_1212), 'b')
+plt.plot(4*w, np.abs(g11_1212_1)**2, 'g')
+# plt.plot(4*w, np.imag(g11_1212_1), 'y--')
+# plt.plot(4*w, S_12(4*w)/1e13, 'g--')
 # plt.plot(w, [np.imag(ff(y_arr[0][0, 0]*y_arr[0][1, 1], tb, wi)) for wi in w], 'b')
 # plt.plot(tb, y1_arr[1][0, 0]*y1_arr[1][1, 1], 'r')
 # plt.plot(tb, y2_arr[7][0, 0], 'b--')
 # plt.plot(w, [np.abs(ff(y1_arr[1][0, 0]*y1_arr[1][1, 1], tb, wi))**2 for wi in w], 'b')
 # plt.plot(w, [np.abs(ff(y1_arr[3][0, 0], tb, wi))**2 for wi in w], 'r')
-# plt.plot(wk, yax, 'k.')
-# plt.show()
+plt.plot(4*wk, yax, 'k.')
+plt.show()
+
