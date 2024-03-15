@@ -89,9 +89,9 @@ def make_Hamiltonian(y_uv, b_t):
     paulis = jnp.array([[[1., 0.], [0., 1.]], [[0., 1.], [1., 0.]], [[0., -1j], [1j, 0.]], [[1., 0.], [0., -1.]]])
     z_vec = jnp.array([jnp.kron(paulis[0], paulis[0]), jnp.kron(paulis[3], paulis[0]), jnp.kron(paulis[0], paulis[3]),
                        jnp.kron(paulis[3], paulis[3])])
-    h_t = (jnp.tensordot(y_uv[0, 0]*b_t[0], jnp.kron(z_vec[1], paulis[0]), 0)
-           + jnp.tensordot(y_uv[1, 1]*b_t[1], jnp.kron(z_vec[2], paulis[0]), 0)
-           + jnp.tensordot(y_uv[2, 2]*b_t[2], jnp.kron(z_vec[3], paulis[0]), 0))
+    h_t = (jnp.tensordot(y_uv[0, 0]*b_t[0]*0.5, jnp.kron(z_vec[1], paulis[0]), 0)
+           + jnp.tensordot(y_uv[1, 1]*b_t[1]*0.5, jnp.kron(z_vec[2], paulis[0]), 0)
+           + jnp.tensordot(y_uv[2, 2]*b_t[2]*0.5, jnp.kron(z_vec[3], paulis[0]), 0))
     return h_t
 
 def f(t, tk):
@@ -138,7 +138,7 @@ def cdd3(t, m):
 def make_y(t_b, pulse, **kwargs):
     ctime = kwargs.get('ctime')
     M = kwargs.get('M')
-    n = int(t_b[-1]/ctime)
+    n = int((t_b[-1]/ctime).round(0))
     y = np.zeros((3,3,np.size(t_b)))
     for i in range(2):
         if pulse[i] == 'CPMG':
