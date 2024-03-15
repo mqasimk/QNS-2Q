@@ -24,18 +24,18 @@ def S_11(w):
 def S_12(w):
     tc=1/(1*10**6)
     S0 = 1e3
-    w0=0*10**6
+    w0=4*10**6
     return S0*(1/(1+(tc**2)*(jnp.abs(w)-w0)**2))
 
 T = 10**(-5)
 M = 10
 t_grain = int(1e3)
 t_b = jnp.linspace(0, T, t_grain)
-truncate = 8
+truncate = 12
 wmax = 2*np.pi*truncate/T
 w_grain = 1000
 spec_vec = [S_11, S_12]
-a_sp = np.array([1., 1.])
+a_sp = np.array([0.96, 0.97])
 c = np.array([np.array(0.+0.*1j), np.array(0.+0.*1j)])
 a_m = np.array([1., 1.])
 delta = np.array([0., 0.])
@@ -43,11 +43,11 @@ gamma = T/5
 gamma_12 = 0.
 t_vec = jnp.linspace(0, M*T, M*jnp.size(t_b))
 c_times = jnp.array([T/n for n in range(1, truncate+1)])
-n_shots = 2000
+n_shots = 1000
 import os
 # create a folder in the parent directory
 parent_dir = os.pardir
-fname = "Run_jax_3"
+fname = "Run_jax_5_SP_err"
 if not os.path.exists(os.path.join(parent_dir, fname)):
     path = os.path.join(parent_dir, fname)
     os.mkdir(path)

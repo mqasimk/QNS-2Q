@@ -41,7 +41,7 @@ def recon_S_11(coefs, **kwargs):
     U = np.zeros((np.size(c_times), np.size(c_times)), dtype=np.complex128)
     for i in range(np.size(c_times)):
         for j in range(np.size(c_times)):
-            U[i, j] = ((M/T)*(np.square(np.absolute(ff(y_arr[i][0, 0], tb, wk[j]))) - np.square(np.absolute(ff(y_arr[i][1, 1], tb, wk[j]))))).round(15)
+            U[i, j] = ((2*M/T)*(np.square(np.absolute(ff(y_arr[i][0, 0], tb, wk[j]))) - np.square(np.absolute(ff(y_arr[i][1, 1], tb, wk[j]))))).round(15)
     S_11_k = np.matmul(np.linalg.inv(U), np.reshape(C_12_0_MT_1-C_12_0_MT_2, (C_12_0_MT_1.shape[0], 1)))
     return S_11_k
 
@@ -50,15 +50,15 @@ def recon_S_22(coefs, **kwargs):
     M = kwargs.get('M')
     T = kwargs.get('T')
     C_12_0_MT_1 = coefs[0]
-    C_12_0_MT_2 = coefs[1]
+    C_12_0_MT_3 = coefs[1]
     wk = np.array([2*np.pi*(n+1)/T for n in range(np.size(c_times))])
     tb = np.linspace(0, T, 10**4)
     y_arr = [make_y(tb, ['CPMG', 'CDD3'], ctime=c_times[i], M=1) for i in range(np.size(c_times))]
     U = np.zeros((np.size(c_times), np.size(c_times)), dtype=np.complex128)
     for i in range(np.size(c_times)):
         for j in range(np.size(c_times)):
-            U[i, j] = ((M/T)*(np.square(np.absolute(ff(y_arr[i][0, 0], tb, wk[j]))) - np.square(np.absolute(ff(y_arr[i][1, 1], tb, wk[j]))))).round(15)
-    S_22_k = np.matmul(np.linalg.inv(U), np.reshape(C_12_0_MT_1-C_12_0_MT_2, (C_12_0_MT_1.shape[0], 1)))
+            U[i, j] = ((2*M/T)*(np.square(np.absolute(ff(y_arr[i][0, 0], tb, wk[j]))) - np.square(np.absolute(ff(y_arr[i][1, 1], tb, wk[j]))))).round(15)
+    S_22_k = np.matmul(np.linalg.inv(U), np.reshape(C_12_0_MT_1-C_12_0_MT_3, (C_12_0_MT_1.shape[0], 1)))
     return S_22_k
 
 def recon_S_1_2(coefs, **kwargs):
@@ -67,7 +67,7 @@ def recon_S_1_2(coefs, **kwargs):
     T = kwargs.get('T')
     C_12_12_MT_1 = coefs[0]
     C_12_12_MT_2 = coefs[1]
-    tb = np.linspace(0, T, 10**4)
+    tb = np.linspace(0, T, 10**5)
     y1_arr = np.array([make_y(tb, ['CDD3', 'CDD1'], ctime=c_times[i], M=1) for i in range(np.size(c_times))])
     y2_arr = np.array([make_y(tb, ['CDD3', 'CPMG'], ctime=c_times[i], M=1) for i in range(np.size(c_times))])
     wk = np.array([2*np.pi*(n+1)/T for n in range(np.size(c_times))])
@@ -94,7 +94,7 @@ def recon_S_12_12(coefs, **kwargs):
     y_arr = np.array([make_y(tb, ['CDD3', 'CPMG'], ctime=c_times[i], M=1) for i in range(np.size(c_times))])
     for i in range(np.size(c_times)):
         for j in range(np.size(c_times)):
-            U[i, j] = ((M/T)*(np.abs(ff(y_arr[i][0, 0]*y_arr[i][1, 1], tb, 4*wk[j]))**2)).round(15)
+            U[i, j] = ((2*M/T)*(np.abs(ff(y_arr[i][0, 0]*y_arr[i][1, 1], tb, 4*wk[j]))**2)).round(15)
     return np.linalg.inv(U)@(C_1_0_MT+C_2_0_MT-C_12_0_MT_2)*0.5
 
 def recon_S_1_12(coefs, **kwargs):

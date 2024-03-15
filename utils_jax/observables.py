@@ -4,6 +4,18 @@ from trajectories import make_y, make_init_state
 import jax.numpy as jnp
 from joblib import Parallel, delayed
 
+def POVMs(a_m, delta):
+    A1 = np.array([[(a_m[0]+delta[0]+1.)/2., (1.+delta[0]-a_m[0])/2.], [(1.-delta[0]-a_m[0])/2., (a_m[0]-delta[0]+1.)/2.]])
+    A2 = np.array([[(a_m[1]+delta[1]+1.)/2., (1.+delta[1]-a_m[1])/2.], [(1.-delta[1]-a_m[1])/2., (a_m[1]-delta[1]+1.)/2.]])
+    A1 = qt.Qobj(A1)
+    A2 = qt.Qobj(A2)
+    A = qt.tensor(A1, A2)
+    basis1q = [qt.basis(2, 0), qt.basis(2, 1)]
+    basis2q = [qt.tensor(basis1q[0], basis1q[0]), qt.tensor(basis1q[0], basis1q[1]),
+               qt.tensor(basis1q[1], basis1q[0]), qt.tensor(basis1q[1], basis1q[1])]
+    povm_arr = np.array([[basis2q[i].dag()*A*basis2q[j]*basis2q[j]*basis2q[j].dag() for j in range(4)] for i in range(4)])
+    return np.sum(povm_arr, axis=1)
+
 
 def E_X(qubit, state, a_m, delta):
     if qubit == 1:
@@ -248,3 +260,6 @@ def make_C_a_0_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
                                                    n_shots=n_shots, M=M, a_m=a_m, l=l,
                                                    delta=delta) for i in range(np.size(c_times)))
 
+
+# print(POVMs([0.9, 0.9], [0.01, 0.02]))
+# print(np.array([[(i,j) for j in range(4)] for i in range(4)]))
