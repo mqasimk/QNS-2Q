@@ -33,10 +33,10 @@ def make_noise_mat_arr(act, **kwargs):
 def make_noise_mat(spec_vec, t_vec, **kwargs):
     w_grain = kwargs.get('w_grain')
     wmax = kwargs.get('wmax')
-    trunc_n = kwargs.get('trunc_n')
+    # trunc_n = kwargs.get('trunc_n')
     gamma = kwargs.get('gamma')
     size_t = np.size(t_vec)
-    size_w = int(trunc_n*w_grain)
+    size_w = int(2*w_grain)
     S = np.zeros((size_t, size_w))
     C = np.zeros((size_t, size_w))
     dw = wmax/w_grain
