@@ -127,5 +127,4 @@ print(C_1_0_MT_1+C_2_0_MT_1-C_12_0_MT_2)
 # plt.plot(wk, yax, 'k.')
 # plt.show()
 
-import qutip as qt
-print(qt.tensor(qt.sigmax(), qt.sigmax()))
+print([ 9.99840479e-01 -3.72529046e-09 + 1.57486654e-04 + 2.03773388e-06])
