@@ -10,7 +10,7 @@ def S_11(w):
     return S0*(1/(1+(tc**2)*(np.abs(w)-w0)**2))
 
 def S_12(w):
-    tc=1/(1*10**6)
+    tc=0.25/(1*10**6)
     S0 = 1e3
     w0=4*10**6
     return S0*(1/(1+(tc**2)*(np.abs(w)-w0)**2))
@@ -23,7 +23,7 @@ def S_12(w):
 
 # load the variables
 parent_dir = os.pardir
-fname = "Run_jax_5_SP_err"
+fname = "Run_jax_7_SPAM"
 path = os.path.join(parent_dir, fname)
 params = np.load(os.path.join(path, "params.npz"))
 t_vec = params['t_vec']
