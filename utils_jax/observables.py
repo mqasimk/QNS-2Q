@@ -24,12 +24,12 @@ def POVMs(a_m, delta):
     return [p1_0, p1_1, p2_0, p2_1]
 
 def twoq_meas(probs):
-    # normalize the array
     probs = np.real(probs)
     # set negative values to 0
     probs[probs < 0] = 0
     # set values greater than 1 to 1
     probs[probs > 1] = 1
+    # normalize the array
     probs = probs/np.sum(probs)
     return np.random.multinomial(1, probs)
 
@@ -103,17 +103,24 @@ def E_XX(state, a_m, delta):
 
 def E_XX_hat(state, a_m, delta):
     povms = POVMs(a_m, delta)
-    counts = np.zeros((len(state), 4))
+    # counts = np.zeros((len(state), 4))
     h = [np.kron(np.array([[1,1],[1,-1]])/np.sqrt(2), np.identity(2)), np.kron(np.identity(2), np.array([[1,1],[1,-1]])/np.sqrt(2)),
          np.kron(np.array([[1,1],[1,-1]])/np.sqrt(2), np.array([[1,1],[1,-1]])/np.sqrt(2))]
     for i in range(len(h)):
         h[i] = qt.Qobj(np.kron(h[i], np.identity(2)), dims=[[2, 2, 2], [2, 2, 2]])
+    probs = np.zeros((len(state), 4))
     for i in range(len(state)):
-        counts[i, :] = twoq_meas(gen_probs(h[2], state[i], povms))
-    p00 = np.sum(counts[:, 0])/counts.shape[0]
-    p01 = np.sum(counts[:, 1])/counts.shape[0]
-    p10 = np.sum(counts[:, 2])/counts.shape[0]
-    p11 = np.sum(counts[:, 3])/counts.shape[0]
+        probs[i, :] = gen_probs(h[2], state[i], povms)
+    p00 = np.sum(probs[:, 0])/probs.shape[0]
+    p01 = np.sum(probs[:, 1])/probs.shape[0]
+    p10 = np.sum(probs[:, 2])/probs.shape[0]
+    p11 = np.sum(probs[:, 3])/probs.shape[0]
+    # for i in range(len(state)):
+    #     counts[i, :] = twoq_meas(gen_probs(h[2], state[i], povms))
+    # p00 = np.sum(counts[:, 0])/counts.shape[0]
+    # p01 = np.sum(counts[:, 1])/counts.shape[0]
+    # p10 = np.sum(counts[:, 2])/counts.shape[0]
+    # p11 = np.sum(counts[:, 3])/counts.shape[0]
     return p00 + p11 - p01 - p10
 
 
@@ -123,7 +130,7 @@ def E_XY(state, a_m, delta):
 
 def E_XY_hat(state, a_m, delta):
     povms = POVMs(a_m, delta)
-    counts = np.zeros((len(state), 4))
+    # counts = np.zeros((len(state), 4))
     h = [np.kron(np.array([[1,1],[1,-1]])/np.sqrt(2), np.identity(2)), np.kron(np.identity(2), np.array([[1,1],[1,-1]])/np.sqrt(2)),
          np.kron(np.array([[1,1],[1,-1]])/np.sqrt(2), np.array([[1,1],[1,-1]])/np.sqrt(2))]
     rx = [np.kron(np.array([[1.,-1j],[-1j,1.]])/np.sqrt(2), np.identity(2)), np.kron(np.identity(2), np.array([[1.,-1j],[-1j,1.]])/np.sqrt(2)),
@@ -131,12 +138,19 @@ def E_XY_hat(state, a_m, delta):
     for i in range(len(h)):
         h[i] = qt.Qobj(np.kron(h[i], np.identity(2)), dims=[[2, 2, 2], [2, 2, 2]])
         rx[i] = qt.Qobj(np.kron(rx[i], np.identity(2)), dims=[[2, 2, 2], [2, 2, 2]])
+    probs = np.zeros((len(state), 4))
     for i in range(len(state)):
-        counts[i, :] = twoq_meas(gen_probs(h[0]*rx[1], state[i], povms))
-    p00 = np.sum(counts[:, 0])/counts.shape[0]
-    p01 = np.sum(counts[:, 1])/counts.shape[0]
-    p10 = np.sum(counts[:, 2])/counts.shape[0]
-    p11 = np.sum(counts[:, 3])/counts.shape[0]
+        probs[i, :] = gen_probs(h[0]*rx[1], state[i], povms)
+    p00 = np.sum(probs[:, 0])/probs.shape[0]
+    p01 = np.sum(probs[:, 1])/probs.shape[0]
+    p10 = np.sum(probs[:, 2])/probs.shape[0]
+    p11 = np.sum(probs[:, 3])/probs.shape[0]
+    # for i in range(len(state)):
+    #     counts[i, :] = twoq_meas(gen_probs(h[0]*rx[1], state[i], povms))
+    # p00 = np.sum(counts[:, 0])/counts.shape[0]
+    # p01 = np.sum(counts[:, 1])/counts.shape[0]
+    # p10 = np.sum(counts[:, 2])/counts.shape[0]
+    # p11 = np.sum(counts[:, 3])/counts.shape[0]
     return  p00 + p11 - p01 - p10
 
 
@@ -146,7 +160,7 @@ def E_YX(state, a_m, delta):
 
 def E_YX_hat(state, a_m, delta):
     povms = POVMs(a_m, delta)
-    counts = np.zeros((len(state), 4))
+    # counts = np.zeros((len(state), 4))
     h = [np.kron(np.array([[1,1],[1,-1]])/np.sqrt(2), np.identity(2)), np.kron(np.identity(2), np.array([[1,1],[1,-1]])/np.sqrt(2)),
          np.kron(np.array([[1,1],[1,-1]])/np.sqrt(2), np.array([[1,1],[1,-1]])/np.sqrt(2))]
     rx = [np.kron(np.array([[1.,-1j],[-1j,1.]])/np.sqrt(2), np.identity(2)), np.kron(np.identity(2), np.array([[1.,-1j],[-1j,1.]])/np.sqrt(2)),
@@ -154,12 +168,19 @@ def E_YX_hat(state, a_m, delta):
     for i in range(len(h)):
         h[i] = qt.Qobj(np.kron(h[i], np.identity(2)), dims=[[2, 2, 2], [2, 2, 2]])
         rx[i] = qt.Qobj(np.kron(rx[i], np.identity(2)), dims=[[2, 2, 2], [2, 2, 2]])
+    probs = np.zeros((len(state), 4))
     for i in range(len(state)):
-        counts[i, :] = twoq_meas(gen_probs(h[1]*rx[0], state[i], povms))
-    p00 = np.sum(counts[:, 0])/counts.shape[0]
-    p01 = np.sum(counts[:, 1])/counts.shape[0]
-    p10 = np.sum(counts[:, 2])/counts.shape[0]
-    p11 = np.sum(counts[:, 3])/counts.shape[0]
+        probs[i, :] = gen_probs(h[1]*rx[0], state[i], povms)
+    p00 = np.sum(probs[:, 0])/probs.shape[0]
+    p01 = np.sum(probs[:, 1])/probs.shape[0]
+    p10 = np.sum(probs[:, 2])/probs.shape[0]
+    p11 = np.sum(probs[:, 3])/probs.shape[0]
+    # for i in range(len(state)):
+    #     counts[i, :] = twoq_meas(gen_probs(h[1]*rx[0], state[i], povms))
+    # p00 = np.sum(counts[:, 0])/counts.shape[0]
+    # p01 = np.sum(counts[:, 1])/counts.shape[0]
+    # p10 = np.sum(counts[:, 2])/counts.shape[0]
+    # p11 = np.sum(counts[:, 3])/counts.shape[0]
     return p00 + p11 - p01 - p10
 
 
@@ -169,7 +190,7 @@ def E_YY(state, a_m, delta):
 
 def E_YY_hat(state, a_m, delta):
     povms = POVMs(a_m, delta)
-    counts = np.zeros((len(state), 4))
+    # counts = np.zeros((len(state), 4))
     h = [np.kron(np.array([[1,1],[1,-1]])/np.sqrt(2), np.identity(2)), np.kron(np.identity(2), np.array([[1,1],[1,-1]])/np.sqrt(2)),
          np.kron(np.array([[1,1],[1,-1]])/np.sqrt(2), np.array([[1,1],[1,-1]])/np.sqrt(2))]
     rx = [np.kron(np.array([[1.,-1j],[-1j,1.]])/np.sqrt(2), np.identity(2)), np.kron(np.identity(2), np.array([[1.,-1j],[-1j,1.]])/np.sqrt(2)),
@@ -177,12 +198,19 @@ def E_YY_hat(state, a_m, delta):
     for i in range(len(h)):
         h[i] = qt.Qobj(np.kron(h[i], np.identity(2)), dims=[[2, 2, 2], [2, 2, 2]])
         rx[i] = qt.Qobj(np.kron(rx[i], np.identity(2)), dims=[[2, 2, 2], [2, 2, 2]])
+    probs = np.zeros((len(state), 4))
     for i in range(len(state)):
-        counts[i, :] = twoq_meas(gen_probs(rx[2], state[i], povms))
-    p00 = np.sum(counts[:, 0])/counts.shape[0]
-    p01 = np.sum(counts[:, 1])/counts.shape[0]
-    p10 = np.sum(counts[:, 2])/counts.shape[0]
-    p11 = np.sum(counts[:, 3])/counts.shape[0]
+        probs[i, :] = gen_probs(rx[2], state[i], povms)
+    p00 = np.sum(probs[:, 0])/probs.shape[0]
+    p01 = np.sum(probs[:, 1])/probs.shape[0]
+    p10 = np.sum(probs[:, 2])/probs.shape[0]
+    p11 = np.sum(probs[:, 3])/probs.shape[0]
+    # for i in range(len(state)):
+    #     counts[i, :] = twoq_meas(gen_probs(rx[2], state[i], povms))
+    # p00 = np.sum(counts[:, 0])/counts.shape[0]
+    # p01 = np.sum(counts[:, 1])/counts.shape[0]
+    # p10 = np.sum(counts[:, 2])/counts.shape[0]
+    # p11 = np.sum(counts[:, 3])/counts.shape[0]
     return p00 + p11 - p01 - p10
 
 def A(expec):
