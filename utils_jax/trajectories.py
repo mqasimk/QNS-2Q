@@ -95,8 +95,7 @@ def make_Hamiltonian(y_uv, b_t):
     return h_t
 
 def f(t, tk):
-    return sum([((-1)**i)*np.heaviside(t-tk[i],1)*np.heaviside(tk[i+1]-t,1) for i in range(np.size(tk)-1)])
-
+    return jnp.sum(jnp.array([((-1)**i)*jnp.heaviside(t-tk[i], 1)*jnp.heaviside(tk[i+1] - t, 1) for i in range(jnp.size(tk) - 1)]))
 
 def cpmg(t, n):
     tk = [(k+0.50)*t[-1]/(2*n) for k in range(int(2*n))]
@@ -158,6 +157,22 @@ def make_y(t_b, pulse, **kwargs):
     y[2,2] = np.multiply(y[1,1], y[0,0])
     return np.tile(y, M)
 
+def custom_y(vt, t_b, M):
+    y = jnp.zeros((3, 3, np.size(t_b)))
+    ftn = f(t_b, vt[0])
+    y = y.at[0, 0].set(ftn)
+    ftn = f(t_b, vt[1])
+    y = y.at[1, 1].set(ftn)
+    y = y.at[2, 2].set(jnp.multiply(y[1, 1], y[0, 0]))
+    return jnp.tile(y, M)
+
+# def custom_y(vt, t_b, M):
+#     y = np.zeros((3, 3, np.size(t_b)))
+#     y[0, 0] = f(t_b, vt[0])
+#     y[1, 1] = f(t_b, vt[1])
+#     y[2, 2] = np.multiply(y[1, 1], y[0, 0])
+#     return jnp.tile(y, M)
+
 @jax.jit
 def make_propagator(H_t, t_vec):
     U = jax.scipy.linalg.expm(-1j*jax.scipy.integrate.trapezoid(H_t, t_vec, axis=0))
@@ -165,9 +180,11 @@ def make_propagator(H_t, t_vec):
 
 # @jax.jit
 def single_shot_prop(noise_mats, t_vec, y_uv, rho0, key):
-    bvec = make_noise_traj(noise_mats[0, 0], noise_mats[0, 1], key)
-    bvec_g = make_noise_traj(noise_mats[1, 0], noise_mats[1, 1], key)
-    bvec_12 = make_noise_traj(noise_mats[2, 0], noise_mats[2, 1], key)
+    size = np.size(t_vec)
+    y_uv = y_uv[:, :, :size]
+    bvec = make_noise_traj(noise_mats[0, 0], noise_mats[0, 1], key)[:size]
+    bvec_g = make_noise_traj(noise_mats[1, 0], noise_mats[1, 1], key)[:size]
+    bvec_12 = make_noise_traj(noise_mats[2, 0], noise_mats[2, 1], key)[:size]
     H_t = make_Hamiltonian(y_uv, jnp.array([bvec, bvec_g, bvec_12]))
     U = make_propagator(H_t, t_vec)
     rho_MT = jnp.matmul(jnp.matmul(U, rho0), U.conjugate().transpose())

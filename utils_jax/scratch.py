@@ -10,15 +10,16 @@ import jax.numpy as jnp
 import scipy
 
 def S_11(w):
-    tc=1/(1*10**6)
-    S0 = 1e3
+    tc=0.5/(1*10**6)
+    S0 = 2e3
     w0=0*10**6
     return S0*(1/(1+(tc**2)*(jnp.abs(w)-w0)**2))
 
+
 def S_12(w):
     tc=0.5/(1*10**6)
-    S0 = 1e3
-    w0=0*10**6
+    S0 = 3e3
+    w0=2*10**6
     return S0*(1/(1+(tc**2)*(jnp.abs(w)-w0)**2))
 
 def ff(y, t, w):
@@ -74,19 +75,19 @@ for i in range(np.size(c_times)):
 print(np.linalg.cond(U_3))
 # print((np.linalg.inv(U_3)@U_3).round(10))
 
-import os
-
-pdir = os.pardir
-fname = "Run_jax_3"
-observed = np.load(os.path.join(pdir, fname, "results.npz"))
-C_12_0_MT_1 = observed['C_12_0_MT_1']
-C_12_0_MT_2 = observed['C_12_0_MT_2']
-C_12_0_MT_3 = observed['C_12_0_MT_3']
-C_12_12_MT_1 = observed['C_12_12_MT_1']
-C_12_12_MT_2 = observed['C_12_12_MT_2']
-C_1_0_MT_1 = observed['C_1_0_MT_1']
-C_2_0_MT_1 = observed['C_2_0_MT_1']
-print(C_1_0_MT_1+C_2_0_MT_1-C_12_0_MT_2)
+# import os
+#
+# pdir = os.pardir
+# fname = "Run_jax_3"
+# observed = np.load(os.path.join(pdir, fname, "results.npz"))
+# C_12_0_MT_1 = observed['C_12_0_MT_1']
+# C_12_0_MT_2 = observed['C_12_0_MT_2']
+# C_12_0_MT_3 = observed['C_12_0_MT_3']
+# C_12_12_MT_1 = observed['C_12_12_MT_1']
+# C_12_12_MT_2 = observed['C_12_12_MT_2']
+# C_1_0_MT_1 = observed['C_1_0_MT_1']
+# C_2_0_MT_1 = observed['C_2_0_MT_1']
+# print(C_1_0_MT_1+C_2_0_MT_1-C_12_0_MT_2)
 # yax = np.zeros(np.size(wk))
 # plt.plot(4*wk, -np.linalg.inv(U_3)@np.real(C_1_0_MT_1+C_2_0_MT_1-C_12_0_MT_2)/np.sqrt(8), 'r.')
 # plt.plot(4*w, S_12(4*w), 'r--')
@@ -100,12 +101,19 @@ print(C_1_0_MT_1+C_2_0_MT_1-C_12_0_MT_2)
 # plt.plot(tb, y_base[ind][0, 0])
 # plt.plot(tb/2, y_base[ind][0, 0])
 # plt.show()
-# y_base = np.array([make_y(tb, ['CDD3', 'CDD1'], ctime=ct, M=1) for ct in ct_arr])
-# yax = np.zeros(np.size(wk))
-# plt.plot(w, [np.real(ff(y_base[0][0, 0], tb, wi)*ff(y_base[0][1, 1], tb, -wi)) for wi in w])
-# plt.plot(w, [np.imag(ff(y_base[0][0, 0], tb, wi)*ff(y_base[0][1, 1], tb, -wi)) for wi in w])
-# plt.plot(wk, yax, 'r.')
-# plt.show()
+y_base = np.array([make_y(tb, ['CDD1', 'CPMG'], ctime=ct, M=1) for ct in ct_arr])
+yax = np.zeros(np.size(wk))
+plt.plot(w, [np.real(ff(y_base[4][0, 0], tb, wi)*ff(y_base[2][0, 0], tb, -wi)) for wi in w])
+plt.plot(w, [np.imag(ff(y_base[4][0, 0], tb, wi)*ff(y_base[2][0, 0], tb, -wi)) for wi in w])
+plt.plot(w, [np.real(ff(y_base[4][1, 1], tb, wi)*ff(y_base[2][1, 1], tb, -wi)) for wi in w])
+plt.plot(w, [np.imag(ff(y_base[4][1, 1], tb, wi)*ff(y_base[2][1, 1], tb, -wi)) for wi in w])
+plt.plot(w, [np.real(ff(y_base[4][2, 2], tb, wi)*ff(y_base[2][2, 2], tb, -wi)) for wi in w])
+plt.plot(w, [np.imag(ff(y_base[4][2, 2], tb, wi)*ff(y_base[2][2, 2], tb, -wi)) for wi in w])
+plt.plot(wk, yax, 'r.')
+plt.show()
+plt.plot(w, S_12(w))
+plt.plot(w, S_11(w))
+plt.show()
 # y_base = np.array([make_y(tb, ['CDD3', 'CPMG'], ctime=ct, M=1) for ct in ct_arr])
 # yax = np.zeros(np.size(wk))
 # ctn = [2*T/n for n in range(1, (trunc+1))]
