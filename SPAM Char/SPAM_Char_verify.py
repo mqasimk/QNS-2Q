@@ -4,7 +4,7 @@ from qiskit_ibm_provider import IBMProvider
 from qiskit.providers.backend import Backend
 from qiskit_experiments.framework import BaseExperiment, Options, AnalysisResultData
 from qiskit_ibm_runtime import Options as IBMOptions
-from qiskit.providers.fake_provider import FakeLagos
+from qiskit.providers.fake_provider import Fake5QV1
 from qiskit_aer.noise import NoiseModel
 from qiskit_experiments.framework import ParallelExperiment
 from qiskit_experiments.framework import (
@@ -133,7 +133,7 @@ def analyze_output(num_qubits, num_exps, qubit_set, parallel_run, runnum, folder
     return [alpha_arr, alpha_m_arr, alpha_sp_arr, delta_arr]
 
 # Make a noise model
-fake_backend = FakeLagos()
+fake_backend = Fake5QV1()
 noise_model = NoiseModel.from_backend(fake_backend)
 
 # Set options to include the noise model
@@ -153,12 +153,12 @@ options.resilience_level = 0
 
 IBMProvider.save_account(token="4fd31868f9a515dcfab559da15732676ca598d027e6ef67b42fd93f506cad6dca269609c7519717a74c99644eae00d7eee8ca97d1f3a4b83c30a6978d628ebbb", overwrite=True)
 provider = IBMProvider(instance="ibm-q-ornl/ornl/phy147")
-backend_name = 'ibm_osaka'
+backend_name = 'ibm_cusco'
 backend = provider.get_backend(backend_name)
 
 
 # create a quantum circuit with n qubits and n classical bits
-qubit_set = [0,2,4,6,8,10]
+qubit_set = [0,2,4,6,8,10,12,14]
 num_qubits = len(qubit_set)#backend.num_qubits
 num_exps = 20
 num_classical_bits = num_qubits
@@ -184,40 +184,6 @@ for i in range(len(parallel_exp_list)):
     parallel_run = parallel_exp_list[i].run(backend=backend).block_for_results()
     results.append(analyze_output(num_qubits, num_exps, qubit_set, parallel_run, i, foldername))
 print(results)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

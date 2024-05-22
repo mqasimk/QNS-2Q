@@ -26,11 +26,10 @@ def POVMs(a_m, delta):
 def twoq_meas(probs):
     probs = np.real(probs)
     # set negative values to 0
-    probs[probs < 0] = 0
+    probs[probs < 0] = 0.
     # set values greater than 1 to 1
-    probs[probs > 1] = 1
+    probs[probs > 1] = 1.
     # normalize the array
-    probs = probs/np.sum(probs)
     return np.random.multinomial(1, probs)
 
 def gen_probs(gate, rho, povms):
@@ -49,24 +48,26 @@ def E_X(qubit, state, a_m, delta):
 
 def E_X_hat(qubit, state, a_m, delta):
     povms = POVMs(a_m, delta)
-    counts = np.zeros(len(state))
+    # counts = np.zeros(len(state))
     h = [np.kron(np.array([[1,1],[1,-1]])/np.sqrt(2), np.identity(2)), np.kron(np.identity(2), np.array([[1,1],[1,-1]])/np.sqrt(2)),
          np.kron(np.array([[1,1],[1,-1]])/np.sqrt(2), np.array([[1,1],[1,-1]])/np.sqrt(2))]
     for i in range(len(h)):
         h[i] = qt.Qobj(np.kron(h[i], np.identity(2)), dims=[[2, 2, 2], [2, 2, 2]])
+    p0 = np.zeros(len(state))
     for i in range(len(state)):
         if qubit == 1:
-            p0 = (povms[0]*h[0]*state[i]*h[0]).tr()
-            if np.real(p0) > 1:
-                p0 = 1
-            counts[i] = np.random.binomial(1, np.real(p0))
+            p0[i] = np.real((povms[0]*h[0]*state[i]*h[0]).tr())
+            if np.real(p0[i]) > 1:
+                p0[i] = 1
+            # counts[i] = np.random.binomial(1, np.real(p0))
         else:
-            p0 = (povms[2]*h[1]*state[i]*h[1]).tr()
-            if np.real(p0) > 1:
-                p0 = 1
-            counts[i] = np.random.binomial(1, np.real(p0))
-    p = np.sum(counts)/counts.shape[0]
-    return 2*p-1
+            p0[i] = np.real((povms[2]*h[1]*state[i]*h[1]).tr())
+            if np.real(p0[i]) > 1:
+                p0[i] = 1
+            # counts[i] = np.random.binomial(1, np.real(p0))
+    # p = np.sum(counts)/counts.shape[0]
+    p = np.sum(p0)/len(p0)
+    return 2.*p-1.
 
 def E_Y(qubit, state, a_m, delta):
     if qubit == 1:
@@ -78,24 +79,26 @@ def E_Y(qubit, state, a_m, delta):
 
 def E_Y_hat(qubit, state, a_m, delta):
     povms = POVMs(a_m, delta)
-    counts = np.zeros(len(state))
+    # counts = np.zeros(len(state))
     rx = [np.kron(np.array([[1.,-1j],[-1j,1.]])/np.sqrt(2), np.identity(2)), np.kron(np.identity(2), np.array([[1.,-1j],[-1j,1.]])/np.sqrt(2)),
           np.kron(np.array([[1.,-1j],[-1j,1.]])/np.sqrt(2), np.array([[1.,-1j],[-1j,1.]])/np.sqrt(2))]
     for i in range(len(rx)):
         rx[i] = qt.Qobj(np.kron(rx[i], np.identity(2)), dims=[[2, 2, 2], [2, 2, 2]])
+    p0 = np.zeros(len(state))
     for i in range(len(state)):
         if qubit == 1:
-            p0 = (povms[0]*rx[0]*state[i]*rx[0].dag()).tr()
-            if np.real(p0) > 1:
-                p0 = 1
-            counts[i] = np.random.binomial(1, np.real(p0))
+            p0[i] = np.real((povms[0]*rx[0]*state[i]*rx[0].dag()).tr())
+            if np.real(p0[i]) > 1:
+                p0[i] = 1
+            # counts[i] = np.random.binomial(1, np.real(p0))
         else:
-            p0 = (povms[2]*rx[1]*state[i]*rx[1].dag()).tr()
-            if np.real(p0) > 1:
-                p0 = 1
-            counts[i] = np.random.binomial(1, np.real(p0))
-    p = np.sum(counts)/len(counts)
-    return 2*p-1
+            p0[i] = np.real((povms[2]*rx[1]*state[i]*rx[1].dag()).tr())
+            if np.real(p0[i]) > 1:
+                p0[i] = 1
+            # counts[i] = np.random.binomial(1, np.real(p0))
+    # p = np.sum(counts)/len(counts)
+    p = np.sum(p0)/len(p0)
+    return 2.*p-1.
 
 def E_XX(state, a_m, delta):
     op = qt.tensor(qt.sigmax(), qt.sigmax(), qt.identity(2))
@@ -110,7 +113,7 @@ def E_XX_hat(state, a_m, delta):
         h[i] = qt.Qobj(np.kron(h[i], np.identity(2)), dims=[[2, 2, 2], [2, 2, 2]])
     probs = np.zeros((len(state), 4))
     for i in range(len(state)):
-        probs[i, :] = gen_probs(h[2], state[i], povms)
+        probs[i, :] = np.real(gen_probs(h[2], state[i], povms))
     p00 = np.sum(probs[:, 0])/probs.shape[0]
     p01 = np.sum(probs[:, 1])/probs.shape[0]
     p10 = np.sum(probs[:, 2])/probs.shape[0]
@@ -140,7 +143,7 @@ def E_XY_hat(state, a_m, delta):
         rx[i] = qt.Qobj(np.kron(rx[i], np.identity(2)), dims=[[2, 2, 2], [2, 2, 2]])
     probs = np.zeros((len(state), 4))
     for i in range(len(state)):
-        probs[i, :] = gen_probs(h[0]*rx[1], state[i], povms)
+        probs[i, :] = np.real(gen_probs(h[0]*rx[1], state[i], povms))
     p00 = np.sum(probs[:, 0])/probs.shape[0]
     p01 = np.sum(probs[:, 1])/probs.shape[0]
     p10 = np.sum(probs[:, 2])/probs.shape[0]
@@ -170,7 +173,7 @@ def E_YX_hat(state, a_m, delta):
         rx[i] = qt.Qobj(np.kron(rx[i], np.identity(2)), dims=[[2, 2, 2], [2, 2, 2]])
     probs = np.zeros((len(state), 4))
     for i in range(len(state)):
-        probs[i, :] = gen_probs(h[1]*rx[0], state[i], povms)
+        probs[i, :] = np.real(gen_probs(h[1]*rx[0], state[i], povms))
     p00 = np.sum(probs[:, 0])/probs.shape[0]
     p01 = np.sum(probs[:, 1])/probs.shape[0]
     p10 = np.sum(probs[:, 2])/probs.shape[0]
@@ -200,7 +203,7 @@ def E_YY_hat(state, a_m, delta):
         rx[i] = qt.Qobj(np.kron(rx[i], np.identity(2)), dims=[[2, 2, 2], [2, 2, 2]])
     probs = np.zeros((len(state), 4))
     for i in range(len(state)):
-        probs[i, :] = gen_probs(rx[2], state[i], povms)
+        probs[i, :] = np.real(gen_probs(rx[2], state[i], povms))
     p00 = np.sum(probs[:, 0])/probs.shape[0]
     p01 = np.sum(probs[:, 1])/probs.shape[0]
     p10 = np.sum(probs[:, 2])/probs.shape[0]

@@ -4,15 +4,15 @@ from reconstruction import recon_S_11, recon_S_22, recon_S_1_2, recon_S_12_12
 from matplotlib import pyplot as plt
 from matplotlib import gridspec
 def S_11(w):
-    tc=1/(1*10**6)
+    tc=0.5/(1*10**6)
     S0 = 1e3
-    w0=0*10**6
+    w0=1*10**6
     return S0*(1/(1+(tc**2)*(np.abs(w)-w0)**2))
 
 def S_12(w):
-    tc=0.25/(1*10**6)
+    tc=0.5/(1*10**6)
     S0 = 1e3
-    w0=4*10**6
+    w0=2*10**6
     return S0*(1/(1+(tc**2)*(np.abs(w)-w0)**2))
 
 # def S_12(w):
@@ -23,7 +23,7 @@ def S_12(w):
 
 # load the variables
 parent_dir = os.pardir
-fname = "Run_jax_7_SPAM"
+fname = "Run_jax_8_Merr"
 path = os.path.join(parent_dir, fname)
 params = np.load(os.path.join(path, "params.npz"))
 t_vec = params['t_vec']
