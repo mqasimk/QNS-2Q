@@ -14,14 +14,14 @@ def S_11(w):
     tc=1/(1*10**6)
     S0 = 2e3
     w0=6*10**6
-    return S0*(L(w, 0, 0.5*tc)+0*L(w, w0, tc))
+    return S0*(L(w, 0, 0.5*tc)+L(w, w0, tc))
 
 
 def S_22(w):
     tc=1/(1*10**6)
     S0 = 2e3
     w0=6*10**6
-    return S0*(L(w, 0, 0.5*tc)+0*L(w, w0, 0.5*tc))
+    return S0*(L(w, 0, 0.5*tc)+L(w, w0, 0.5*tc))
 
 
 def S_1_2(w, gamma):
@@ -30,9 +30,9 @@ def S_1_2(w, gamma):
 
 def S_12(w):
     tc=1/(1*10**6)
-    S0 = 1e3
-    w0=0
-    return S0*L(w, w0, tc*0.5)
+    S0 = 2e3
+    w0=5*10**6
+    return 0.5*S0*L(w, w0, tc*0.5)
 
 #######################################################
 # Utility functions
@@ -138,7 +138,7 @@ def infidelity(params, SMat, M, w):
 
 def hyperOpt(SMat, nPs, M, T, w):
     optimizer = jaxopt.ScipyBoundedMinimize(fun=inf_ID, maxiter=30, jit=False, method='L-BFGS-B',
-                                            options={'disp': True, 'gtol': 1e-9, 'ftol': 1e-9,
+                                            options={'disp': True, 'gtol': 1e-9, 'ftol': 1e-6,
                                                      'maxfun': 1000, 'maxls': 10})
     opt_out = []
     init_params = []
@@ -227,8 +227,8 @@ def opt_known_pulses(nCs, SMat, M, T, w):
 
 T = 1e-5
 mc = 16
-M=20
-gamma = -T/25
+M = 20
+gamma = T/25
 
 p1q = jnp.array([[[1, 0], [0, 1]], [[0, 1], [1, 0]], [[0, -1j], [1j, 0]], [[1, 0], [0, -1]]])
 p2q = jnp.array([jnp.kron(p1q[i], p1q[j]) for i in range(4) for j in range(4)])
@@ -256,25 +256,30 @@ SMat_ideal = SMat_ideal.at[1, 0].set(jnp.conj(S_1_2(w, gamma)))
 
 L_map = jax.vmap(jax.vmap(Lambda, in_axes=(None, 0, None, None, None, None)), in_axes=(0, None, None, None, None, None))
 
-nPs = [[19, 20], [20]]
-vt_opt, inf_min = hyperOpt(SMat, nPs, M, T, w)
-L_opt = L_map(p2q, p2q, vt_opt, SMat_ideal, M, w)
-
-nCs = [[9,10], [10]]
+nCs = [[4,5,8,9,12], [4,5,8,9,12]]
 known_opt, known_inf = opt_known_pulses(nCs, SMat, M, T, w)
 L_known = L_map(p2q, p2q, known_opt, SMat_ideal, M, w)
-
-inf_opt = infidelity(vt_opt, SMat_ideal, M, w)
 inf_known = infidelity(known_opt, SMat_ideal, M, w)
+
+print('infidelity over known seqs: ')
+print(inf_known)
+print('number of pulses: ')
+print([known_opt[i].shape[0]-2 for i in range(2)])
+
+
+
+nPs = [[11,23,24], [12,23,24]]
+vt_opt, inf_min = hyperOpt(SMat, nPs, M, T, w)
+L_opt = L_map(p2q, p2q, vt_opt, SMat_ideal, M, w)
+inf_opt = infidelity(vt_opt, SMat_ideal, M, w)
 
 print('infidelity over optimized seqs: ')
 print(inf_opt)
 print('number of pulses: ')
 print([vt_opt[i].shape[0]-2 for i in range(2)])
-print('infidelity over known seqs: ')
-print(inf_known)
-print('number of pulses: ')
-print([known_opt[i].shape[0]-2 for i in range(2)])
+
+
+
 plt.plot(w, Gp_re(0, 0, known_opt, w, M))
 plt.plot(w, Gp_im(0, 0, known_opt, w, M))
 plt.show()
@@ -290,10 +295,16 @@ plt.show()
 plt.plot(jnp.linspace(0, T, 1000), y_t(jnp.linspace(0, T, 1000), known_opt[0]))
 plt.plot(jnp.linspace(0, T, 1000), y_t(jnp.linspace(0, T, 1000), known_opt[1])+3)
 plt.plot(jnp.linspace(0, T, 1000), y_t(jnp.linspace(0, T, 1000), known_opt[2])+6)
+plt.legend([r'$y_{1,1}(t)$', r'$y_{2,2}(t)$', r'$y_{12,12}(t)$'])
+plt.xlabel('t')
+plt.ylabel('y(t)')
 plt.show()
 plt.plot(jnp.linspace(0, T, 1000), y_t(jnp.linspace(0, T, 1000), vt_opt[0]))
 plt.plot(jnp.linspace(0, T, 1000), y_t(jnp.linspace(0, T, 1000), vt_opt[1])+3)
 plt.plot(jnp.linspace(0, T, 1000), y_t(jnp.linspace(0, T, 1000), vt_opt[2])+6)
+plt.legend([r'$y_{1,1}(t)$', r'$y_{2,2}(t)$', r'$y_{12,12}(t)$'])
+plt.xlabel('t')
+plt.ylabel('y(t)')
 plt.show()
 print('End')
 

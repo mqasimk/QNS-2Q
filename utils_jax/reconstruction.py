@@ -41,7 +41,7 @@ def recon_S_11(coefs, **kwargs):
     U = np.zeros((np.size(c_times), np.size(c_times)), dtype=np.complex128)
     for i in range(np.size(c_times)):
         for j in range(np.size(c_times)):
-            U[i, j] = ((2*M/T)*(np.square(np.absolute(ff(y_arr[i][0, 0], tb, wk[j]))) - np.square(np.absolute(ff(y_arr[i][1, 1], tb, wk[j]))))).round(15)
+            U[i, j] = ((M/T)*(np.square(np.absolute(ff(y_arr[i][0, 0], tb, wk[j]))) - np.square(np.absolute(ff(y_arr[i][1, 1], tb, wk[j]))))).round(15)
     S_11_k = np.matmul(np.linalg.inv(U), np.reshape(C_12_0_MT_1-C_12_0_MT_2, (C_12_0_MT_1.shape[0], 1)))
     return S_11_k
 
@@ -57,7 +57,7 @@ def recon_S_22(coefs, **kwargs):
     U = np.zeros((np.size(c_times), np.size(c_times)), dtype=np.complex128)
     for i in range(np.size(c_times)):
         for j in range(np.size(c_times)):
-            U[i, j] = ((2*M/T)*(np.square(np.absolute(ff(y_arr[i][0, 0], tb, wk[j]))) - np.square(np.absolute(ff(y_arr[i][1, 1], tb, wk[j]))))).round(15)
+            U[i, j] = ((M/T)*(np.square(np.absolute(ff(y_arr[i][0, 0], tb, wk[j]))) - np.square(np.absolute(ff(y_arr[i][1, 1], tb, wk[j]))))).round(15)
     S_22_k = np.matmul(np.linalg.inv(U), np.reshape(C_12_0_MT_1-C_12_0_MT_3, (C_12_0_MT_1.shape[0], 1)))
     return S_22_k
 

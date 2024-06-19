@@ -14,18 +14,21 @@ import time
 start_time = time.time()
 
 
+def L(w, w0, tc):
+    return 1/(1+(tc**2)*(w-w0)**2)+1/(1+(tc**2)*(w+w0)**2)
+
 def S_11(w):
-    tc=0.5/(1*10**6)
-    S0 = 1e3
-    w0=1*10**6
-    return S0*(1/(1+(tc**2)*(jnp.abs(w)-w0)**2))
+    tc=1/(1*10**6)
+    S0 = 2e3
+    w0=4*10**6
+    return 0.5*S0*(L(w, 0, 0.5*tc)+L(w, w0, tc))
 
 
 def S_12(w):
-    tc=0.5/(1*10**6)
-    S0 = 1e3
-    w0=2*10**6
-    return S0*(1/(1+(tc**2)*(jnp.abs(w)-w0)**2))
+    tc=1/(1*10**6)
+    S0 = 2e3
+    w0=4*10**6
+    return 0.5*S0*L(w, w0, 0.5*tc)
 
 T = 10**(-5)
 M = 10
@@ -35,15 +38,15 @@ truncate = 12
 wmax = 2*np.pi*truncate/T
 w_grain = 1000
 spec_vec = [S_11, S_12]
-a_sp = np.array([0.98, 0.97])
+a_sp = np.array([0.99, 0.98])
 c = np.array([np.array(0.+0.*1j), np.array(0.+0.*1j)])
-a1 = 0.97
-b1 = 0.95
+a1 = 0.98
+b1 = 0.96
 a2 = 0.99
-b2 = 0.95
+b2 = 0.975
 a_m = np.array([a1+b1-1, a2+b2-1])
 delta = np.array([a1-b1, a2-b2])
-gamma = T/5
+gamma = T/25
 gamma_12 = 0.
 t_vec = jnp.linspace(0, M*T, M*jnp.size(t_b))
 c_times = jnp.array([T/n for n in range(1, truncate+1)])
@@ -51,7 +54,7 @@ n_shots = 1000
 import os
 # create a folder in the parent directory
 parent_dir = os.pardir
-fname = "Run_jax_9_SPAMerr"
+fname = "Run_jax_10_SPAMerr_optimization"
 if not os.path.exists(os.path.join(parent_dir, fname)):
     path = os.path.join(parent_dir, fname)
     os.mkdir(path)
