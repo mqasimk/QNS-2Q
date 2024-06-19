@@ -44,7 +44,7 @@ def E_X(qubit, state, a_m, delta):
         op = qt.tensor(qt.sigmax(), qt.identity(2), qt.identity(2))
     else:
         op = qt.tensor(qt.identity(2), qt.sigmax(), qt.identity(2))
-    return np.sum(np.array([(state[i]*op).tr() for i in range(len(state))]))/len(state)
+    return a_m[qubit-1]*np.sum(np.array([(state[i]*op).tr() for i in range(len(state))]))/len(state) + delta[qubit-1]
 
 def E_X_hat(qubit, state, a_m, delta):
     povms = POVMs(a_m, delta)
@@ -74,7 +74,7 @@ def E_Y(qubit, state, a_m, delta):
         op = qt.tensor(qt.sigmay(), qt.identity(2), qt.identity(2))
     else:
         op = qt.tensor(qt.identity(2), qt.sigmay(), qt.identity(2))
-    return np.sum(np.array([(state[i]*op).tr() for i in range(len(state))]))/len(state)
+    return a_m[qubit-1]*np.sum(np.array([(state[i]*op).tr() for i in range(len(state))]))/len(state) + delta[qubit-1]
 
 
 def E_Y_hat(qubit, state, a_m, delta):
@@ -102,7 +102,12 @@ def E_Y_hat(qubit, state, a_m, delta):
 
 def E_XX(state, a_m, delta):
     op = qt.tensor(qt.sigmax(), qt.sigmax(), qt.identity(2))
-    return np.sum(np.array([(state[i]*op).tr() for i in range(len(state))]))/len(state)
+    XX = np.sum(np.array([(state[i]*op).tr() for i in range(len(state))]))/len(state)
+    opx1 = qt.tensor(qt.sigmax(), qt.identity(2), qt.identity(2))
+    X1 = np.sum(np.array([(state[i]*opx1).tr() for i in range(len(state))]))/len(state)
+    opx2 = qt.tensor(qt.identity(2), qt.sigmax(), qt.identity(2))
+    X2 = np.sum(np.array([(state[i]*opx2).tr() for i in range(len(state))]))/len(state)
+    return delta[0]*delta[1] + a_m[0]*a_m[1]*XX - delta[0]*a_m[1]*X2 - a_m[0]*delta[1]*X1
 
 def E_XX_hat(state, a_m, delta):
     povms = POVMs(a_m, delta)
@@ -129,7 +134,12 @@ def E_XX_hat(state, a_m, delta):
 
 def E_XY(state, a_m, delta):
     op = qt.tensor(qt.sigmax(), qt.sigmay(), qt.identity(2))
-    return np.sum(np.array([(state[i]*op).tr() for i in range(len(state))]))/len(state)
+    XY = np.sum(np.array([(state[i]*op).tr() for i in range(len(state))]))/len(state)
+    opx1 = qt.tensor(qt.sigmax(), qt.identity(2), qt.identity(2))
+    X1 = np.sum(np.array([(state[i]*opx1).tr() for i in range(len(state))]))/len(state)
+    opy2 = qt.tensor(qt.identity(2), qt.sigmay(), qt.identity(2))
+    Y2 = np.sum(np.array([(state[i]*opy2).tr() for i in range(len(state))]))/len(state)
+    return delta[0]*delta[1] + a_m[0]*a_m[1]*XY - delta[0]*a_m[1]*Y2 - a_m[0]*delta[1]*X1
 
 def E_XY_hat(state, a_m, delta):
     povms = POVMs(a_m, delta)
@@ -159,7 +169,12 @@ def E_XY_hat(state, a_m, delta):
 
 def E_YX(state, a_m, delta):
     op = qt.tensor(qt.sigmay(), qt.sigmax(), qt.identity(2))
-    return np.sum(np.array([(state[i]*op).tr() for i in range(len(state))]))/len(state)
+    YX = np.sum(np.array([(state[i]*op).tr() for i in range(len(state))]))/len(state)
+    opy1 = qt.tensor(qt.sigmay(), qt.identity(2), qt.identity(2))
+    Y1 = np.sum(np.array([(state[i]*opy1).tr() for i in range(len(state))]))/len(state)
+    opx2 = qt.tensor(qt.identity(2), qt.sigmax(), qt.identity(2))
+    X2 = np.sum(np.array([(state[i]*opx2).tr() for i in range(len(state))]))/len(state)
+    return delta[0]*delta[1] + a_m[0]*a_m[1]*YX - delta[0]*a_m[1]*X2 - a_m[0]*delta[1]*Y1
 
 def E_YX_hat(state, a_m, delta):
     povms = POVMs(a_m, delta)
@@ -189,7 +204,12 @@ def E_YX_hat(state, a_m, delta):
 
 def E_YY(state, a_m, delta):
     op = qt.tensor(qt.sigmay(), qt.sigmay(), qt.identity(2))
-    return np.sum(np.array([(state[i]*op).tr() for i in range(len(state))]))/len(state)
+    YY = np.sum(np.array([(state[i]*op).tr() for i in range(len(state))]))/len(state)
+    opy1 = qt.tensor(qt.sigmay(), qt.identity(2), qt.identity(2))
+    Y1 = np.sum(np.array([(state[i]*opy1).tr() for i in range(len(state))]))/len(state)
+    opy2 = qt.tensor(qt.identity(2), qt.sigmay(), qt.identity(2))
+    Y2 = np.sum(np.array([(state[i]*opy2).tr() for i in range(len(state))]))/len(state)
+    return delta[0]*delta[1] + a_m[0]*a_m[1]*YY - delta[0]*a_m[1]*Y2 - a_m[0]*delta[1]*Y1
 
 def E_YY_hat(state, a_m, delta):
     povms = POVMs(a_m, delta)
@@ -250,20 +270,20 @@ def C_12_0_MT_i(solver_ftn, t_b, pulse, noise_mats, t_vec, rho, ct, **kwargs):
     rho = jnp.array(rho)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     sol = frame_correct(sol, pulse)
-    # EX1X2 = E_XX(sol, a_m, delta)
-    EX1X2 = E_XX_hat(sol, a_m, delta)
+    EX1X2 = E_XX(sol, a_m, delta)
+    # EX1X2 = E_XX_hat(sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     sol = frame_correct(sol, pulse)
-    # EY1Y2 = E_YY(sol, a_m, delta)
-    EY1Y2 = E_YY_hat(sol, a_m, delta)
+    EY1Y2 = E_YY(sol, a_m, delta)
+    # EY1Y2 = E_YY_hat(sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     sol = frame_correct(sol, pulse)
-    # EX1Y2 = E_XY(sol, a_m, delta)
-    EX1Y2 = E_XY_hat(sol, a_m, delta)
+    EX1Y2 = E_XY(sol, a_m, delta)
+    # EX1Y2 = E_XY_hat(sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     sol = frame_correct(sol, pulse)
-    # EY1X2 = E_YX(sol, a_m, delta)
-    EY1X2 = E_YX_hat(sol, a_m, delta)
+    EY1X2 = E_YX(sol, a_m, delta)
+    # EY1X2 = E_YX_hat(sol, a_m, delta)
     return np.real(D('+', (EX1X2, EY1Y2, EX1Y2, EY1X2)) + D('-', (EX1X2, EY1Y2, EX1Y2, EY1X2)))
 
 def make_C_12_0_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
@@ -292,20 +312,20 @@ def C_12_12_MT_i(solver_ftn, t_b, pulse, noise_mats, t_vec, rho, ct, **kwargs):
     y_uv = jnp.array(make_y(t_b, pulse, ctime=ct, M=M))
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     sol = frame_correct(sol, pulse)
-    # EX1X2 = E_XX(sol, a_m, delta)
-    EX1X2 = E_XX_hat(sol, a_m, delta)
+    EX1X2 = E_XX(sol, a_m, delta)
+    # EX1X2 = E_XX_hat(sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     sol = frame_correct(sol, pulse)
-    # EY1Y2 = E_YY(sol, a_m, delta)
-    EY1Y2 = E_YY_hat(sol, a_m, delta)
+    EY1Y2 = E_YY(sol, a_m, delta)
+    # EY1Y2 = E_YY_hat(sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     sol = frame_correct(sol, pulse)
-    # EX1Y2 = E_XY(sol, a_m, delta)
-    EX1Y2 = E_XY_hat(sol, a_m, delta)
+    EX1Y2 = E_XY(sol, a_m, delta)
+    # EX1Y2 = E_XY_hat(sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     sol = frame_correct(sol, pulse)
-    # EY1X2 = E_YX(sol, a_m, delta)
-    EY1X2 = E_YX_hat(sol, a_m, delta)
+    EY1X2 = E_YX(sol, a_m, delta)
+    # EY1X2 = E_YX_hat(sol, a_m, delta)
     return np.real(D('+', (EX1X2, EY1Y2, EX1Y2, EY1X2)) - D('-', (EX1X2, EY1Y2, EX1Y2, EY1X2)))
 
 
@@ -337,21 +357,21 @@ def C_a_b_MT_i(solver_ftn, t_b, pulse, noise_mats, t_vec, rho, ct, **kwargs):
     y_uv = jnp.array(make_y(t_b, pulse, ctime=ct, M=M))
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhop, n_shots)
     sol = frame_correct(sol, pulse)
-    # EXlp = E_X(l, sol, a_m, delta)
-    EXlp = E_X_hat(l, sol, a_m, delta)
+    EXlp = E_X(l, sol, a_m, delta)
+    # EXlp = E_X_hat(l, sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhop, n_shots)
     sol = frame_correct(sol, pulse)
-    # EYlp = E_Y(l, sol, a_m, delta)
-    EYlp = E_Y_hat(l, sol, a_m, delta)
+    EYlp = E_Y(l, sol, a_m, delta)
+    # EYlp = E_Y_hat(l, sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhom, n_shots)
     sol = frame_correct(sol, pulse)
     Ap = A([EXlp, EYlp])
-    # EXlm = E_X(l, sol, a_m, delta)
-    EXlm = E_X_hat(l, sol, a_m, delta)
+    EXlm = E_X(l, sol, a_m, delta)
+    # EXlm = E_X_hat(l, sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhom, n_shots)
     sol = frame_correct(sol, pulse)
-    # EYlm = E_Y(l, sol, a_m, delta)
-    EYlm = E_Y_hat(l, sol, a_m, delta)
+    EYlm = E_Y(l, sol, a_m, delta)
+    # EYlm = E_Y_hat(l, sol, a_m, delta)
     Am = A([EXlm, EYlm])
     return np.real(Ap + Am)
 
@@ -394,21 +414,21 @@ def C_a_0_MT_i(solver_ftn, t_b, pulse, noise_mats, t_vec, rho, ct, **kwargs):
     y_uv = jnp.array(make_y(t_b, pulse, ctime=ct, M=M))
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhop, n_shots)
     sol = frame_correct(sol, pulse)
-    # EXlp = E_X(l, sol, a_m, delta)
-    EXlp = E_X_hat(l, sol, a_m, delta)
+    EXlp = E_X(l, sol, a_m, delta)
+    # EXlp = E_X_hat(l, sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhop, n_shots)
     sol = frame_correct(sol, pulse)
-    # EYlp = E_Y(l, sol, a_m, delta)
-    EYlp = E_Y_hat(l, sol, a_m, delta)
+    EYlp = E_Y(l, sol, a_m, delta)
+    # EYlp = E_Y_hat(l, sol, a_m, delta)
     Ap = A([EXlp, EYlp])
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhom, n_shots)
     sol = frame_correct(sol, pulse)
-    # EXlm = E_X(l, sol, a_m, delta)
-    EXlm = E_X_hat(l, sol, a_m, delta)
+    EXlm = E_X(l, sol, a_m, delta)
+    # EXlm = E_X_hat(l, sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhom, n_shots)
     sol = frame_correct(sol, pulse)
-    # EYlm = E_Y(l, sol, a_m, delta)
-    EYlm = E_Y_hat(l, sol, a_m, delta)
+    EYlm = E_Y(l, sol, a_m, delta)
+    # EYlm = E_Y_hat(l, sol, a_m, delta)
     Am = A([EXlm, EYlm])
     return np.real(Ap - Am)
 

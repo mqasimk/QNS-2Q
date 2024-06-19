@@ -95,7 +95,7 @@ def make_Hamiltonian(y_uv, b_t):
     return h_t
 
 def f(t, tk):
-    return jnp.sum(jnp.array([((-1)**i)*jnp.heaviside(t-tk[i], 1)*jnp.heaviside(tk[i+1] - t, 1) for i in range(jnp.size(tk) - 1)]))
+    return jnp.sum(jnp.array([((-1)**i)*jnp.heaviside(t-tk[i], 1)*jnp.heaviside(tk[i+1] - t, 1) for i in range(jnp.size(tk) - 1)]), axis=0)
 
 def cpmg(t, n):
     tk = [(k+0.50)*t[-1]/(2*n) for k in range(int(2*n))]
