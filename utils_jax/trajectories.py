@@ -3,6 +3,7 @@ import qutip as qt
 import jax
 import jax.numpy as jnp
 
+
 def make_noise_mat_arr(act, **kwargs):
     spec_vec = kwargs.get('spec_vec')
     t_vec = kwargs.get('t_vec')
@@ -14,25 +15,32 @@ def make_noise_mat_arr(act, **kwargs):
     if act == 'load':
         return np.load('noise_mats.npy', allow_pickle=True)
     elif act == 'make':
-        S, C = make_noise_mat(spec_vec[0], t_vec, w_grain = w_grain, wmax = wmax, trunc_n = truncate, gamma = 0.)
-        Sg, Cg = make_noise_mat(spec_vec[0], t_vec, w_grain = w_grain, wmax = wmax, trunc_n = truncate, gamma = gamma)
-        S_12, C_12 = make_noise_mat(spec_vec[1], t_vec, w_grain = w_grain, wmax = wmax, trunc_n = truncate, gamma = 0.)
-        Sg_12, Cg_12 = make_noise_mat(spec_vec[1], t_vec, w_grain = w_grain, wmax = wmax, trunc_n = truncate,
+        S_11, C_11 = make_noise_mat(spec_vec[0], t_vec, w_grain = w_grain, wmax = wmax, trunc_n = truncate, gamma = 0.)
+        S_11g, C_11g = make_noise_mat(spec_vec[0], t_vec, w_grain = w_grain, wmax = wmax, trunc_n = truncate, gamma = gamma)
+        S_22, C_22 = make_noise_mat(spec_vec[1], t_vec, w_grain = w_grain, wmax = wmax, trunc_n = truncate, gamma = 0.)
+        S_22g, C_22g = make_noise_mat(spec_vec[1], t_vec, w_grain = w_grain, wmax = wmax, trunc_n = truncate, gamma = gamma)
+        S_1212, C_1212 = make_noise_mat(spec_vec[2], t_vec, w_grain = w_grain, wmax = wmax, trunc_n = truncate, gamma = 0.)
+        S_1212g, C_1212g = make_noise_mat(spec_vec[2], t_vec, w_grain = w_grain, wmax = wmax, trunc_n = truncate,
                                       gamma = gamma_12)
-        return jnp.array([[S, C], [Sg, Cg], [S_12, C_12], [Sg_12, Cg_12]])
+        return jnp.array([[S_11, C_11], [S_11g, C_11g], [S_22, C_22], [S_22g, C_22g], [S_1212, C_1212],
+                          [S_1212g, C_1212g]])
     elif act == 'save':
         mats = make_noise_mat_arr('make', **kwargs)
         np.save('noise_mats.npy', mats)
         return mats
     else:
         raise Exception("Invalid action input")
+
+
 # @jax.jit
 def sinM(spec, w, t, dw, gamma):
-    return jnp.sqrt(dw*spec(w)/np.pi)*jnp.sin(w*(t + gamma))
+    return jnp.sqrt(dw*spec(w)/jnp.pi)*jnp.sin(w*(t + gamma))
+
 
 # @jax.jit
 def cosM(spec, w, t, dw, gamma):
-    return jnp.sqrt(dw*spec(w)/np.pi)*jnp.cos(w*(t + gamma))
+    return jnp.sqrt(dw*spec(w)/jnp.pi)*jnp.cos(w*(t + gamma))
+
 
 def make_noise_mat(spec, t_vec, **kwargs):
     w_grain = kwargs.get('w_grain')
@@ -46,6 +54,7 @@ def make_noise_mat(spec, t_vec, **kwargs):
     Sf = jax.vmap(jax.vmap(sinM, in_axes=(None, 0, None, None, None)), in_axes=(None, None, 0, None, None))
     Cf = jax.vmap(jax.vmap(cosM, in_axes=(None, 0, None, None, None)), in_axes=(None, None, 0, None, None))
     return Sf(spec, w, t_vec, dw, gamma), Cf(spec, w, t_vec, dw, gamma)
+
 
 @jax.jit
 def make_noise_traj(S, C, key):
@@ -84,6 +93,7 @@ def make_init_state(a_sp, c, **kwargs):
     else:
         raise Exception("Invalid state input")
 
+
 @jax.jit
 def make_Hamiltonian(y_uv, b_t):
     paulis = jnp.array([[[1., 0.], [0., 1.]], [[0., 1.], [1., 0.]], [[0., -1j], [1j, 0.]], [[1., 0.], [0., -1.]]])
@@ -94,8 +104,10 @@ def make_Hamiltonian(y_uv, b_t):
            + jnp.tensordot(y_uv[2, 2]*b_t[2]*0.5, jnp.kron(z_vec[3], paulis[0]), 0))
     return h_t
 
+
 def f(t, tk):
     return jnp.sum(jnp.array([((-1)**i)*jnp.heaviside(t-tk[i], 1)*jnp.heaviside(tk[i+1] - t, 1) for i in range(jnp.size(tk) - 1)]), axis=0)
+
 
 def cpmg(t, n):
     tk = [(k+0.50)*t[-1]/(2*n) for k in range(int(2*n))]
@@ -146,6 +158,10 @@ def make_y(t_b, pulse, **kwargs):
         elif pulse[i] == 'CDD1':
             y[i, i] = cdd1(t_b, n)
             #y = y.at[i, i].set(cdd1(t_b, n))
+        elif pulse[i] == 'CDD1-1/2':
+            n = int((t_b[-1]/(0.5*ctime)).round(0))
+            y[i, i] = cdd1(t_b, n)
+            #y = y.at[i, i].set(cdd1(t_b, n))
         elif pulse[i] == 'CDD3':
             y[i, i] = cdd3(t_b, n)
             #y = y.at[i, i].set(cdd3(t_b, n))
@@ -154,8 +170,9 @@ def make_y(t_b, pulse, **kwargs):
             #y = y.at[i, i].set(np.ones(np.size(t_b)))
         else:
             raise Exception("Invalid pulse input")
-    y[2,2] = np.multiply(y[1,1], y[0,0])
+    y[2,2] = y[1, 1]*y[0, 0]
     return np.tile(y, M)
+
 
 def custom_y(vt, t_b, M):
     y = jnp.zeros((3, 3, np.size(t_b)))
@@ -166,26 +183,21 @@ def custom_y(vt, t_b, M):
     y = y.at[2, 2].set(jnp.multiply(y[1, 1], y[0, 0]))
     return jnp.tile(y, M)
 
-# def custom_y(vt, t_b, M):
-#     y = np.zeros((3, 3, np.size(t_b)))
-#     y[0, 0] = f(t_b, vt[0])
-#     y[1, 1] = f(t_b, vt[1])
-#     y[2, 2] = np.multiply(y[1, 1], y[0, 0])
-#     return jnp.tile(y, M)
 
 @jax.jit
 def make_propagator(H_t, t_vec):
     U = jax.scipy.linalg.expm(-1j*jax.scipy.integrate.trapezoid(H_t, t_vec, axis=0))
     return U
 
-# @jax.jit
+
+@jax.jit
 def single_shot_prop(noise_mats, t_vec, y_uv, rho0, key):
     size = np.size(t_vec)
     y_uv = y_uv[:, :, :size]
-    bvec = make_noise_traj(noise_mats[0, 0], noise_mats[0, 1], key)[:size]
-    bvec_g = make_noise_traj(noise_mats[1, 0], noise_mats[1, 1], key)[:size]
-    bvec_12 = make_noise_traj(noise_mats[2, 0], noise_mats[2, 1], key)[:size]
-    H_t = make_Hamiltonian(y_uv, jnp.array([bvec, bvec_g, bvec_12]))
+    bvec_1 = make_noise_traj(noise_mats[0, 0], noise_mats[0, 1], key)[:size]
+    bvec_2_g = make_noise_traj(noise_mats[3, 0], noise_mats[3, 1], key)[:size]
+    bvec_1212g = make_noise_traj(noise_mats[5, 0], noise_mats[5, 1], key)[:size]
+    H_t = make_Hamiltonian(y_uv, jnp.array([bvec_1, bvec_2_g, bvec_1212g]))
     U = make_propagator(H_t, t_vec)
     rho_MT = jnp.matmul(jnp.matmul(U, rho0), U.conjugate().transpose())
     return rho_MT
@@ -193,9 +205,23 @@ def single_shot_prop(noise_mats, t_vec, y_uv, rho0, key):
 
 def solver_prop(y_uv, noise_mats, t_vec, rho, n_shots):
     y_uv = jnp.array(y_uv)
-    n_arr = jnp.array(np.random.randint(0, 100000, (n_shots, 2)))
-    result = jax.vmap(single_shot_prop, in_axes=[None, None, None, None, 0])(noise_mats, t_vec, y_uv, rho, n_arr)
     output = []
-    for i in range(n_shots):
-        output.append(qt.Qobj(np.array(result[i]), dims=[[2,2,2], [2,2,2]]))
+    # Memory allocation safety for my laptop with a single GPU
+    n_slices = int(np.ceil(n_shots/1000))
+    for i in range(n_slices):
+        if n_slices == 1:
+            n_arr = jnp.array(np.random.randint(0, 100000, (n_shots, 2)))
+            result = jax.vmap(single_shot_prop, in_axes=[None, None, None, None, 0])(noise_mats, t_vec, y_uv, rho, n_arr)
+            for j in range(n_arr.shape[0]):
+                output.append(qt.Qobj(np.array(result[j]), dims=[[2, 2, 2], [2, 2, 2]]))
+        else:
+            for k in range(n_slices-1):
+                n_arr = jnp.array(np.random.randint(0, 100000, (1000, 2)))
+                result = jax.vmap(single_shot_prop, in_axes=[None, None, None, None, 0])(noise_mats, t_vec, y_uv, rho, n_arr)
+                for j in range(n_arr.shape[0]):
+                    output.append(qt.Qobj(np.array(result[j]), dims=[[2, 2, 2], [2, 2, 2]]))
+            n_arr = jnp.array(np.random.randint(0, 100000, (n_shots-1000, 2)))
+            result = jax.vmap(single_shot_prop, in_axes=[None, None, None, None, 0])(noise_mats, t_vec, y_uv, rho, n_arr)
+            for j in range(n_arr.shape[0]):
+                output.append(qt.Qobj(np.array(result[j]), dims=[[2, 2, 2], [2, 2, 2]]))
     return output
