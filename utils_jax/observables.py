@@ -5,6 +5,8 @@ import jax.numpy as jnp
 from joblib import Parallel, delayed
 import jax
 
+
+
 # @jax.jit
 def POVMs(a_m, delta):
     a1 = (a_m[0]+delta[0]+1)*0.5
@@ -23,6 +25,7 @@ def POVMs(a_m, delta):
     p2_1 = qt.tensor(qt.identity(2), p2_1, qt.identity(2))
     return [p1_0, p1_1, p2_0, p2_1]
 
+
 def twoq_meas(probs):
     probs = np.real(probs)
     # set negative values to 0
@@ -32,6 +35,7 @@ def twoq_meas(probs):
     # normalize the array
     return np.random.multinomial(1, probs)
 
+
 def gen_probs(gate, rho, povms):
     p00 = (povms[0]*povms[2]*gate*rho*gate.dag()).tr()
     p01 = (povms[0]*povms[3]*gate*rho*gate.dag()).tr()
@@ -39,12 +43,14 @@ def gen_probs(gate, rho, povms):
     p11 = (povms[1]*povms[3]*gate*rho*gate.dag()).tr()
     return np.array([p00, p01, p10, p11])
 
+
 def E_X(qubit, state, a_m, delta):
     if qubit == 1:
         op = qt.tensor(qt.sigmax(), qt.identity(2), qt.identity(2))
     else:
         op = qt.tensor(qt.identity(2), qt.sigmax(), qt.identity(2))
-    return np.real(a_m[qubit-1]*np.sum(np.array([(state[i]*op).tr() for i in range(len(state))]))/len(state) - delta[qubit-1])
+    return a_m[qubit-1]*np.sum(np.array([(state[i]*op).tr() for i in range(len(state))]), axis=0)/len(state) - delta[qubit-1]
+
 
 def E_X_hat(qubit, state, a_m, delta):
     povms = POVMs(a_m, delta)
@@ -69,12 +75,13 @@ def E_X_hat(qubit, state, a_m, delta):
     p = np.sum(p0)/len(p0)
     return 2.*p-1.
 
+
 def E_Y(qubit, state, a_m, delta):
     if qubit == 1:
         op = qt.tensor(qt.sigmay(), qt.identity(2), qt.identity(2))
     else:
         op = qt.tensor(qt.identity(2), qt.sigmay(), qt.identity(2))
-    return np.real(a_m[qubit-1]*np.sum(np.array([(state[i]*op).tr() for i in range(len(state))]))/len(state) - delta[qubit-1])
+    return a_m[qubit-1]*np.sum(np.array([(state[i]*op).tr() for i in range(len(state))]), axis=0)/len(state) - delta[qubit-1]
 
 
 def E_Y_hat(qubit, state, a_m, delta):
@@ -100,6 +107,7 @@ def E_Y_hat(qubit, state, a_m, delta):
     p = np.sum(p0)/len(p0)
     return 2.*p-1.
 
+
 def E_XX(state, a_m, delta):
     op = qt.tensor(qt.sigmax(), qt.sigmax(), qt.identity(2))
     XX = np.sum(np.array([(state[i]*op).tr() for i in range(len(state))]))/len(state)
@@ -108,6 +116,7 @@ def E_XX(state, a_m, delta):
     opx2 = qt.tensor(qt.identity(2), qt.sigmax(), qt.identity(2))
     X2 = np.sum(np.array([(state[i]*opx2).tr() for i in range(len(state))]))/len(state)
     return delta[0]*delta[1] + a_m[0]*a_m[1]*XX - delta[0]*a_m[1]*X2 - a_m[0]*delta[1]*X1
+
 
 def E_XX_hat(state, a_m, delta):
     povms = POVMs(a_m, delta)
@@ -140,6 +149,7 @@ def E_XY(state, a_m, delta):
     opy2 = qt.tensor(qt.identity(2), qt.sigmay(), qt.identity(2))
     Y2 = np.sum(np.array([(state[i]*opy2).tr() for i in range(len(state))]))/len(state)
     return delta[0]*delta[1] + a_m[0]*a_m[1]*XY - delta[0]*a_m[1]*Y2 - a_m[0]*delta[1]*X1
+
 
 def E_XY_hat(state, a_m, delta):
     povms = POVMs(a_m, delta)
@@ -176,6 +186,7 @@ def E_YX(state, a_m, delta):
     X2 = np.sum(np.array([(state[i]*opx2).tr() for i in range(len(state))]))/len(state)
     return delta[0]*delta[1] + a_m[0]*a_m[1]*YX - delta[0]*a_m[1]*X2 - a_m[0]*delta[1]*Y1
 
+
 def E_YX_hat(state, a_m, delta):
     povms = POVMs(a_m, delta)
     # counts = np.zeros((len(state), 4))
@@ -211,6 +222,7 @@ def E_YY(state, a_m, delta):
     Y2 = np.sum(np.array([(state[i]*opy2).tr() for i in range(len(state))]))/len(state)
     return delta[0]*delta[1] + a_m[0]*a_m[1]*YY - delta[0]*a_m[1]*Y2 - a_m[0]*delta[1]*Y1
 
+
 def E_YY_hat(state, a_m, delta):
     povms = POVMs(a_m, delta)
     # counts = np.zeros((len(state), 4))
@@ -236,9 +248,10 @@ def E_YY_hat(state, a_m, delta):
     # p11 = np.sum(counts[:, 3])/counts.shape[0]
     return p00 + p11 - p01 - p10
 
+
 def A(expec):
     # send expec as (EX, EY) created with the appropriate $$\psi^{\pm}_l$$
-    return -0.25*np.log(np.square(expec[0])+np.square(expec[1]))
+    return -0.25*np.log(expec[0]**2+expec[1]**2)
 
 
 def D(pm, expec):
@@ -250,43 +263,52 @@ def D(pm, expec):
     else:
         raise Exception("Invalid pm input")
 
+
 def frame_correct(sol, pulse):
-    x1 = qt.tensor(qt.sigmax(), qt.identity(2), qt.identity(2))
-    x2 = qt.tensor(qt.identity(2), qt.sigmax(), qt.identity(2))
-    if pulse[0] == 'CDD3' or pulse[0] == 'CDD1':
-        for i in range(len(sol)):
-            sol[i] = x1*sol[i]*x1.dag()
-    if pulse[1] == 'CDD3' or pulse[1] == 'CDD1':
-        for i in range(len(sol)):
-            sol[i] = x2*sol[i]*x2.dag()
+    # x1 = qt.tensor(qt.sigmax(), qt.identity(2), qt.identity(2))
+    # x2 = qt.tensor(qt.identity(2), qt.sigmax(), qt.identity(2))
+    # if pulse[0] == 'CDD3' or pulse[0] == 'CDD1' or pulse[0] == 'CDD1-1/2':
+    #     for i in range(len(sol)):
+    #         sol[i] = x1*sol[i]*x1.dag()
+    # if pulse[1] == 'CDD3' or pulse[1] == 'CDD1' or pulse[1] == 'CDD1-1/2':
+    #     for i in range(len(sol)):
+    #         sol[i] = x2*sol[i]*x2.dag()
     return sol
 
-def C_12_0_MT_i(solver_ftn, t_b, pulse, noise_mats, t_vec, rho, ct, **kwargs):
+
+def C_12_0_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, **kwargs):
     n_shots = kwargs.get('n_shots')
     M = kwargs.get('M')
     a_m = kwargs.get('a_m')
     delta = kwargs.get('delta')
+    noise_mats = kwargs.get('noise_mats')
+    # w = kwargs.get('w')
     y_uv = jnp.array(make_y(t_b, pulse, ctime=ct, M=M))
     rho = jnp.array(rho)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
+    # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     sol = frame_correct(sol, pulse)
     EX1X2 = E_XX(sol, a_m, delta)
     # EX1X2 = E_XX_hat(sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
+    # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     sol = frame_correct(sol, pulse)
     EY1Y2 = E_YY(sol, a_m, delta)
     # EY1Y2 = E_YY_hat(sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
+    # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     sol = frame_correct(sol, pulse)
     EX1Y2 = E_XY(sol, a_m, delta)
     # EX1Y2 = E_XY_hat(sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
+    # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     sol = frame_correct(sol, pulse)
     EY1X2 = E_YX(sol, a_m, delta)
     # EY1X2 = E_YX_hat(sol, a_m, delta)
     return np.real(D('+', (EX1X2, EY1Y2, EX1Y2, EY1X2)) + D('-', (EX1X2, EY1Y2, EX1Y2, EY1X2)))
 
-def make_C_12_0_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
+
+def make_C_12_0_MT(solver_ftn, pulse, t_vec, c_times, **kwargs):
     n_shots = kwargs.get('n_shots')
     M = kwargs.get('M')
     t_b = kwargs.get('t_b')
@@ -295,41 +317,49 @@ def make_C_12_0_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     a_sp = kwargs.get('a_sp')
     c = kwargs.get('c')
     state = kwargs.get('state')
+    # w = kwargs.get('w')
+    noise_mats = kwargs.get('noise_mats')
     rho0 = make_init_state(a_sp, c, state = state)
     rho_B = 0.5*qt.identity(2)#qt.basis(2, 0) * qt.basis(2, 0).dag()
     rho = jnp.array((qt.tensor(rho0, rho_B)).full())
-    C_12_0_MT = Parallel(n_jobs=1)(delayed(C_12_0_MT_i)(solver_ftn, t_b, pulse, noise_mats, t_vec, rho,
+    C_12_0_MT = Parallel(n_jobs=1)(delayed(C_12_0_MT_i)(solver_ftn, t_b, pulse, t_vec, rho,
                                                          c_times[i], n_shots=n_shots, M=M, a_m=a_m,
-                                                         delta=delta) for i in range(np.size(c_times)))
+                                                         delta=delta, noise_mats=noise_mats) for i in range(np.size(c_times)))
     return C_12_0_MT
 
 
-def C_12_12_MT_i(solver_ftn, t_b, pulse, noise_mats, t_vec, rho, ct, **kwargs):
+def C_12_12_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, **kwargs):
     n_shots = kwargs.get('n_shots')
     M = kwargs.get('M')
     a_m = kwargs.get('a_m')
     delta = kwargs.get('delta')
+    # w = kwargs.get('w')
+    noise_mats = kwargs.get('noise_mats')
     y_uv = jnp.array(make_y(t_b, pulse, ctime=ct, M=M))
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
+    # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     sol = frame_correct(sol, pulse)
     EX1X2 = E_XX(sol, a_m, delta)
     # EX1X2 = E_XX_hat(sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
+    # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     sol = frame_correct(sol, pulse)
     EY1Y2 = E_YY(sol, a_m, delta)
     # EY1Y2 = E_YY_hat(sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
+    # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     sol = frame_correct(sol, pulse)
     EX1Y2 = E_XY(sol, a_m, delta)
     # EX1Y2 = E_XY_hat(sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
+    # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     sol = frame_correct(sol, pulse)
     EY1X2 = E_YX(sol, a_m, delta)
     # EY1X2 = E_YX_hat(sol, a_m, delta)
     return np.real(D('+', (EX1X2, EY1Y2, EX1Y2, EY1X2)) - D('-', (EX1X2, EY1Y2, EX1Y2, EY1X2)))
 
 
-def make_C_12_12_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
+def make_C_12_12_MT(solver_ftn, pulse, t_vec, c_times, **kwargs):
     n_shots = kwargs.get('n_shots')
     M = kwargs.get('M')
     t_b = kwargs.get('t_b')
@@ -338,44 +368,53 @@ def make_C_12_12_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     a_sp = kwargs.get('a_sp')
     c = kwargs.get('c')
     state = kwargs.get('state')
+    # w = kwargs.get('w')
+    noise_mats = kwargs.get('noise_mats')
     rho0 = make_init_state(a_sp, c, state = state)
     rho_B = 0.5*qt.identity(2) #qt.basis(2, 0) * qt.basis(2, 0).dag()
     rho = jnp.array((qt.tensor(rho0, rho_B)).full())
-    return Parallel(n_jobs=1)(delayed(C_12_12_MT_i)(solver_ftn, t_b, pulse, noise_mats, t_vec, rho, c_times[i],
+    return Parallel(n_jobs=1)(delayed(C_12_12_MT_i)(solver_ftn, t_b, pulse, t_vec, rho, c_times[i],
                                                            n_shots=n_shots, M=M, a_m=a_m,
-                                                           delta=delta) for i in range(np.size(c_times)))
+                                                           delta=delta, noise_mats = noise_mats) for i in range(np.size(c_times)))
 
 
-def C_a_b_MT_i(solver_ftn, t_b, pulse, noise_mats, t_vec, rho, ct, **kwargs):
+def C_a_b_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, **kwargs):
     n_shots = kwargs.get('n_shots')
     M = kwargs.get('M')
     a_m = kwargs.get('a_m')
     l = kwargs.get('l')
     delta = kwargs.get('delta')
+    # w = kwargs.get('w')
+    noise_mats = kwargs.get('noise_mats')
     rhop = rho[0]
     rhom = rho[1]
     y_uv = jnp.array(make_y(t_b, pulse, ctime=ct, M=M))
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhop, n_shots)
+    # sol = solver_ftn(y_uv, w, t_vec, rhop, n_shots)
     sol = frame_correct(sol, pulse)
     EXlp = E_X(l, sol, a_m, delta)
     # EXlp = E_X_hat(l, sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhop, n_shots)
+    # sol = solver_ftn(y_uv, w, t_vec, rhop, n_shots)
     sol = frame_correct(sol, pulse)
     EYlp = E_Y(l, sol, a_m, delta)
     # EYlp = E_Y_hat(l, sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhom, n_shots)
+    # sol = solver_ftn(y_uv, w, t_vec, rhom, n_shots)
     sol = frame_correct(sol, pulse)
     Ap = A([EXlp, EYlp])
     EXlm = E_X(l, sol, a_m, delta)
     # EXlm = E_X_hat(l, sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhom, n_shots)
+    # sol = solver_ftn(y_uv, w, t_vec, rhom, n_shots)
     sol = frame_correct(sol, pulse)
     EYlm = E_Y(l, sol, a_m, delta)
     # EYlm = E_Y_hat(l, sol, a_m, delta)
     Am = A([EXlm, EYlm])
-    return Ap + Am
+    return Ap - Am
 
-def make_C_a_b_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
+
+def make_C_a_b_MT(solver_ftn, pulse, t_vec, c_times, **kwargs):
     M = kwargs.get('M')
     t_b = kwargs.get('t_b')
     a_m = kwargs.get('a_m')
@@ -384,6 +423,8 @@ def make_C_a_b_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     n_shots = kwargs.get('n_shots')
     a_sp = kwargs.get('a_sp')
     c = kwargs.get('c')
+    # w = kwargs.get('w')
+    noise_mats = kwargs.get('noise_mats')
     if l==1:
         state_p = 'p0'
         state_m = 'p1'
@@ -399,40 +440,48 @@ def make_C_a_b_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     rho0m = make_init_state(a_sp, c, state = state_m)
     rho_B = 0.5*qt.identity(2)
     rhom = jnp.array((qt.tensor(rho0m, rho_B)).full())
-    return Parallel(n_jobs=1)(delayed(C_a_b_MT_i)(solver_ftn, t_b, pulse, noise_mats, t_vec, [rhop, rhom], c_times[i],
+    return Parallel(n_jobs=1)(delayed(C_a_b_MT_i)(solver_ftn, t_b, pulse, t_vec, [rhop, rhom], c_times[i],
                                                    n_shots=n_shots, M=M, a_m=a_m, l=l,
-                                                   delta=delta) for i in range(np.size(c_times))) # keep n_jobs=1 on Linux
+                                                   delta=delta, noise_mats = noise_mats) for i in range(np.size(c_times))) # keep n_jobs=1 on Linux
 
-def C_a_0_MT_i(solver_ftn, t_b, pulse, noise_mats, t_vec, rho, ct, **kwargs):
+
+def C_a_0_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, **kwargs):
     n_shots = kwargs.get('n_shots')
     M = kwargs.get('M')
     a_m = kwargs.get('a_m')
     l = kwargs.get('l')
     delta = kwargs.get('delta')
+    # w = kwargs.get('w')
+    noise_mats = kwargs.get('noise_mats')
     rhop = rho[0]
     rhom = rho[1]
     y_uv = jnp.array(make_y(t_b, pulse, ctime=ct, M=M))
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhop, n_shots)
+    # sol = solver_ftn(y_uv, w, t_vec, rhop, n_shots)
     sol = frame_correct(sol, pulse)
     EXlp = E_X(l, sol, a_m, delta)
     # EXlp = E_X_hat(l, sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhop, n_shots)
+    # sol = solver_ftn(y_uv, w, t_vec, rhop, n_shots)
     sol = frame_correct(sol, pulse)
     EYlp = E_Y(l, sol, a_m, delta)
     # EYlp = E_Y_hat(l, sol, a_m, delta)
     Ap = A([EXlp, EYlp])
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhom, n_shots)
+    # sol = solver_ftn(y_uv, w, t_vec, rhom, n_shots)
     sol = frame_correct(sol, pulse)
     EXlm = E_X(l, sol, a_m, delta)
     # EXlm = E_X_hat(l, sol, a_m, delta)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhom, n_shots)
+    # sol = solver_ftn(y_uv, w, t_vec, rhom, n_shots)
     sol = frame_correct(sol, pulse)
     EYlm = E_Y(l, sol, a_m, delta)
     # EYlm = E_Y_hat(l, sol, a_m, delta)
     Am = A([EXlm, EYlm])
-    return np.real(Ap - Am)
+    return Ap + Am
 
-def make_C_a_0_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
+
+def make_C_a_0_MT(solver_ftn, pulse, t_vec, c_times, **kwargs):
     M = kwargs.get('M')
     t_b = kwargs.get('t_b')
     a_m = kwargs.get('a_m')
@@ -441,6 +490,8 @@ def make_C_a_0_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     n_shots = kwargs.get('n_shots')
     a_sp = kwargs.get('a_sp')
     c = kwargs.get('c')
+    noise_mats = kwargs.get('noise_mats')
+    # w = kwargs.get('w')
     if l==1:
         state_p = 'p0'
         state_m = 'p1'
@@ -450,15 +501,12 @@ def make_C_a_0_MT(solver_ftn, pulse, noise_mats, t_vec, c_times, **kwargs):
     else:
         raise Exception("Invalid state input")
     rho0p = make_init_state(a_sp, c, state = state_p)
-    rho_B = 0.5*(qt.identity(2)+qt.sigmaz())
+    rho_B = 0.5*qt.identity(2)
     rhop = jnp.array((qt.tensor(rho0p, rho_B)).full())
     rho0m = make_init_state(a_sp, c, state = state_m)
-    rho_B = 0.5*(qt.identity(2)+qt.sigmaz())
+    rho_B = 0.5*qt.identity(2)
     rhom = jnp.array((qt.tensor(rho0m, rho_B)).full())
-    return Parallel(n_jobs=1)(delayed(C_a_0_MT_i)(solver_ftn, t_b, pulse, noise_mats, t_vec, [rhop, rhom], c_times[i],
+    return Parallel(n_jobs=1)(delayed(C_a_0_MT_i)(solver_ftn, t_b, pulse, t_vec, [rhop, rhom], c_times[i],
                                                    n_shots=n_shots, M=M, a_m=a_m, l=l,
-                                                   delta=delta) for i in range(np.size(c_times)))
+                                                   delta=delta, noise_mats = noise_mats) for i in range(np.size(c_times)))
 
-
-# print(POVMs([0.9, 0.9], [0.01, 0.02]))
-# print(np.array([[(i,j) for j in range(4)] for i in range(4)]))
