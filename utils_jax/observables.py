@@ -3,7 +3,6 @@ import qutip as qt
 from trajectories import make_y, make_init_state
 import jax.numpy as jnp
 from joblib import Parallel, delayed
-import jax
 
 
 
