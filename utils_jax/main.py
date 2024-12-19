@@ -16,15 +16,15 @@ start_time = time.time()
 
 
 T = 2e-6
-M = 24
-t_grain = int(1e3)
+M = 12
+t_grain = int(2e3)
 t_b = jnp.linspace(0, T, t_grain)
 truncate = 20
 wmax = 2*np.pi*truncate/T
 w_grain = 2000
 w = jnp.linspace(0, wmax, w_grain)
 spec_vec = [S_11, S_22, S_1212]
-a_sp = np.array([1, 1])#np.array([1, 1])
+a_sp = np.array([1, 1])
 c = np.array([np.array(0.+0.*1j), np.array(0.+0.*1j)])
 a1 = 1#0.98
 b1 = 1#0.97
@@ -32,11 +32,11 @@ a2 = 1#0.99
 b2 = 1#0.97
 a_m = np.array([a1+b1-1, a2+b2-1])
 delta = np.array([a1-b1, a2-b2])
-gamma = T/7
-gamma_12 = T/14
+gamma = T/10
+gamma_12 = T/18
 t_vec = jnp.linspace(0, M*T, M*jnp.size(t_b))
 c_times = jnp.array([T/n for n in range(1, truncate+1)])
-n_shots = 2000
+n_shots = 6000
 # create a folder in the parent directory
 parent_dir = os.pardir
 fname = "DraftRun_NoSPAM"

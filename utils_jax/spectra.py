@@ -34,10 +34,10 @@ def S_22(w):
 
 @jax.jit
 def S_1212(w):
-    tc=4e-7
+    tc=1e-6
     S0 = 1e3
     w0=0*10**9
-    return S0/(1+tc*w)#L(w, w0, 0.5*tc)
+    return S0/(1+(tc*w))#L(w, w0, 0.5*tc)
 
 
 @jax.jit
