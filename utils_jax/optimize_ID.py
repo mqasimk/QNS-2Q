@@ -388,8 +388,8 @@ uddLib = []
 
 
 # Parameters for the optimization over known pulse sequences
-Tknown = 2*T
-Mknown = M
+Tknown = 2*M*T
+Mknown = 1
 tau = T/80
 
 
@@ -399,7 +399,7 @@ print("#########################################################################
 
 
 # Make CDD_n libraries that respect the minimum pulse separation constraint
-cddOrd = 1
+cddOrd = 7
 make = True
 while make:
     pul = cddn(Tknown, cddOrd)
@@ -413,21 +413,21 @@ while make:
 
 
 # Make UDD_n libraries that respect the minimum pulse separation constraint
-uddOrd = 1
-make = True
-while make:
-    pul = uddn(Tknown, uddOrd)
-    uddOrd += 1
-    for i in range(1, pul.size-2):
-        if pul[i+1] - pul[i] < tau:
-            make = False
-    if make == False:
-        break
-    uddLib.append(pul)
+# uddOrd = 60
+# make = True
+# while make:
+#     pul = uddn(Tknown, uddOrd)
+#     uddOrd += 1
+#     for i in range(1, pul.size-2):
+#         if pul[i+1] - pul[i] < tau:
+#             make = False
+#     if make == False:
+#         break
+#     uddLib.append(pul)
 
 
 pLib.append(cddLib)
-pLib.append(uddLib)
+# pLib.append(uddLib)
 
 
 # Generate an Idling gate that is optimized using known sequences
@@ -445,7 +445,7 @@ print([known_opt[i].shape[0]-2 for i in range(2)])
 Topt = T
 Mopt = 2*M
 # Generate an Idling gate that is optimized over a given number of pulses on each qubit
-nPs = [[51, 52, 53], [64, 65]]
+nPs = [[51, 52, 53], [65, 75, 77]]
 vt_opt, inf_min = hyperOpt(SMat, nPs, Mopt, Topt, w)
 L_opt = L_map(p2q, p2q, vt_opt, SMat, Mopt, w)
 inf_opt = infidelity(vt_opt, SMat_ideal, Mopt, w_ideal)
