@@ -5,10 +5,7 @@ import numpy as np
 import jaxopt
 from spectra import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
 import os
-
-
-
-
+jax.config.update("jax_enable_x64", True)
 
 
 ########################################################################################################################
@@ -20,8 +17,8 @@ import os
 
 @jax.jit
 def Sc(w):
-    tc=4e-4
-    S0 =0*1e-6
+    tc = 4e-4
+    S0 = 1e-6
     return S0/(1+(tc**2)*(w**2))
 
 
@@ -34,7 +31,7 @@ def zzPTM():
     return jnp.real(gamma)
 
 
-@jax.jit
+# @jax.jit
 def pulse(mu, sig, t):
     return jnp.exp(-(t-mu)**2/(2*sig**2))
 
@@ -82,13 +79,13 @@ def make_tk12(tk1, tk2):
 
 
 def inf_CZ(params, i, j, SMat, M, T, w, Jmax):
-    vt1 = jnp.sort(jnp.concatenate((jnp.array([0]), params[:i], jnp.array([T]))))
-    vt2 = jnp.sort(jnp.concatenate((jnp.array([0]), params[i:], jnp.array([T]))))
+    vt1 = jnp.concatenate((jnp.array([0]), params[:i], jnp.array([T])))
+    vt2 = jnp.concatenate((jnp.array([0]), params[i:i+j], jnp.array([T])))
     vt12 = make_tk12(vt1, vt2)
     vt = [vt1, vt2, vt12]
     Gp_re_map = jax.vmap(Gp_re, in_axes=(None, None, 0, None))
     Gp_im_map = jax.vmap(Gp_im, in_axes=(None, None, 0, None))
-    Gp = jnp.zeros((3, 3, w.size), dtype=jnp.complex64)
+    Gp = jnp.zeros((3, 3, w.size), dtype=jnp.complex128)
     for i in range(3):
         for j in range(3):
             Gp = Gp.at[i, j].set(Gp_re_map(vt[i], vt[j], w, M) + 1j*Gp_im_map(vt[i], vt[j], w, M))
@@ -96,9 +93,19 @@ def inf_CZ(params, i, j, SMat, M, T, w, Jmax):
     p1q = jnp.array([[[1, 0], [0, 1]], [[0, 1], [1, 0]], [[0, -1j], [1j, 0]], [[1, 0], [0, -1]]])
     p2q = jnp.array([jnp.kron(p1q[i], p1q[j]) for i in range(4) for j in range(4)])
     dt = tau
-    fid = jnp.trace(zzPTM().transpose()@L_map(p2q, p2q, vt, SMat, M, w, Jmax))/16.
-    clustering=(1/(vt[0].shape[0]+vt[1].shape[0]-2))*jnp.sum(jnp.array([jnp.tanh(vt[i].shape[0]*(vt[i][j+1]-vt[i][j])/dt-1) for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)
-    return 1-fid-clustering*1e-3
+    # xax = jnp.linspace(0, M*vt[2][-1], M*1000)
+    # xbase = jnp.linspace(0, vt[2][-1], 1000)
+    # sig = M*vt[2][-1]/2
+    # tf = M*vt[2][-1]/2
+    # area = jax.scipy.integrate.trapezoid(jnp.tile(y_t(xbase, vt[2]), M)*pulse(tf, sig, xax), xax)
+    # J = jnp.maximum(jnp.minimum((jnp.pi*0.25)/area, Jmax), -Jmax)
+    tax = np.linspace(0, T, 1000)
+    J = jnp.maximum(jnp.minimum(jnp.pi*0.25/(M*jax.scipy.integrate.trapezoid(y_t(tax, vt12), tax)), Jmax), -Jmax)
+    fid = jnp.trace(zzPTM().transpose()@L_map(p2q, p2q, vt, SMat, M, w, J))/16.
+    clustering=(1/(vt[0].shape[0]+vt[1].shape[0]-2))*jnp.sum(jnp.array([jnp.tanh(vt[i].shape[0]*(vt[i][j+1]-vt[i][j]/dt-1)) for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)
+    #jnp.sum(jnp.array([((vt[i][j+1]-vt[i][j])-dt)**2 for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)
+    return -fid-clustering*1e-3
+
 
 
 def infidelity(params, SMat, M, w, J):
@@ -108,7 +115,7 @@ def infidelity(params, SMat, M, w, J):
     vt = [vt1, vt2, vt12]
     Gp_re_map = jax.vmap(Gp_re, in_axes=(None, None, 0, None))
     Gp_im_map = jax.vmap(Gp_im, in_axes=(None, None, 0, None))
-    Gp = jnp.zeros((3, 3, w.size), dtype=jnp.complex64)
+    Gp = jnp.zeros((3, 3, w.size), dtype=jnp.complex128)
     for i in range(3):
         for j in range(3):
             Gp = Gp.at[i, j].set(Gp_re_map(vt[i], vt[j], w, M) + 1j*Gp_im_map(vt[i], vt[j], w, M))
@@ -118,6 +125,7 @@ def infidelity(params, SMat, M, w, J):
     return 1.-jnp.trace(zzPTM().transpose()@L_map(p2q, p2q, vt, SMat, M, w, J))/16.
 
 
+
 def T2(params, SMat, M, w, qubit):
     vt1 = params[0]
     vt2 = params[1]
@@ -125,7 +133,7 @@ def T2(params, SMat, M, w, qubit):
     vt = [vt1, vt2, vt12]
     Gp_re_map = jax.vmap(Gp_re, in_axes=(None, None, 0, None))
     Gp_im_map = jax.vmap(Gp_im, in_axes=(None, None, 0, None))
-    Gp = jnp.zeros((3, 3, w.size), dtype=jnp.complex64)
+    Gp = jnp.zeros((3, 3, w.size), dtype=jnp.complex128)
     for i in range(3):
         for j in range(3):
             Gp = Gp.at[i, j].set(Gp_re_map(vt[i], vt[j], w, 1) + 1j*Gp_im_map(vt[i], vt[j], w, 1))
@@ -141,61 +149,84 @@ def T2(params, SMat, M, w, qubit):
         raise ValueError("qubit must be an integer 1 or 2")
 
 
-def hyperOpt(SMat, nPs, M, T, w, Jmax):
+def hyperOpt(SMat, nPs, M, T, w, Jmax, vtin = None):
     optimizer = jaxopt.ScipyBoundedMinimize(fun=inf_CZ, maxiter=80, jit=False, method='L-BFGS-B',
-                                            options={'disp': False, 'gtol': 1e-9, 'ftol': 1e-6,
-                                                     'maxfun': 1000, 'maxls': 10})
+                                            options={'disp': False, 'gtol': 1e-9, 'ftol': 1e-8,
+                                                     'maxfun': 1000, 'maxls': 20})
     opt_out = []
     init_params = []
-    for i in nPs[0]:
-        opt_out_temp = []
-        for j in nPs[1]:
-            vt = jnp.array(np.random.rand(i+j)*T)
-            init_params.append(vt)
-            lower_bnd = jnp.zeros_like(vt)
-            upper_bnd = jnp.ones_like(vt)*T
-            bnds = (lower_bnd, upper_bnd)
-            opt = optimizer.run(vt, bnds, i, j, SMat, M, T, w, Jmax)
-            opt_out_temp.append(opt)
-            print("Optimized Cost: "+str(opt.state[0])+", No. of pulses on qubits:"+str([i, j]))
-        opt_out.append(opt_out_temp)
-    inf_ID_out = jnp.array([[opt_out[i][j].state[0] for j in range(len(opt_out[0]))] for i in range(len(opt_out))])
-    inds_min = jnp.unravel_index(jnp.argmin(inf_ID_out), inf_ID_out.shape) #jnp.where(inf_ID_out == jnp.min(inf_ID_out))
-    vt_min_arr = opt_out[inds_min[0]][inds_min[1]].params
-    vt_opt = [params_to_tk(vt_min_arr, T, jnp.array([0, nPs[0][inds_min[0]]])), params_to_tk(vt_min_arr, T, jnp.array([nPs[0][inds_min[0]], nPs[0][inds_min[0]]+nPs[1][inds_min[1]]]))]
-    vt_opt.append(make_tk12(vt_opt[0], vt_opt[1]))
-    xax = jnp.linspace(0, M*vt_opt[2][-1], M*1000)
-    xbase = jnp.linspace(0, vt_opt[2][-1], 1000)
-    sig = M*vt_opt[2][-1]/3
-    tf = M*vt_opt[2][-1]/2
-    area = jax.scipy.integrate.trapezoid(pulse(tf, sig, xax)*jnp.tile(y_t(xbase, vt_opt[2]), M), xax)
-    Jopt = jnp.maximum(jnp.minimum((jnp.pi*0.25)/area, Jmax), -Jmax)
-    return vt_opt, infidelity(vt_opt, SMat, M, w, Jopt)
+    if vtin is None:
+        for i in nPs[0]:
+            opt_out_temp = []
+            for j in nPs[1]:
+                vt = jnp.concatenate((jnp.sort(np.random.rand(i)*T),jnp.sort(np.random.rand(j)*T)))
+                init_params.append(vt)
+                lower_bnd = jnp.zeros(vt.size)
+                upper_bnd = jnp.ones(vt.size)*T
+                bnds = (lower_bnd, upper_bnd)
+                opt = optimizer.run(vt, bnds, i, j, SMat, M, T, w, Jmax)
+                opt_out_temp.append(opt)
+                print("Optimized Cost: "+str(opt.state[0])+", No. of pulses on qubits:"+str([i, j]))
+            opt_out.append(opt_out_temp)
+        inf_ID_out = jnp.array([[opt_out[i][j].state[0] for j in range(len(opt_out[0]))] for i in range(len(opt_out))])
+        inds_min = jnp.unravel_index(jnp.argmin(inf_ID_out), inf_ID_out.shape) #jnp.where(inf_ID_out == jnp.min(inf_ID_out))
+        vt_min_arr = opt_out[inds_min[0]][inds_min[1]].params
+        vt_opt = [params_to_tk(vt_min_arr, T, jnp.array([0, nPs[0][inds_min[0]]])), params_to_tk(vt_min_arr, T, jnp.array([nPs[0][inds_min[0]], nPs[0][inds_min[0]]+nPs[1][inds_min[1]]]))]
+        vt_opt.append(make_tk12(vt_opt[0], vt_opt[1]))
+        # xax = jnp.linspace(0, M*vt_opt[2][-1], M*1000)
+        # xbase = jnp.linspace(0, vt_opt[2][-1], 1000)
+        # sig = M*vt_opt[2][-1]/2
+        # tf = M*vt_opt[2][-1]/2
+        # area = jax.scipy.integrate.trapezoid(jnp.tile(y_t(xbase, vt_opt[2]), M)*pulse(tf, sig, xax), xax)
+        # Jopt = jnp.maximum(jnp.minimum((jnp.pi*0.25)/area, Jmax), -Jmax)
+        tax = jnp.linspace(0, T, 1000)
+        Jopt = jnp.pi*0.25/(M*jax.scipy.integrate.trapezoid(y_t(tax, vt_opt[2]), tax))
+    else:
+        for vt1 in vtin:
+            opt_out_temp = []
+            for vt2 in vtin:
+                vt = jnp.concatenate((vt1[1:-1],vt2[1:-1]))
+                init_params.append(vt)
+                lower_bnd = jnp.zeros(vt.size)
+                upper_bnd = jnp.ones(vt.size)*T
+                bnds = (lower_bnd, upper_bnd)
+                opt = optimizer.run(vt, bnds, vt1[1:-1].size, vt2[1:-1].size, SMat, M, T, w, Jmax)
+                opt_out_temp.append(opt)
+                print("Optimized Cost: "+str(opt.state[0])+", No. of pulses on qubits:"+str([vt1[1:-1].size, vt2[1:-1].size]))
+            opt_out.append(opt_out_temp)
+        inf_ID_out = jnp.array([[opt_out[i][j].state[0] for j in range(len(opt_out[0]))] for i in range(len(opt_out))])
+        inds_min = jnp.unravel_index(jnp.argmin(inf_ID_out), inf_ID_out.shape) #jnp.where(inf_ID_out == jnp.min(inf_ID_out))
+        vt_opt = [vtin[inds_min[0]], vtin[inds_min[1]]]
+        vt_opt.append(make_tk12(vt_opt[0], vt_opt[1]))
+        # xax = jnp.linspace(0, M*vt_opt[2][-1], M*1000)
+        # xbase = jnp.linspace(0, vt_opt[2][-1], 1000)
+        # sig = M*vt_opt[2][-1]/2
+        # tf = M*vt_opt[2][-1]/2
+        # area = jax.scipy.integrate.trapezoid(jnp.tile(y_t(xbase, vt_opt[2]), M)*pulse(tf, sig, xax), xax)
+        # Jopt = jnp.maximum(jnp.minimum((jnp.pi*0.25)/area, Jmax), -Jmax)
+        tax = jnp.linspace(0, T, 1000)
+        Jopt = np.maximum(np.minimum(jnp.pi*0.25/(M*jax.scipy.integrate.trapezoid(y_t(tax, vt_opt[2]), tax)),Jmax),-Jmax)
+    return vt_opt, infidelity(vt_opt, SMat, M, w, Jopt), Jopt
 
 
 def Lambda_CZ(Oi, Oj, vt, SMat, M, w, J):
-    vt12 = make_tk12(vt[0], vt[1])
-    vt.append(vt12)
     z1q = jnp.array([jnp.array([[1, 0], [0, 1]]), jnp.array([[1, 0], [0, -1]])])
     z2q = jnp.array([jnp.kron(z1q[0], z1q[0]), jnp.kron(z1q[1], z1q[0]), jnp.kron(z1q[0], z1q[1]), jnp.kron(z1q[1], z1q[1])])
     Gp_re_map = jax.vmap(Gp_re, in_axes=(None, None, 0, None))
     Gp_im_map = jax.vmap(Gp_im, in_axes=(None, None, 0, None))
-    Gp = jnp.zeros((3, 3, w.size), dtype=jnp.complex64)
+    Gp = jnp.zeros((3, 3, w.size), dtype=jnp.complex128)
     for i in range(3):
         for j in range(3):
             Gp = Gp.at[i, j].set(Gp_re_map(vt[i], vt[j], w, M) + 1j*Gp_im_map(vt[i], vt[j], w, M))
-    xax = jnp.linspace(0, M*vt12[-1], M*1000)
-    xbase = jnp.linspace(0, vt12[-1], 1000)
-    sig = M*vt[2][-1]/8
-    tf = M*vt[2][-1]/2
+    tax = jnp.linspace(0, vt[2][-1], 1000)
     CO = 0
-    ft1212 = jax.vmap(ft, in_axes=(None, None, 0))
-    y1212 = J*pulse(tf, sig, xax)*jnp.tile(y_t(xbase, vt[2]), M)
+    # ft1212 = jax.vmap(ft, in_axes=(None, None, 0))
+    # y1212 = J*pulse(tf, sig, xax)*jnp.tile(y_t(xbase, vt[2]), M)
     for i in range(3):
         for j in range(3):
-            CO += (-0.5*(sgn(Oi, i+1, j+1)+1)*z2q[i+1]@z2q[j+1]*jax.scipy.integrate.trapezoid(SMat[i, j]*(sgn(Oi, i+1, 0)-1)*Gp[i, j], w)/jnp.pi
-                   +(1-sgn(Oi, 1, 2))*jax.scipy.integrate.trapezoid(Sc(w)*jnp.real(np.abs(ft1212(y1212, xax, w))**2), w)/jnp.pi*z2q[0])
-    rot = (1.-sgn(Oi, 1, 2))*jax.scipy.integrate.trapezoid(J*pulse(tf, sig, xax)*jnp.tile(y_t(xbase, vt[2]), M), xax)*z2q[3]
+            CO += (-0.5*(sgn(Oi, i+1, j+1)+1)*z2q[i+1]@z2q[j+1]*jax.scipy.integrate.trapezoid(SMat[i, j]*(sgn(Oi, i+1, 0)-1)*Gp[i, j], w)/jnp.pi)
+                   #+(1-sgn(Oi, 1, 2))*(jax.scipy.integrate.trapezoid(Sc(w)*jnp.real(np.abs(ft1212(y1212, xax, w))**2), w)/jnp.pi)*z2q[0])
+    rot = (1.-sgn(Oi, 1, 2))*M*jax.scipy.integrate.trapezoid(J*y_t(tax, vt[2]), tax)*z2q[3]
     return jnp.real(jnp.trace(Oi@jax.scipy.linalg.expm(-1j*rot-CO)@Oj)*0.25)
 
 
@@ -251,6 +282,7 @@ def cddn_rec(T, n):
         return np.array([0., T/2])
     return comb_vks([0.], comb_vks(comb_vks(cddn_rec(T/2, n-1), [T/2]), cddn_rec(T/2, n-1) + T/2))
 
+
 def cddn(T, n):
     return np.concatenate((np.array([0]), comb_vks(cddn_rec(T, n), [T])))
 
@@ -267,12 +299,14 @@ def opt_known_pulses(pLib, SMat, M, w, Jmax):
                     tk2 = pLib[j][l]
                     tk12 = make_tk12(tk1, tk2)
                     vt = [tk1, tk2, tk12]
-                    xax = jnp.linspace(0, M*vt[2][-1], M*1000)
-                    xbase = jnp.linspace(0, vt[2][-1], 1000)
-                    sig = M*vt[2][-1]/3
-                    tf = M*vt[2][-1]/2
-                    area = jax.scipy.integrate.trapezoid(pulse(tf, sig, xax)*jnp.tile(y_t(xbase, vt[2]), M), xax)
-                    J = jnp.maximum(jnp.minimum((jnp.pi*0.25)/area, Jmax), -Jmax)
+                    # xax = jnp.linspace(0, M*vt[2][-1], M*1000)
+                    # xbase = jnp.linspace(0, vt[2][-1], 1000)
+                    # sig = M*vt[2][-1]/2
+                    # tf = M*vt[2][-1]/2
+                    # area = jax.scipy.integrate.trapezoid(jnp.tile(y_t(xbase, vt[2]), M)*pulse(tf, sig, xax), xax)
+                    # J = jnp.maximum(jnp.minimum((jnp.pi*0.25)/area, Jmax), -Jmax)
+                    tax = jnp.linspace(0, vt[2][-1], 1000)
+                    J = np.maximum(np.minimum(jnp.pi*0.25/(M*jax.scipy.integrate.trapezoid(y_t(tax, vt[2]), tax)),Jmax),-Jmax)
                     L_map = jax.vmap(jax.vmap(Lambda_CZ, in_axes=(None, 0, None, None, None, None, None)), in_axes=(0, None, None, None, None, None, None))
                     p1q = jnp.array([[[1, 0], [0, 1]], [[0, 1], [1, 0]], [[0, -1j], [1j, 0]], [[1, 0], [0, -1]]])
                     p2q = jnp.array([jnp.kron(p1q[i], p1q[j]) for i in range(4) for j in range(4)])
@@ -286,6 +320,34 @@ def opt_known_pulses(pLib, SMat, M, w, Jmax):
     tk12 = make_tk12(tk1, tk2)
     vt_opt = [tk1, tk2, tk12]
     return vt_opt, infmin, Jopt
+
+
+def makeSMat_k(specs, wk, wkqns, gamma, gamma12):
+    SMat = jnp.zeros((3, 3, wk.size), dtype=jnp.complex128)
+    SMat = SMat.at[0, 0].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_11(wk[0])]), specs["S11"]))))
+    SMat = SMat.at[1, 1].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_22(wk[0])]), specs["S22"]))))
+    # SMat = SMat.at[2, 2].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_1212(wk[0])]), specs["S1212"]))))
+    SMat = SMat.at[0, 1].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_1_2(wk[0], gamma)]), specs["S12"]))))
+    SMat = SMat.at[1, 0,].set(jnp.interp(wk, wkqns, jnp.conj(jnp.concatenate((jnp.array([S_1_2(wk[0], gamma)]), specs["S12"])))))
+    # SMat = SMat.at[0, 2].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_1_12(wk[0], gamma12)]), specs["S112"]))))
+    # SMat = SMat.at[2, 0].set(jnp.interp(wk, wkqns, jnp.conj(jnp.concatenate((jnp.array([S_1_12(wk[0], gamma12)]), specs["S112"])))))
+    # SMat = SMat.at[1, 2].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_2_12(wk[0], gamma12-gamma)]), specs["S212"]))))
+    # SMat = SMat.at[2, 1].set(jnp.interp(wk, wkqns, jnp.conj(jnp.concatenate((jnp.array([S_2_12(wk[0], gamma12-gamma)]), specs["S212"])))))
+    return SMat
+
+
+def makeSMat_k_ideal(wk, gamma, gamma12):
+    SMat_ideal = jnp.zeros((3, 3, wk.size), dtype=jnp.complex128)
+    SMat_ideal = SMat_ideal.at[0, 0].set(S_11(wk))
+    SMat_ideal = SMat_ideal.at[1, 1].set(S_22(wk))
+    SMat_ideal = SMat_ideal.at[2, 2].set(S_1212(wk))
+    SMat_ideal = SMat_ideal.at[0, 1].set(S_1_2(wk, gamma))
+    SMat_ideal = SMat_ideal.at[1, 0].set(jnp.conj(S_1_2(wk, gamma)))
+    SMat_ideal = SMat_ideal.at[0, 2].set(S_1_12(wk, gamma12))
+    SMat_ideal = SMat_ideal.at[2, 0].set(jnp.conj(S_1_12(wk, gamma12)))
+    SMat_ideal = SMat_ideal.at[1, 2].set(S_2_12(wk, gamma12-gamma))
+    SMat_ideal = SMat_ideal.at[2, 1].set(jnp.conj(S_2_12(wk, gamma12-gamma)))
+    return SMat_ideal
 
 
 ########################################################################################################################
@@ -320,48 +382,44 @@ Tqns = params['T']
 
 
 T=Tqns
-M=20
+# M=20
+
 
 p1q = jnp.array([[[1, 0], [0, 1]], [[0, 1], [1, 0]], [[0, -1j], [1j, 0]], [[1, 0], [0, -1]]])
 p2q = jnp.array([jnp.kron(p1q[i], p1q[j]) for i in range(4) for j in range(4)])
-w = jnp.linspace(0.001, 2*jnp.pi*mc/T, 4000)
-wk = jnp.array([2*jnp.pi*(n+1)/Tqns for n in range(mc)])
-S_11_k = S_11(wk)
-S_22_k = S_22(wk)
-S_12_k = S_1212(wk)
-S_1_2_k = S_1_2(wk, gamma)
-S_1_12_k = S_1_12(wk, gamma12)
-S_2_12_k = S_2_12(wk, gamma12-gamma)
-SMat = jnp.zeros((3, 3, w.size), dtype=jnp.complex64)
+wqns = jnp.linspace(0.001, 2*jnp.pi*mc/T, 4000)
+w_ideal = jnp.linspace(0.0001, 2*jnp.pi*2*mc/T, 12000)
+wkqns = jnp.array([2*jnp.pi*(n+1)/Tqns for n in range(mc)])
+SMat = jnp.zeros((3, 3, wqns.size), dtype=jnp.complex128)
 
 
-SMat = SMat.at[0, 0].set(jnp.interp(w, wk, specs["S11"]))
-SMat = SMat.at[1, 1].set(jnp.interp(w, wk, specs["S22"]))
-SMat = SMat.at[2, 2].set(jnp.interp(w, wk, specs["S1212"]))
-SMat = SMat.at[0, 1].set(jnp.interp(w, wk, specs["S12"]))
-SMat = SMat.at[1, 0].set(jnp.interp(w, wk, np.conj(specs["S12"])))
-SMat = SMat.at[0, 2].set(jnp.interp(w, wk, specs["S112"]))
-SMat = SMat.at[2, 0].set(jnp.interp(w, wk, np.conj(specs["S11"])))
-SMat = SMat.at[1, 2].set(jnp.interp(w, wk, specs["S212"]))
-SMat = SMat.at[2, 1].set(jnp.interp(w, wk, np.conj(specs["S212"])))
+SMat = SMat.at[0, 0].set(jnp.interp(wqns, wkqns, specs["S11"]))
+SMat = SMat.at[1, 1].set(jnp.interp(wqns, wkqns, specs["S22"]))
+# SMat = SMat.at[2, 2].set(jnp.interp(wqns, wkqns, specs["S1212"]))
+SMat = SMat.at[0, 1].set(jnp.interp(wqns, wkqns, specs["S12"]))
+SMat = SMat.at[1, 0].set(jnp.interp(wqns, wkqns, np.conj(specs["S12"])))
+# SMat = SMat.at[0, 2].set(jnp.interp(wqns, wkqns, specs["S112"]))
+# SMat = SMat.at[2, 0].set(jnp.interp(wqns, wkqns, np.conj(specs["S112"])))
+# SMat = SMat.at[1, 2].set(jnp.interp(wqns, wkqns, specs["S212"]))
+# SMat = SMat.at[2, 1].set(jnp.interp(wqns, wkqns, np.conj(specs["S212"])))
 
 
-SMat_ideal = jnp.zeros((3, 3, w.size), dtype=jnp.complex64)
-SMat_ideal = SMat_ideal.at[0, 0].set(S_11(w))
-SMat_ideal = SMat_ideal.at[1, 1].set(S_22(w))
-SMat_ideal = SMat_ideal.at[2, 2].set(S_1212(w))
-SMat_ideal = SMat_ideal.at[0, 1].set(S_1_2(w, gamma))
-SMat_ideal = SMat_ideal.at[1, 0].set(jnp.conj(S_1_2(w, gamma)))
-SMat_ideal = SMat_ideal.at[0, 2].set(S_1_12(w, gamma12))
-SMat_ideal = SMat_ideal.at[2, 0].set(jnp.conj(S_1_12(w, gamma12)))
-SMat_ideal = SMat_ideal.at[1, 2].set(S_2_12(w, gamma12-gamma))
-SMat_ideal = SMat_ideal.at[2, 1].set(jnp.conj(S_2_12(w, gamma12-gamma)))
+SMat_ideal = jnp.zeros((3, 3, w_ideal.size), dtype=jnp.complex128)
+SMat_ideal = SMat_ideal.at[0, 0].set(S_11(w_ideal))
+SMat_ideal = SMat_ideal.at[1, 1].set(S_22(w_ideal))
+SMat_ideal = SMat_ideal.at[2, 2].set(S_1212(w_ideal))
+SMat_ideal = SMat_ideal.at[0, 1].set(S_1_2(w_ideal, gamma))
+SMat_ideal = SMat_ideal.at[1, 0].set(jnp.conj(S_1_2(w_ideal, gamma)))
+SMat_ideal = SMat_ideal.at[0, 2].set(S_1_12(w_ideal, gamma12))
+SMat_ideal = SMat_ideal.at[2, 0].set(jnp.conj(S_1_12(w_ideal, gamma12)))
+SMat_ideal = SMat_ideal.at[1, 2].set(S_2_12(w_ideal, gamma12-gamma))
+SMat_ideal = SMat_ideal.at[2, 1].set(jnp.conj(S_2_12(w_ideal, gamma12-gamma)))
 
 
 taxis = jnp.linspace(1*T, 20*T, 20)
 vt_T2 = jnp.array([jnp.array([[0, taxis[i]], [0, taxis[i]]]) for i in range(taxis.shape[0])])
-q1T2 = jnp.array([T2(vt_T2[i], SMat_ideal, 1, w, 1) for i in range(vt_T2.shape[0])])
-q2T2 = jnp.array([T2(vt_T2[i], SMat_ideal, 1, w, 2) for i in range(vt_T2.shape[0])])
+q1T2 = jnp.array([T2(vt_T2[i], SMat_ideal, 1, w_ideal, 1) for i in range(vt_T2.shape[0])])
+q2T2 = jnp.array([T2(vt_T2[i], SMat_ideal, 1, w_ideal, 2) for i in range(vt_T2.shape[0])])
 T2q1 = jnp.inf
 T2q2 = jnp.inf
 for i in range(q1T2.size):
@@ -381,80 +439,145 @@ print(f"T2 time for qubit 1 is {np.round(T2q1/T,2)} T")
 print(f"T2 time for qubit 2 is {np.round(T2q2/T, 2)} T")
 print("###########################################################################################")
 
+
 yaxis_base = []
-yaxis = []
-xaxis = []
-
-for i in range(8):
-    pLib=[]
-    cddLib = []
-    uddLib = []
+xaxis_base = []
+yaxis_Tg = []
+seqs = []
+xaxis_Tg = []
 
 
-    Tbase = T/2**i
-    Mbase = 1
-    base_gate = [[jnp.array([0, Tbase])], [jnp.array([0, Tbase])]]
-    Jmax = jnp.inf
-    base_opt, base_inf, Jopt = opt_known_pulses(base_gate, SMat, Mbase, w, Jmax)
-    inf_base = infidelity(base_opt, SMat_ideal, Mbase, w, Jopt)
+tau = T/80
+Jmax = 3e6
+
+for i in [1,2,3,3.5,4,4.5,5]:
+    yaxis = []
+    Tg = T/2**(i-1)
+    base_gate = [[jnp.array([0, Tg])], [jnp.array([0, Tg])]]
+    base_opt, base_inf, Jopt = opt_known_pulses(base_gate, SMat_ideal, 1, w_ideal, Jmax)
+    inf_base = infidelity(base_opt, SMat_ideal, 1, w_ideal, Jopt)
     yaxis_base.append(inf_base)
-    xaxis.append(Tbase)
-
+    xaxis_base.append(Tg)
 
     print("###########################################################################################")
-    print(f"Gate Time: {np.round(Mbase*Tbase/T2q1, 2)} T2q1 or {np.round(Mbase*Tbase/T2q2, 2)} T2q2")
+    print(f"Gate Time: {np.round(Tg/T2q1, 2)} T2q1 or {np.round(Tg/T2q2, 2)} T2q2")
     print(f"Jmax: {Jmax}")
+    print("###########################################################################################")
     print(f'infidelity of the uncorrected gate: {inf_base}')
     print(f'number of pulses: {[base_opt[i].shape[0]-2 for i in range(2)]}')
     print(f"The coupling strength J: {Jopt}")
     print("###########################################################################################")
+    best_inf = np.inf
+    best_seq = 0
+    Jopt_best = 0
+    if Tg < tau:
+        best_inf = base_inf
+        best_seq = base_gate
+        continue
+    for j in [1]:
+        pLib=[]
+        cddLib = []
+        Tknown = j*Tg
+        Mknown = int(1/j)
+        # cddLib.append(np.array([0.,Tknown]))
+        if Tknown < tau:
+            continue
+        # if Mknown < 10:
+        cddOrd = 1
+        make = True
+        while make:
+            pul = cddn(Tknown, cddOrd)
+            cddOrd += 1
+            for i in range(1, pul.size-2):
+                if pul[i+1] - pul[i] < tau:
+                    make = False
+            if make == False:
+                break
+            cddLib.append(pul)
+        pLib.append(cddLib)
+        known_opt, known_inf, Jopt = opt_known_pulses(pLib, SMat, Mknown, wqns, Jmax)
+        if known_inf <= best_inf:
+            inf_known = infidelity(known_opt, SMat_ideal, Mknown, w_ideal, Jopt)
+            best_inf = inf_known
+            best_seq = known_opt
+            Jopt_best = Jopt
+            print(f'number of pulses: {[best_seq[i].shape[0]-2 for i in range(2)]}')
+            print(f"The coupling strength J: {Jopt_best}")
+            print(f'best infidelity till now: {best_inf}, # of repetitions considered: {Mknown}')
+            print("###########################################################################################")
+    yaxis_Tg.append(best_inf)
+    xaxis_Tg.append(Tg)
+    seqs.append(best_seq)
+
+yaxis_opt = []
+xaxis_opt = []
+seqs_opt = []
+nplist = [[[158],[158]],[[78],[78]],[[38,39],[38,39]],[[38,39],[38,39]],[[38,39],[38,39]],[[38,39],[38,39]],[[38,39],[38,39]],[[38,39],[38,39]],[[38,39],[38,39]]]
+count = 0
+for i in [1,2,3,3.5,4,4.5,5]:
+    yaxis = []
+    Tg = T/2**(i-1)
+    best_inf = np.inf
+    best_seq = 0
+    Jopt_best = 0
+    if Tg < tau:
+        continue
+    for j in [1]:
+        Topt = j*Tg
+        Mopt = int(1/j)
+        if Topt < tau:
+            continue
+        nps = nplist[count]#[[int((Topt/tau)/2),int((Topt/tau)/2)+1],[int((Topt/tau)/2),int((Topt/tau)/2)+1]]
+        # cddLib = []
+        # if Topt < tau:
+        #     continue
+        # cddOrd = 1
+        # make = True
+        # while make:
+        #     pul = cddn(Topt, cddOrd)
+        #     cddOrd += 1
+        #     for k in range(1, pul.size-2):
+        #         if pul[k+1] - pul[k] < tau:
+        #             make = False
+        #     if make == False:
+        #         break
+        #     cddLib.append(pul)
+        if 1 <= i <= 6:
+            vt_opt, opt_inf, Jopt = hyperOpt(SMat, nps, Mopt, Topt, wqns, Jmax, [jnp.linspace(0, Topt, int((Topt/tau)))])
+        else:
+            vt_opt, opt_inf, Jopt = hyperOpt(SMat, nps, Mopt, Topt, wqns, Jmax)
+            count+=1
+        # vt_opt, opt_inf, Jopt = hyperOpt(SMat, nps, Mopt, Topt, wqns, Jmax)
+        # count+=1
+        inf_opt = infidelity(vt_opt, SMat_ideal, Mopt, w_ideal, Jopt)
+        if opt_inf <= best_inf:
+            best_inf = inf_opt
+            best_seq = vt_opt
+            Jopt_best = Jopt
+            print(f'number of pulses: {[best_seq[i].shape[0]-2 for i in range(2)]}')
+            print(f"The coupling strength J: {Jopt_best}")
+            print(f'best infidelity till now: {best_inf}, # of repetitions considered: {Mopt}')
+            print("###########################################################################################")
+    yaxis_opt.append(best_inf)
+    xaxis_opt.append(Tg)
+    seqs_opt.append(best_seq)
 
 
-    Tknown = Tbase
-    Mknown = Mbase
-    tau = T/160
+np.savez(os.path.join(path,"infs_known_4.npz"), infs_known=np.array(yaxis_Tg), infs_base=np.array(yaxis_base), taxis=np.array(xaxis_Tg))
+np.savez(os.path.join(path,"infs_opt_4.npz"), infs_opt=np.array(yaxis_opt), taxis=np.array(xaxis_opt))
 
 
-    cddOrd = 1
-    make = True
-    while make:
-        pul = cddn(Tknown, cddOrd)
-        cddOrd += 1
-        for i in range(1, pul.size-2):
-            if pul[i+1] - pul[i] < tau:
-                make = False
-        if make == False:
-            break
-        cddLib.append(pul)
+# knowndata = np.load(os.path.join(path,"infs_known_3.npz"))
+# optdata = np.load(os.path.join(path,"infs_opt_3.npz"))
+
+# yaxis_Tg = knowndata["infs_known"]
+# xaxis_Tg = knowndata["taxis"]
+# yaxis_base = knowndata["infs_base"]
+# xaxis_base = xaxis_Tg
+# xaxis_opt = optdata["taxis"]
+# yaxis_opt = optdata["infs_opt"]
 
 
-    uddOrd = 1
-    make = True
-    while make:
-        pul = uddn(Tknown, uddOrd)
-        uddOrd += 1
-        for i in range(1, pul.size-2):
-            if pul[i+1] - pul[i] < tau:
-                make = False
-        if make == False:
-            break
-        uddLib.append(pul)
-
-
-    pLib.append(cddLib)
-    pLib.append(uddLib)
-
-
-    known_opt, known_inf, Jopt = opt_known_pulses(pLib, SMat, Mknown, w, Jmax)
-    inf_known = infidelity(known_opt, SMat_ideal, Mknown, w, Jopt)
-    yaxis.append(inf_known)
-
-    print(f'infidelity over known seqs: {inf_known}')
-    print(f'number of pulses: {[known_opt[i].shape[0]-2 for i in range(2)]}')
-    print(f"The coupling strength J: {Jopt}")
-    print("###########################################################################################")
-
-np.savez(os.path.join(path,"infs_known.npz"), infs_known=yaxis, infs_base=yaxis_base, taxis=xaxis)
 
 
 legendfont = 12
@@ -463,27 +586,14 @@ tickfont = 12
 
 
 fig = plt.figure(figsize=(16,9))
-plt.plot(xaxis, yaxis_base, "r^")
-plt.plot(xaxis, yaxis, "bs")
-plt.legend(["Uncorrected Gate", "DD Gate"], fontsize=legendfont)
+plt.plot(xaxis_base, yaxis_base, "r^-")
+plt.plot(xaxis_Tg, yaxis_Tg, "bs-")
+plt.plot(xaxis_opt, yaxis_opt, "ko-")
+plt.legend(["Uncorrected Gate", "DD Gate", "NT Gate"], fontsize=legendfont)
 plt.xlabel('Gate Time (s)', fontsize=labelfont)
 plt.ylabel('Gate Infidelity', fontsize=labelfont)
 plt.xscale('log')
 plt.yscale('log')
-plt.tick_params(axis='both', labelsize=tickfont)
-plt.savefig(os.path.join(path,"infs_known_GateTime.png"), dpi=1200)
+# plt.tick_params(axis='both', labelsize=tickfont)
+plt.savefig(os.path.join(path,"infs_GateTime_4.png"), dpi=800)
 plt.show()
-
-
-# Mopt = 10
-# Topt = Tbase/Mopt
-# nPs = [[1,2,3,4], [1,2,3,4]]
-# vt_opt, inf_min = hyperOpt(SMat, nPs, Mopt, Topt, w, Jmax)
-# inf_opt = infidelity(vt_opt, SMat_ideal, Mopt, w, Jmax)
-#
-#
-# print('infidelity over optimized seqs: ')
-# print(inf_opt)
-# print('number of pulses: ')
-# print([vt_opt[i].shape[0]-2 for i in range(2)])
-
