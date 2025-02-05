@@ -7,7 +7,7 @@ from spectra import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
 
 # load the variables
 parent_dir = os.pardir
-fname = "DraftRun_NoSPAM"
+fname = "DraftRun_SPAM_hat"
 path = os.path.join(parent_dir, fname)
 params = np.load(os.path.join(path, "params.npz"))
 t_vec = params['t_vec']

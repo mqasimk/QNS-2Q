@@ -51,33 +51,18 @@ def make_tk12(tk1, tk2):
     return z
 
 
-# @jax.jit
-# def makeCO(vt, O, SMat, M, w):
-#     vt12 = make_tk12(vt[0], vt[1])
-#     z1q = jnp.array([jnp.array([[1, 0], [0, 1]]), jnp.array([[1, 0], [0, -1]])])
-#     z2q = jnp.array([jnp.kron(z1q[0], z1q[0]), jnp.kron(z1q[1], z1q[0]), jnp.kron(z1q[0], z1q[1]), jnp.kron(z1q[1], z1q[1])])
-#     Gp_re_map = jax.vmap(Gp_re, in_axes=(None, None, 0))
-#     Gp_im_map = jax.vmap(Gp_im, in_axes=(None, None, 0))
-#     Gp = jnp.zeros((3, 3, w.size), dtype=jnp.complex64)
-#     i=0
-#     for ti in [vt[0], vt[1], vt12]:
-#         j = 0
-#         for tj in [vt[0], vt[1], vt12]:
-#             Gp = Gp.at[i, j].set(Gp_re_map(ti, tj, w, M) + 1j*Gp_im_map(ti, tj, w, M))
-#             j+=1
-#         i+=1
-#     CO = 1j*0.
-#     for i in range(3):
-#         for j in range(3):
-#             CO += -z2q[i+1]@z2q[j+1]*jax.scipy.integrate.trapezoid(SMat[i, j]*(sgn(O, i+1, 0)-1)*Gp[i, j], w)/(4*jnp.pi)
-#     return jnp.real(jax.scipy.linalg.expm(CO))
-
-
 @jax.jit
 def CO_sum_els(O, SMat, Gp, i, j, w):
     z1q = jnp.array([jnp.array([[1, 0], [0, 1]]), jnp.array([[1, 0], [0, -1]])])
     z2q = jnp.array([jnp.kron(z1q[0], z1q[0]), jnp.kron(z1q[1], z1q[0]), jnp.kron(z1q[0], z1q[1]), jnp.kron(z1q[1], z1q[1])])
     return -0.5*(sgn(O, i+1, j+1)+1)*z2q[i+1]@z2q[j+1]*jax.scipy.integrate.trapezoid(SMat[i, j]*(sgn(O, i+1, 0)-1)*Gp[i, j], w)/jnp.pi
+
+
+@jax.jit
+def CO_sum_els_wk(O, SMat_k, Gp, i, j, M, T):
+    z1q = jnp.array([jnp.array([[1, 0], [0, 1]]), jnp.array([[1, 0], [0, -1]])])
+    z2q = jnp.array([jnp.kron(z1q[0], z1q[0]), jnp.kron(z1q[1], z1q[0]), jnp.kron(z1q[0], z1q[1]), jnp.kron(z1q[1], z1q[1])])
+    return -0.5*(sgn(O, i+1, j+1)+1)*z2q[i+1]@z2q[j+1]*jnp.sum(SMat_k[i, j]*(sgn(O, i+1, 0)-1)*Gp[i, j], axis=0)*M/T
 
 
 @jax.jit
@@ -90,6 +75,20 @@ def Lambda_diags(SMat, Gp, w):
                                    in_axes=(None, None, None, 0, None, None)),
                           in_axes=(0, None, None, None, None, None))
     CO = jnp.sum(CO_sum_map(p2q, SMat, Gp, inds, inds, w), axis=(1, 2))
+    return jnp.real(jnp.array([jnp.trace(p2q[i]@jax.scipy.linalg.expm(-CO[i])@p2q[i])*0.25 for i in range(CO.shape[0])]))
+
+
+@jax.jit
+def Lambda_diags_wk(SMat_k, Gp, M, T):
+    p1q = jnp.array([[[1, 0], [0, 1]], [[0, 1], [1, 0]], [[0, -1j], [1j, 0]], [[1, 0], [0, -1]]])
+    p2q = jnp.array([jnp.kron(p1q[i], p1q[j]) for i in range(4) for j in range(4)])
+    #CO = jnp.array([CO_sum_els_wk(p2q[i], SMat_k, Gp, j, k, M, T) for i in range(p2q.size) for j in range(3) for k in range(3)])
+    inds = jnp.array([0, 1, 2])
+    CO_sum_map = jax.vmap(jax.vmap(jax.vmap(CO_sum_els_wk,
+                                            in_axes=(None, None, None, None, 0, None, None)),
+                                   in_axes=(None, None, None, 0, None, None, None)),
+                          in_axes=(0, None, None, None, None, None, None))
+    CO = jnp.sum(CO_sum_map(p2q, SMat_k, Gp, inds, inds, M, T), axis=(1, 2))
     return jnp.real(jnp.array([jnp.trace(p2q[i]@jax.scipy.linalg.expm(-CO[i])@p2q[i])*0.25 for i in range(CO.shape[0])]))
 
 
@@ -107,8 +106,27 @@ def inf_ID(params, i, j, SMat, M, T, w):
     L_diag = Lambda_diags(SMat, Gp, w)
     dt = tau
     fid=jnp.sum(L_diag, axis=0)/16.
-    clustering=jnp.sum(jnp.array([((vt[i][j+1]-vt[i][j])-dt)**2 for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)
-    return 1.-fid-clustering
+    clustering=(1/(vt[0].shape[0]+vt[1].shape[0]-2))*jnp.sum(jnp.array([jnp.tanh(vt[i].shape[0]*((vt[i][j+1]-vt[i][j])/dt-1)) for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)
+    #jnp.sum(jnp.array([((vt[i][j+1]-vt[i][j])-dt)**2 for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)
+    return -fid-clustering*1e-3
+
+
+def inf_ID_wk(params, i, j, SMat_k, M, T, wk):
+    vt1 = jnp.sort(jnp.concatenate((jnp.array([0]), params[:i], jnp.array([T]))))
+    vt2 = jnp.sort(jnp.concatenate((jnp.array([0]), params[i:], jnp.array([T]))))
+    vt12 = make_tk12(vt1, vt2)
+    vt = [vt1, vt2, vt12]
+    Gp_re_map = jax.vmap(Gp_re, in_axes=(None, None, 0, None))
+    Gp_im_map = jax.vmap(Gp_im, in_axes=(None, None, 0, None))
+    Gp = jnp.zeros((3, 3, wk.size), dtype=jnp.complex64)
+    for i in range(3):
+        for j in range(3):
+            Gp = Gp.at[i, j].set(Gp_re_map(vt[i], vt[j], wk, 1) + 1j*Gp_im_map(vt[i], vt[j], wk, 1))
+    L_diag = Lambda_diags_wk(SMat_k, Gp, M, T)
+    dt = tau
+    fid=jnp.sum(L_diag, axis=0)/16.
+    clustering=(1/(vt[0].shape[0]+vt[1].shape[0]-2))*jnp.sum(jnp.array([jnp.tanh(vt[i].shape[0]*((vt[i][j+1]-vt[i][j])/dt-1)) for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)#jnp.sum(jnp.array([((vt[i][j+1]-vt[i][j])-dt)**2 for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)
+    return -fid-clustering*1e-3
 
 
 def infidelity(params, SMat, M, w):
@@ -123,6 +141,21 @@ def infidelity(params, SMat, M, w):
         for j in range(3):
             Gp = Gp.at[i, j].set(Gp_re_map(vt[i], vt[j], w, M) + 1j*Gp_im_map(vt[i], vt[j], w, M))
     L_diag = Lambda_diags(SMat, Gp, w)
+    return 1.-jnp.sum(L_diag, axis=0)/16
+
+
+def infidelity_k(params, SMat_k, M, wk):
+    vt1 = params[0]
+    vt2 = params[1]
+    vt12 = make_tk12(vt1, vt2)
+    vt = [vt1, vt2, vt12]
+    Gp_re_map = jax.vmap(Gp_re, in_axes=(None, None, 0, None))
+    Gp_im_map = jax.vmap(Gp_im, in_axes=(None, None, 0, None))
+    Gp = jnp.zeros((3, 3, wk.size), dtype=jnp.complex64)
+    for i in range(3):
+        for j in range(3):
+            Gp = Gp.at[i, j].set(Gp_re_map(vt[i], vt[j], wk, 1) + 1j*Gp_im_map(vt[i], vt[j], wk, 1))
+    L_diag = Lambda_diags_wk(SMat_k, Gp, M, vt1[-1])
     return 1.-jnp.sum(L_diag, axis=0)/16
 
 
@@ -150,7 +183,7 @@ def T2(params, SMat, M, w, qubit):
 
 
 def hyperOpt(SMat, nPs, M, T, w):
-    optimizer = jaxopt.ScipyBoundedMinimize(fun=inf_ID, maxiter=100, jit=False, method='L-BFGS-B',
+    optimizer = jaxopt.ScipyBoundedMinimize(fun=inf_ID, maxiter=200, jit=False, method='L-BFGS-B',
                                             options={'disp': False, 'gtol': 1e-9, 'ftol': 1e-6,
                                                      'maxfun': 1000, 'maxls': 20})
     opt_out = []
@@ -174,6 +207,32 @@ def hyperOpt(SMat, nPs, M, T, w):
     vt_opt.append(make_tk12(vt_opt[0], vt_opt[1]))
     #vt_init = params_to_tk(init_params[jnp.argmin(inf_ID_out)], T)
     return vt_opt, infidelity(vt_opt, SMat, M, w) #inf_ID_out[inds_min]
+
+
+def hyperOpt_k(SMat_k, nPs, M, T, wk):
+    optimizer = jaxopt.ScipyBoundedMinimize(fun=inf_ID_wk, maxiter=200, jit=False, method='L-BFGS-B',
+                                            options={'disp': False, 'gtol': 1e-9, 'ftol': 1e-6,
+                                                     'maxfun': 1000, 'maxls': 20})
+    opt_out = []
+    init_params = []
+    for i in nPs[0]:
+        opt_out_temp = []
+        for j in nPs[1]:
+            vt = jnp.array(np.random.rand(i+j)*T)
+            init_params.append(vt)
+            lower_bnd = jnp.zeros_like(vt)
+            upper_bnd = jnp.ones_like(vt)*T
+            bnds = (lower_bnd, upper_bnd)
+            opt = optimizer.run(vt, bnds, i, j, SMat_k, M, T, wk)
+            opt_out_temp.append(opt)
+            print("Optimized Cost: "+str(opt.state[0])+", No. of pulses on qubits:"+str([i, j]))
+        opt_out.append(opt_out_temp)
+    inf_ID_out = jnp.array([[opt_out[i][j].state[0] for j in range(len(opt_out[0]))] for i in range(len(opt_out))])
+    inds_min = jnp.unravel_index(jnp.argmin(inf_ID_out), inf_ID_out.shape) #jnp.where(inf_ID_out == jnp.min(inf_ID_out))
+    vt_min_arr = opt_out[inds_min[0]][inds_min[1]].params
+    vt_opt = [params_to_tk(vt_min_arr, T, jnp.array([0, nPs[0][inds_min[0]]])), params_to_tk(vt_min_arr, T, jnp.array([nPs[0][inds_min[0]], nPs[0][inds_min[0]]+nPs[1][inds_min[1]]]))]
+    vt_opt.append(make_tk12(vt_opt[0], vt_opt[1]))
+    return vt_opt, infidelity_k(vt_opt, SMat_k, M, wk)
 
 
 def Lambda(Oi, Oj, vt, SMat, M, w):
@@ -251,6 +310,15 @@ def cddn(T, n):
     return np.concatenate((np.array([0]), comb_vks(cddn_rec(T, n), [T])))
 
 
+def pddn(T, n, M):
+    out = cddn(T,n)
+    if M == 1:
+        return out
+    for i in range(M):
+        out = np.concatenate((out, cddn(T,n)+(i+1)*T))
+    return  out
+
+
 def opt_known_pulses(pLib, SMat, M, w):
     infmin = jnp.inf
     inds_min=0
@@ -281,6 +349,64 @@ def opt_known_pulses(pLib, SMat, M, w):
     return vt_opt, infmin
 
 
+def opt_known_pulses_k(pLib, SMat_k, M, wk):
+    infmin = jnp.inf
+    inds_min=0
+    for i in range(len(pLib)):
+        for j in range(len(pLib)):
+            for k in range(len(pLib[i])):
+                for l in range(len(pLib[j])):
+                    tk1 = pLib[i][k]
+                    tk2 = pLib[j][l]
+                    tk12 = make_tk12(tk1, tk2)
+                    vt = [tk1, tk2, tk12]
+                    Gp_re_map = jax.vmap(Gp_re, in_axes=(None, None, 0, None))
+                    Gp_im_map = jax.vmap(Gp_im, in_axes=(None, None, 0, None))
+                    Gp = jnp.zeros((3, 3, wk.size), dtype=jnp.complex64)
+                    for m in range(3):
+                        for n in range(3):
+                            Gp = Gp.at[m, n].set(Gp_re_map(vt[m], vt[n], wk, 1) + 1j*Gp_im_map(vt[m], vt[n], wk, 1))
+                    L_diag = Lambda_diags_wk(SMat_k, Gp, M, T)
+                    # infidelity_arr = infidelity_arr.at[i, j, k, l].set(1-jnp.sum(L_diag, axis=0)/16)
+                    inf_ijkl = 1.-jnp.sum(L_diag, axis=0)/16
+                    if inf_ijkl < infmin:
+                        infmin = inf_ijkl
+                        inds_min = (i,j,k,l)
+    tk1 = pLib[inds_min[0]][inds_min[2]]
+    tk2 = pLib[inds_min[1]][inds_min[3]]
+    tk12 = make_tk12(tk1, tk2)
+    vt_opt = [tk1, tk2, tk12]
+    return vt_opt, infmin
+
+
+def makeSMat_k(specs, wk, wkqns, gamma, gamma12):
+    SMat = jnp.zeros((3, 3, wk.size), dtype=jnp.complex64)
+    SMat = SMat.at[0, 0].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_11(wk[0])]), specs["S11"]))))
+    SMat = SMat.at[1, 1].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_22(wk[0])]), specs["S22"]))))
+    # SMat = SMat.at[2, 2].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_1212(wk[0])]), specs["S1212"]))))
+    SMat = SMat.at[0, 1].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_1_2(wk[0], gamma)]), specs["S12"]))))
+    SMat = SMat.at[1, 0,].set(jnp.interp(wk, wkqns, jnp.conj(jnp.concatenate((jnp.array([S_1_2(wk[0], gamma)]), specs["S12"])))))
+    # SMat = SMat.at[0, 2].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_1_12(wk[0], gamma12)]), specs["S112"]))))
+    # SMat = SMat.at[2, 0].set(jnp.interp(wk, wkqns, jnp.conj(jnp.concatenate((jnp.array([S_1_12(wk[0], gamma12)]), specs["S112"])))))
+    # SMat = SMat.at[1, 2].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_2_12(wk[0], gamma12-gamma)]), specs["S212"]))))
+    # SMat = SMat.at[2, 1].set(jnp.interp(wk, wkqns, jnp.conj(jnp.concatenate((jnp.array([S_2_12(wk[0], gamma12-gamma)]), specs["S212"])))))
+    return SMat
+
+
+def makeSMat_k_ideal(wk, gamma, gamma12):
+    SMat_ideal = jnp.zeros((3, 3, wk.size), dtype=jnp.complex64)
+    SMat_ideal = SMat_ideal.at[0, 0].set(S_11(wk))
+    SMat_ideal = SMat_ideal.at[1, 1].set(S_22(wk))
+    SMat_ideal = SMat_ideal.at[2, 2].set(S_1212(wk))
+    SMat_ideal = SMat_ideal.at[0, 1].set(S_1_2(wk, gamma))
+    SMat_ideal = SMat_ideal.at[1, 0].set(jnp.conj(S_1_2(wk, gamma)))
+    SMat_ideal = SMat_ideal.at[0, 2].set(S_1_12(wk, gamma12))
+    SMat_ideal = SMat_ideal.at[2, 0].set(jnp.conj(S_1_12(wk, gamma12)))
+    SMat_ideal = SMat_ideal.at[1, 2].set(S_2_12(wk, gamma12-gamma))
+    SMat_ideal = SMat_ideal.at[2, 1].set(jnp.conj(S_2_12(wk, gamma12-gamma)))
+    return SMat_ideal
+
+
 ########################################################################################################################
 ########################################################################################################################
 ####################################### Set and run the optimization ###################################################
@@ -307,7 +433,7 @@ a_m = params['a_m']
 delta = params['delta']
 c_times = params['c_times']
 n_shots = params['n_shots']
-M = params['M']
+# M = params['M']
 a_sp = params['a_sp']
 c = params['c']
 Tqns = params['T']
@@ -315,31 +441,27 @@ Tqns = params['T']
 
 
 T=Tqns
-# M=20
+M=40
 p1q = jnp.array([[[1, 0], [0, 1]], [[0, 1], [1, 0]], [[0, -1j], [1j, 0]], [[1, 0], [0, -1]]])
 p2q = jnp.array([jnp.kron(p1q[i], p1q[j]) for i in range(4) for j in range(4)])
-w = jnp.linspace(0.1, 2*jnp.pi*mc/Tqns, 4000)
-w_ideal = jnp.linspace(0.1, 2*jnp.pi*2*mc/Tqns, 8000)
-wk = jnp.array([2*jnp.pi*(n+1)/Tqns for n in range(mc)])
-S_11_k = S_11(wk)
-S_22_k = S_22(wk)
-S_12_k = S_1212(wk)
-S_1_2_k = S_1_2(wk, gamma)
-S_1_12_k = S_1_12(wk, gamma12)
-S_2_12_k = S_2_12(wk, gamma12-gamma)
+w = jnp.linspace(0.01, 2*jnp.pi*mc/Tqns, 4000)
+w_ideal = jnp.linspace(0.01, 2*jnp.pi*2*mc/Tqns, 8000)
+wkqns = jnp.array([2*jnp.pi*(n+1)/Tqns for n in range(mc)])
+wkqns_ideal = jnp.array([2*jnp.pi*(n)/Tqns for n in range(2*mc+1)])
 SMat = jnp.zeros((3, 3, w.size), dtype=jnp.complex64)
 
 
 # Interpolate the loaded spectra to use in the optimization
-SMat = SMat.at[0, 0].set(jnp.interp(w, wk, specs["S11"]))
-SMat = SMat.at[1, 1].set(jnp.interp(w, wk, specs["S22"]))
-SMat = SMat.at[2, 2].set(jnp.interp(w, wk, specs["S1212"]))
-SMat = SMat.at[0, 1].set(jnp.interp(w, wk, specs["S12"]))
-SMat = SMat.at[1, 0].set(jnp.interp(w, wk, np.conj(specs["S12"])))
-SMat = SMat.at[0, 2].set(jnp.interp(w, wk, specs["S112"]))
-SMat = SMat.at[2, 0].set(jnp.interp(w, wk, np.conj(specs["S11"])))
-SMat = SMat.at[1, 2].set(jnp.interp(w, wk, specs["S212"]))
-SMat = SMat.at[2, 1].set(jnp.interp(w, wk, np.conj(specs["S212"])))
+SMat = SMat.at[0, 0].set(jnp.interp(w, wkqns, specs["S11"]))
+SMat = SMat.at[1, 1].set(jnp.interp(w, wkqns, specs["S22"]))
+SMat = SMat.at[2, 2].set(jnp.interp(w, wkqns, specs["S1212"]))
+SMat = SMat.at[0, 1].set(jnp.interp(w, wkqns, specs["S12"]))
+SMat = SMat.at[1, 0].set(jnp.interp(w, wkqns, np.conj(specs["S12"])))
+SMat = SMat.at[0, 2].set(jnp.interp(w, wkqns, specs["S112"]))
+SMat = SMat.at[2, 0].set(jnp.interp(w, wkqns, np.conj(specs["S11"])))
+SMat = SMat.at[1, 2].set(jnp.interp(w, wkqns, specs["S212"]))
+SMat = SMat.at[2, 1].set(jnp.interp(w, wkqns, np.conj(specs["S212"])))
+
 
 
 # Create a matrix to ideal spectra to validate the optimiaation over
@@ -382,15 +504,15 @@ print(f"T2 time for qubit 2 is {np.round(T2q2/T, 2)} T")
 print("###########################################################################################")
 
 
-pLib=[]
-cddLib = []
+
+
 uddLib = []
 
 
 # Parameters for the optimization over known pulse sequences
-Tknown = 2*M*T
-Mknown = 1
 tau = T/80
+Tknown = M*T
+Mknown = 1
 
 
 print("###########################################################################################")
@@ -398,63 +520,97 @@ print(f"Optimizing the Idling gate for {np.round(Mknown*Tknown/T2q1, 2)} T2q1 or
 print("###########################################################################################")
 
 
-# Make CDD_n libraries that respect the minimum pulse separation constraint
-cddOrd = 7
-make = True
-while make:
-    pul = cddn(Tknown, cddOrd)
-    cddOrd += 1
-    for i in range(1, pul.size-2):
-        if pul[i+1] - pul[i] < tau:
-            make = False
-    if make == False:
-        break
-    cddLib.append(pul)
+best_seq = 0
+best_inf = np.inf
+best_M = 0
 
 
-# Make UDD_n libraries that respect the minimum pulse separation constraint
-# uddOrd = 60
-# make = True
-# while make:
-#     pul = uddn(Tknown, uddOrd)
-#     uddOrd += 1
-#     for i in range(1, pul.size-2):
-#         if pul[i+1] - pul[i] < tau:
-#             make = False
-#     if make == False:
-#         break
-#     uddLib.append(pul)
-
-
-pLib.append(cddLib)
-# pLib.append(uddLib)
-
-
-# Generate an Idling gate that is optimized using known sequences
-known_opt, known_inf = opt_known_pulses(pLib, SMat, Mknown, w)
-# L_known = L_map(p2q, p2q, known_opt, SMat, Mknown, w)
-inf_known = infidelity(known_opt, SMat_ideal, Mknown, w_ideal)
+for i in [1/40, 1/20,1/10,1/5,1/4,1/2,1]:
+    pLib=[]
+    cddLib = []
+    Tknown = i*T
+    Mknown = int(M/i)
+    if Mknown >= 10:
+        wk = jnp.array([0.01]+[2*jnp.pi*(n+1)/Tknown for n in range(int(jnp.floor(mc*i)))])
+        wk_ideal = jnp.array([0.01]+[2*jnp.pi*(n+1)/Tknown for n in range(int(jnp.floor(4*mc*i)))])
+        SMat_k = makeSMat_k(specs, wk, jnp.concatenate((jnp.array([wk[0]]), wkqns)), gamma, gamma12)
+        SMat_k_ideal = makeSMat_k_ideal(wk_ideal, gamma, gamma12)
+        # Make CDD_n libraries that respect the minimum pulse separation constraint
+        cddOrd = 1
+        make = True
+        while make:
+            pul = cddn(Tknown, cddOrd)
+            cddOrd += 1
+            for j in range(1, pul.size-2):
+                if pul[j+1] - pul[j] < tau:
+                    make = False
+            if make == False:
+                break
+            cddLib.append(pul)
+        pLib.append(cddLib)
+        # Generate an Idling gate that is optimized using known sequences
+        known_opt, known_inf = opt_known_pulses_k(pLib, SMat_k, Mknown, wk)
+        inf_known = infidelity_k(known_opt, SMat_k_ideal, Mknown, wk_ideal)
+    else:
+        cddOrd = 5
+        make = True
+        while make:
+            pul = cddn(Tknown, cddOrd)
+            cddOrd += 1
+            for j in range(1, pul.size-2):
+                if pul[j+1] - pul[j] < tau:
+                    make = False
+            if make == False:
+                break
+            cddLib.append(pul)
+        pLib.append(cddLib)
+        # Generate an Idling gate that is optimized using known sequences
+        known_opt, known_inf = opt_known_pulses(pLib, SMat, Mknown, w)
+        inf_known = infidelity(known_opt, SMat_ideal, Mknown, w_ideal)
+    if known_inf <= best_inf:
+        best_seq = known_opt
+        best_inf = inf_known
+        best_M = Mknown
+        print(f"The best infidelity till now is {best_inf}; number of pulses {[best_seq[0].shape[0]-2, best_seq[1].shape[0]-2]}")
+    print(f"# repetitions considered = {Mknown}")
 
 
 print('infidelity over known seqs: ')
-print(inf_known)
+print(best_inf)
 print('number of pulses: ')
-print([known_opt[i].shape[0]-2 for i in range(2)])
+print([best_seq[i].shape[0]-2 for i in range(2)])
 
 
-Topt = T
-Mopt = 2*M
-# Generate an Idling gate that is optimized over a given number of pulses on each qubit
-nPs = [[51, 52, 53], [65, 75, 77]]
-vt_opt, inf_min = hyperOpt(SMat, nPs, Mopt, Topt, w)
-L_opt = L_map(p2q, p2q, vt_opt, SMat, Mopt, w)
-inf_opt = infidelity(vt_opt, SMat_ideal, Mopt, w_ideal)
+opt_seq = 0
+opt_inf = np.inf
+opt_M = 0
+for i in [1]:
+    Topt = i*T
+    Mopt = M/i
+    nPs = [[55,56],[75,76]]
+    if Mopt >= 10:
+        wk = jnp.array([0.01]+[2*jnp.pi*(n+1)/Tknown for n in range(int(jnp.floor(mc*i)))])
+        wk_ideal = jnp.array([0.01]+[2*jnp.pi*(n+1)/Tknown for n in range(int(jnp.floor(4*mc*i)))])
+        SMat_k = makeSMat_k(specs, wk, jnp.concatenate((jnp.array([wk[0]]), wkqns)), gamma, gamma12)
+        SMat_k_ideal = makeSMat_k_ideal(wk_ideal, gamma, gamma12)
+        # Generate an Idling gate that is optimized over a given number of pulses on each qubit
+        vt_opt, inf_min = hyperOpt_k(SMat_k, nPs, Mopt, Topt, wk)
+        inf_opt = infidelity_k(vt_opt, SMat_k_ideal, Mopt, wk_ideal)
+    else:
+        vt_opt, inf_min = hyperOpt(SMat, nPs, Mopt, Topt, w)
+        inf_opt = infidelity(vt_opt, SMat_ideal, Mopt, w_ideal)
+    if inf_min <= opt_inf:
+        opt_seq = vt_opt
+        opt_inf = inf_opt
+        opt_M = Mopt
+        print(f"The best infidelity till now is {opt_inf}; number of pulses {[opt_seq[0].shape[0]-2, opt_seq[1].shape[0]-2]}")
+    print(f"# repetitions considered = {Mopt}")
 
 
 print('infidelity over optimized seqs: ')
-print(inf_opt)
+print(opt_inf)
 print('number of pulses: ')
-print([vt_opt[i].shape[0]-2 for i in range(2)])
+print([opt_seq[i].shape[0]-2 for i in range(2)])
 
 
 ########################################################################################################################
@@ -467,26 +623,29 @@ print([vt_opt[i].shape[0]-2 for i in range(2)])
 fig, axs = plt.subplots(2, 3, figsize=(16,9))
 alp = 0.4
 lw = 0.5
-Mplot = M
+Mplot_opt = opt_M
+Mplot_known = best_M
 legendfont = 10
 labelfont = 16
 xunits = 1e6
 yunits = 1e3
-
+wk=wkqns
+vt_opt=opt_seq
+known_opt = best_seq
 
 max_lim_row1_left = np.max(np.array([np.abs(np.real(S_11(w))/yunits).max(), np.abs(np.imag(S_22(w))/yunits).max(),
                                      np.abs(np.imag(S_1212(w))/yunits).max()]))
-max_lim_row1_right = np.max(np.array([np.abs(Gp_re(vt_opt[0], vt_opt[0], w, Mplot)).max(),
-                                      np.abs(Gp_re(vt_opt[1], vt_opt[1], w, Mplot)).max(),
-                                      np.abs(Gp_re(vt_opt[2], vt_opt[2], w, Mplot)).max()]))
+max_lim_row1_right = np.max(np.array([np.abs(Gp_re(vt_opt[0], vt_opt[0], w, Mplot_opt)).max(),
+                                      np.abs(Gp_re(vt_opt[1], vt_opt[1], w, Mplot_opt)).max(),
+                                      np.abs(Gp_re(vt_opt[2], vt_opt[2], w, Mplot_opt)).max()]))
 
 
 max_lim_row2_left = np.max(np.array([np.abs(np.real(S_1_2(w[int(w.size/mc):], gamma))/yunits).max(),
                                      np.abs(np.imag(S_1_12(w[int(w.size/mc):], gamma12))/yunits).max(),
                                      np.abs(np.imag(S_2_12(w[int(w.size/mc):], gamma-gamma12))/yunits).max()]))
-max_lim_row2_right = np.max(np.array([np.abs(Gp_re(vt_opt[0], vt_opt[1], w, Mplot)).max(),
-                                      np.abs(Gp_re(vt_opt[0], vt_opt[2], w, Mplot)).max(),
-                                      np.abs(Gp_re(vt_opt[1], vt_opt[2], w, Mplot)).max()]))
+max_lim_row2_right = np.max(np.array([np.abs(Gp_re(vt_opt[0], vt_opt[1], w, Mplot_opt)).max(),
+                                      np.abs(Gp_re(vt_opt[0], vt_opt[2], w, Mplot_opt)).max(),
+                                      np.abs(Gp_re(vt_opt[1], vt_opt[2], w, Mplot_opt)).max()]))
 
 
 axs[0, 0].plot(w/xunits, S_11(w)/yunits, 'r-', alpha=alp, lw=1.5*lw)
@@ -498,8 +657,8 @@ axs[0, 0].tick_params(direction='in')
 axs[0, 0].set_xlabel('$\omega$ (MHz)', fontsize=labelfont)
 axs[0, 0].set_yscale('asinh')
 bx = axs[0, 0].twinx()
-bx.plot(w/xunits, Gp_re(vt_opt[0], vt_opt[0], w, Mplot), 'g--', lw=lw)
-bx.plot(w/xunits, Gp_re(known_opt[0], known_opt[0], w, Mplot), 'm-', lw=lw)
+bx.plot(w/xunits, Gp_re(vt_opt[0], vt_opt[0], w, Mplot_opt), 'g--', lw=lw)
+bx.plot(w/xunits, Gp_re(known_opt[0], known_opt[0], w, Mplot_known), 'm-', lw=lw)
 # bx.set_yticklabels([])
 # bx.set_yticks([])
 bx.set_ylim(0)
@@ -516,8 +675,8 @@ axs[0, 1].tick_params(direction='in')
 axs[0, 1].set_xlabel('$\omega$ (MHz)', fontsize=labelfont)
 axs[0, 1].set_yscale('asinh')
 bx = axs[0, 1].twinx()
-bx.plot(w/xunits, Gp_re(vt_opt[1], vt_opt[1], w, Mplot), 'g--', lw=lw)
-bx.plot(w/xunits, Gp_re(known_opt[1], known_opt[1], w, Mplot), 'm-', lw=lw)
+bx.plot(w/xunits, Gp_re(vt_opt[1], vt_opt[1], w, Mplot_opt), 'g--', lw=lw)
+bx.plot(w/xunits, Gp_re(known_opt[1], known_opt[1], w, Mplot_known), 'm-', lw=lw)
 # bx.set_yticklabels([])
 # bx.set_yticks([])
 bx.set_ylim(0)
@@ -534,8 +693,8 @@ axs[0, 2].tick_params(direction='in')
 axs[0, 2].set_xlabel('$\omega$ (MHz)', fontsize=labelfont)
 axs[0, 2].set_yscale('asinh')
 bx = axs[0, 2].twinx()
-bx.plot(w/xunits, Gp_re(vt_opt[2], vt_opt[2], w, Mplot), 'g--', lw=lw)
-bx.plot(w/xunits, Gp_re(known_opt[2], known_opt[2], w, Mplot), 'm-', lw=lw)
+bx.plot(w/xunits, Gp_re(vt_opt[2], vt_opt[2], w, Mplot_opt), 'g--', lw=lw)
+bx.plot(w/xunits, Gp_re(known_opt[2], known_opt[2], w, Mplot_known), 'm-', lw=lw)
 bx.set_ylabel(r'$G^+_{a,a;b,b}(\omega, T)$', fontsize=labelfont)
 bx.legend([r'Re[$G^{+,\text{opt}}_{12,12;12,12}(\omega, T)$]', r'Re[$G^{+,\text{known}}_{12,12;12,12}(\omega, T)$]']
           , fontsize=legendfont, loc='upper right')
@@ -557,16 +716,16 @@ axs[1, 0].tick_params(direction='in')
 axs[1, 0].set_xlabel('$\omega$ (MHz)', fontsize=labelfont)
 bx = axs[1, 0].twinx()
 bx.tick_params(direction='in')
-bx.plot(w/xunits, Gp_re(vt_opt[0], vt_opt[1], w, Mplot), 'g--', lw=lw)
-bx.plot(w/xunits, Gp_im(vt_opt[0], vt_opt[1], w, Mplot), 'k--', lw=lw)
-bx.plot(w/xunits, Gp_re(known_opt[0], known_opt[1], w, Mplot), 'm-', lw=lw)
-bx.plot(w/xunits, Gp_im(known_opt[0], known_opt[1], w, Mplot), 'c-', lw=lw)
+bx.plot(w/xunits, Gp_re(vt_opt[0], vt_opt[1], w, Mplot_opt), 'g--', lw=lw)
+bx.plot(w/xunits, Gp_im(vt_opt[0], vt_opt[1], w, Mplot_opt), 'k--', lw=lw)
+bx.plot(w/xunits, Gp_re(known_opt[0], known_opt[1], w, Mplot_known), 'm-', lw=lw)
+bx.plot(w/xunits, Gp_im(known_opt[0], known_opt[1], w, Mplot_known), 'c-', lw=lw)
 # bx.set_yticklabels([])
 # bx.set_yticks([])
-max_lim = np.max(np.array([np.abs(Gp_re(vt_opt[0], vt_opt[1], w, Mplot)).max(),
-                           np.abs(Gp_im(vt_opt[0], vt_opt[1], w, Mplot)).max(),
-                           np.abs(Gp_re(known_opt[0], known_opt[1], w, Mplot)).max(),
-                           np.abs(Gp_im(known_opt[0], known_opt[1], w, Mplot)).max()]))
+max_lim = np.max(np.array([np.abs(Gp_re(vt_opt[0], vt_opt[1], w, Mplot_opt)).max(),
+                           np.abs(Gp_im(vt_opt[0], vt_opt[1], w, Mplot_opt)).max(),
+                           np.abs(Gp_re(known_opt[0], known_opt[1], w, Mplot_known)).max(),
+                           np.abs(Gp_im(known_opt[0], known_opt[1], w, Mplot_known)).max()]))
 bx.set_ylim(-max_lim*1.01, max_lim*1.01)
 bx.legend([r'Re[$G^{+,\text{opt}}_{1,1;2,2}(\omega, T)$]', r'Im[$G^{+,\text{opt}}_{1,1;2,2}(\omega, T)$]',
            r'Re[$G^{+,\text{known}}_{1,1;2,2}(\omega, T)$]', r'Im[$G^{+,\text{known}}_{1,1;2,2}(\omega, T)$]']
@@ -585,16 +744,16 @@ axs[1, 1].tick_params(direction='in')
 axs[1, 1].set_xlabel('$\omega$ (MHz)', fontsize=labelfont)
 bx = axs[1, 1].twinx()
 bx.tick_params(direction='in')
-bx.plot(w/xunits, Gp_re(vt_opt[0], vt_opt[2], w, Mplot), 'g--', lw=lw)
-bx.plot(w/xunits, Gp_im(vt_opt[0], vt_opt[2], w, Mplot), 'k--', lw=lw)
-bx.plot(w/xunits, Gp_re(known_opt[0], known_opt[2], w, Mplot), 'm-', lw=lw)
-bx.plot(w/xunits, Gp_im(known_opt[0], known_opt[2], w, Mplot), 'c-', lw=lw)
+bx.plot(w/xunits, Gp_re(vt_opt[0], vt_opt[2], w, Mplot_opt), 'g--', lw=lw)
+bx.plot(w/xunits, Gp_im(vt_opt[0], vt_opt[2], w, Mplot_opt), 'k--', lw=lw)
+bx.plot(w/xunits, Gp_re(known_opt[0], known_opt[2], w, Mplot_known), 'm-', lw=lw)
+bx.plot(w/xunits, Gp_im(known_opt[0], known_opt[2], w, Mplot_known), 'c-', lw=lw)
 # bx.set_yticklabels([])
 # bx.set_yticks([])
-max_lim = np.max(np.array([np.abs(Gp_re(vt_opt[0], vt_opt[2], w, Mplot)).max(),
-                                     np.abs(Gp_im(vt_opt[0], vt_opt[2], w, Mplot)).max(),
-                                     np.abs(Gp_re(known_opt[0], known_opt[2], w, Mplot)).max(),
-                                     np.abs(Gp_im(known_opt[0], known_opt[2], w, Mplot)).max()]))
+max_lim = np.max(np.array([np.abs(Gp_re(vt_opt[0], vt_opt[2], w, Mplot_opt)).max(),
+                                     np.abs(Gp_im(vt_opt[0], vt_opt[2], w, Mplot_opt)).max(),
+                                     np.abs(Gp_re(known_opt[0], known_opt[2], w, Mplot_known)).max(),
+                                     np.abs(Gp_im(known_opt[0], known_opt[2], w, Mplot_known)).max()]))
 bx.set_ylim(-max_lim*1.01, max_lim*1.01)
 bx.legend([r'Re[$G^{+,\text{opt}}_{1,1;12,12}(\omega, T)$]', r'Im[$G^{+,\text{opt}}_{1,1;12,12}(\omega, T)$]',
            r'Re[$G^{+,\text{known}}_{1,1;12,12}(\omega, T)$]', r'Im[$G^{+,\text{known}}_{1,1;12,12}(\omega, T)$]']
@@ -613,15 +772,15 @@ axs[1, 2].tick_params(direction='in')
 axs[1, 2].set_xlabel('$\omega$ (MHz)', fontsize=labelfont)
 bx = axs[1, 2].twinx()
 bx.tick_params(direction='in')
-bx.plot(w/xunits, Gp_re(vt_opt[1], vt_opt[2], w, Mplot), 'g--', lw=lw)
-bx.plot(w/xunits, Gp_im(vt_opt[1], vt_opt[2], w, Mplot), 'k--', lw=lw)
-bx.plot(w/xunits, Gp_re(known_opt[1], known_opt[2], w, Mplot), 'm-', lw=lw)
-bx.plot(w/xunits, Gp_im(known_opt[1], known_opt[2], w, Mplot), 'c-', lw=lw)
+bx.plot(w/xunits, Gp_re(vt_opt[1], vt_opt[2], w, Mplot_opt), 'g--', lw=lw)
+bx.plot(w/xunits, Gp_im(vt_opt[1], vt_opt[2], w, Mplot_opt), 'k--', lw=lw)
+bx.plot(w/xunits, Gp_re(known_opt[1], known_opt[2], w, Mplot_known), 'm-', lw=lw)
+bx.plot(w/xunits, Gp_im(known_opt[1], known_opt[2], w, Mplot_known), 'c-', lw=lw)
 bx.set_ylabel(r'$G^+_{a,a;b,b}(\omega, T)$', fontsize=labelfont)
-max_lim = np.max(np.array([np.abs(Gp_re(vt_opt[1], vt_opt[2], w, Mplot)).max(),
-                                     np.abs(Gp_im(vt_opt[1], vt_opt[2], w, Mplot)).max(),
-                                     np.abs(Gp_re(known_opt[1], known_opt[2], w, Mplot)).max(),
-                                     np.abs(Gp_im(known_opt[1], known_opt[2], w, Mplot)).max()]))
+max_lim = np.max(np.array([np.abs(Gp_re(vt_opt[1], vt_opt[2], w, Mplot_opt)).max(),
+                                     np.abs(Gp_im(vt_opt[1], vt_opt[2], w, Mplot_opt)).max(),
+                                     np.abs(Gp_re(known_opt[1], known_opt[2], w, Mplot_known)).max(),
+                                     np.abs(Gp_im(known_opt[1], known_opt[2], w, Mplot_known)).max()]))
 bx.set_ylim(-max_lim*1.01, max_lim*1.01)
 bx.legend([r'Re[$G^{+,\text{opt}}_{2,2;12,12}(\omega, T)$]', r'Im[$G^{+,\text{opt}}_{2,2;12,12}(\omega, T)$]',
            r'Re[$G^{+,\text{known}}_{2,2;12,12}(\omega, T)$]', r'Im[$G^{+,\text{known}}_{2,2;12,12}(\omega, T)$]']
