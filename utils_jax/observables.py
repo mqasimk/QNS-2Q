@@ -67,7 +67,7 @@ def E_X_hat(qubit, state, a_m, delta):
                 p0[i] = 1
             # counts[i] = np.random.binomial(1, np.real(p0[i]))
     # p = np.sum(counts)/counts.shape[0]
-    p = np.random.binomial(10000, p0.mean())/10000
+    p = np.random.binomial(len(state), p0.mean())/len(state)
     return 2.*p-1.
 
 
@@ -99,7 +99,7 @@ def E_Y_hat(qubit, state, a_m, delta):
                 p0[i] = 1
             # counts[i] = np.random.binomial(1, np.real(p0[i]))
     # p = np.sum(counts)/len(counts)
-    p = np.random.binomial(10000, p0.mean())/10000
+    p = np.random.binomial(len(state), p0.mean())/len(state)
     return 2.*p-1.
 
 
@@ -123,10 +123,10 @@ def E_XX_hat(state, a_m, delta):
     probs = np.zeros((len(state), 4))
     for i in range(len(state)):
         probs[i, :] = np.real(gen_probs(h[2], state[i], povms))
-    p00 = np.random.binomial(10000, probs[:, 0].mean())/10000
-    p01 = np.random.binomial(10000, probs[:, 1].mean())/10000
-    p10 = np.random.binomial(10000, probs[:, 2].mean())/10000
-    p11 = np.random.binomial(10000, probs[:, 3].mean())/10000
+    p00 = np.random.binomial(len(state), probs[:, 0].mean())/len(state)
+    p01 = np.random.binomial(len(state), probs[:, 1].mean())/len(state)
+    p10 = np.random.binomial(len(state), probs[:, 2].mean())/len(state)
+    p11 = np.random.binomial(len(state), probs[:, 3].mean())/len(state)
     # for i in range(len(state)):
     #     counts[i, :] = twoq_meas(gen_probs(h[2], state[i], povms), 1)
     # p00 = counts[:, 0].mean()
@@ -159,10 +159,10 @@ def E_XY_hat(state, a_m, delta):
     probs = np.zeros((len(state), 4))
     for i in range(len(state)):
         probs[i, :] = np.real(gen_probs(h[0]*rx[1], state[i], povms))
-    p00 = np.random.binomial(10000, probs[:, 0].mean())/10000
-    p01 = np.random.binomial(10000, probs[:, 1].mean())/10000
-    p10 = np.random.binomial(10000, probs[:, 2].mean())/10000
-    p11 = np.random.binomial(10000, probs[:, 3].mean())/10000
+    p00 = np.random.binomial(len(state), probs[:, 0].mean())/len(state)
+    p01 = np.random.binomial(len(state), probs[:, 1].mean())/len(state)
+    p10 = np.random.binomial(len(state), probs[:, 2].mean())/len(state)
+    p11 = np.random.binomial(len(state), probs[:, 3].mean())/len(state)
     # for i in range(len(state)):
     #     counts[i, :] = twoq_meas(gen_probs(h[0]*rx[1], state[i], povms), 1)
     # p00 = counts[:, 0].mean()
@@ -195,10 +195,10 @@ def E_YX_hat(state, a_m, delta):
     probs = np.zeros((len(state), 4))
     for i in range(len(state)):
         probs[i, :] = np.real(gen_probs(h[1]*rx[0], state[i], povms))
-    p00 = np.random.binomial(10000, probs[:, 0].mean())/10000
-    p01 = np.random.binomial(10000, probs[:, 1].mean())/10000
-    p10 = np.random.binomial(10000, probs[:, 2].mean())/10000
-    p11 = np.random.binomial(10000, probs[:, 3].mean())/10000
+    p00 = np.random.binomial(len(state), probs[:, 0].mean())/len(state)
+    p01 = np.random.binomial(len(state), probs[:, 1].mean())/len(state)
+    p10 = np.random.binomial(len(state), probs[:, 2].mean())/len(state)
+    p11 = np.random.binomial(len(state), probs[:, 3].mean())/len(state)
     # for i in range(len(state)):
     #     counts[i, :] = twoq_meas(gen_probs(rx[0]*h[1], state[i], povms), 1)
     # p00 = counts[:, 0].mean()
@@ -231,10 +231,10 @@ def E_YY_hat(state, a_m, delta):
     probs = np.zeros((len(state), 4))
     for i in range(len(state)):
         probs[i, :] = np.real(gen_probs(rx[2], state[i], povms))
-    p00 = np.random.binomial(10000, probs[:, 0].mean())/10000
-    p01 = np.random.binomial(10000, probs[:, 1].mean())/10000
-    p10 = np.random.binomial(10000, probs[:, 2].mean())/10000
-    p11 = np.random.binomial(10000, probs[:, 3].mean())/10000
+    p00 = np.random.binomial(len(state), probs[:, 0].mean())/len(state)
+    p01 = np.random.binomial(len(state), probs[:, 1].mean())/len(state)
+    p10 = np.random.binomial(len(state), probs[:, 2].mean())/len(state)
+    p11 = np.random.binomial(len(state), probs[:, 3].mean())/len(state)
     # for i in range(len(state)):
     #     counts[i, :] = twoq_meas(gen_probs(rx[2], state[i], povms), 1)
     # p00 = counts[:, 0].mean()
