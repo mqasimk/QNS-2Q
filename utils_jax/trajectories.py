@@ -275,43 +275,17 @@ def single_shot_prop(noise_mats, t_vec, y_uv, rho0, key):
     return rho_MT
 
 
-# @jax.jit
-# def single_shot_prop_noMats(t_vec, w, y_uv, rho0, key):
-#     size = jnp.size(t_vec)
-#     y_uv = y_uv[:, :, :size]
-#     bvec_1 = jax.vmap(b1, in_axes=[0, None, None, None])(t_vec, w, 0, key) #make_noise_traj(noise_mats[0, 0], noise_mats[0, 1], key)[:size]
-#     bvec_2_g = jax.vmap(b2, in_axes=[0, None, None, None])(t_vec, w, 0, key) #make_noise_traj(noise_mats[1, 0], noise_mats[1, 1], key)[:size]
-#     bvec_1212g = jax.vmap(b12, in_axes=[0, None, None, None])(t_vec, w, 0, key) #make_noise_traj(noise_mats[2, 0], noise_mats[2, 1], key)[:size]
-#     H_t = make_Hamiltonian(y_uv, jnp.array([bvec_1, bvec_2_g, bvec_1212g]))
-#     U = make_propagator(H_t, t_vec)
-#     rho_MT = jnp.matmul(jnp.matmul(U, rho0), U.conjugate().transpose())
-#     return rho_MT
-
-
 def solver_prop(y_uv, noise_mats, t_vec, rho, n_shots):
     y_uv = jnp.array(y_uv)
     output = []
     # Memory allocation safety for my laptop with a single GPU
-    slice_size = 10
+    slice_size = 1000
     n_slices = int(np.ceil(n_shots/slice_size))
     for i in range(n_slices):
-        n_arr = jnp.array(np.random.randint(0, 10000, (slice_size, 2)))
+        n_arr = jnp.array(np.random.randint(0, 100, (slice_size, 2)))
         result = jax.vmap(single_shot_prop, in_axes=[None, None, None, None, 0])(noise_mats, t_vec, y_uv, rho, n_arr)
         for j in range(n_arr.shape[0]):
             output.append(qt.Qobj(jnp.array(result[j]), dims=[[2, 2, 2], [2, 2, 2]]))
     return output
 
-
-# def solver_prop_noMats(y_uv, w, t_vec, rho, n_shots):
-#     y_uv = jnp.array(y_uv)
-#     output = []
-#     # Memory allocation safety for my laptop with a single GPU
-#     slice_size = 1000
-#     n_slices = int(np.ceil(n_shots/slice_size))
-#     for i in range(n_slices):
-#         n_arr = jnp.array(np.random.randint(0, 100000, (slice_size, 2)))
-#         result = jax.vmap(single_shot_prop_noMats, in_axes=[None, None, None, None, 0])(t_vec, w, y_uv, rho, n_arr)
-#         for j in range(n_arr.shape[0]):
-#             output.append(qt.Qobj(jnp.array(result[j]), dims=[[2, 2, 2], [2, 2, 2]]))
-#     return output
 

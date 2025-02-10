@@ -7,7 +7,7 @@ from spectra import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
 
 # load the variables
 parent_dir = os.pardir
-fname = "DraftRun_NoSPAM_hat"
+fname = "DraftRun_SP_hat"
 path = os.path.join(parent_dir, fname)
 params = np.load(os.path.join(path, "params.npz"))
 t_vec = params['t_vec']
@@ -129,7 +129,7 @@ ax6.tick_params(direction='in')
 ax6.tick_params(axis='both', labelsize=tickfont)
 ax6.legend([r'Re[$\hat{S}_{2,12}^+(\omega_k)$]', r'Re[$S_{2,12}^+(\omega)$]', r'Im[$\hat{S}_{2,12}^+(\omega_k)$]',
             r'Im[$S_{2,12}^+(\omega)$]'], fontsize=legendfont)
-plt.savefig(os.path.join(path, 'reconstruct.png'), dpi = 1200)
+plt.savefig(os.path.join(path, 'reconstruct.png'), dpi = 600)
 plt.show()
 
 
