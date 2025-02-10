@@ -16,7 +16,7 @@ start_time = time.time()
 
 
 T = 4e-6
-M = 12
+M = 20
 t_grain = int(1e3)
 t_b = jnp.linspace(0, T, t_grain)
 truncate = 20
@@ -36,7 +36,7 @@ gamma = T/7
 gamma_12 = T/14
 t_vec = jnp.linspace(0, M*T, M*jnp.size(t_b))
 c_times = jnp.array([T/n for n in range(1, truncate+1)])
-n_shots = 5000
+n_shots = 1000
 # create a folder in the parent directory where the data will be stored
 parent_dir = os.pardir
 fname = "DraftRun_NoSPAM_hat"
