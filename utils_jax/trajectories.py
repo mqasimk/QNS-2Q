@@ -292,7 +292,7 @@ def solver_prop(y_uv, noise_mats, t_vec, rho, n_shots):
     y_uv = jnp.array(y_uv)
     output = []
     # Memory allocation safety for my laptop with a single GPU
-    slice_size = 1000
+    slice_size = 10
     n_slices = int(np.ceil(n_shots/slice_size))
     for i in range(n_slices):
         n_arr = jnp.array(np.random.randint(0, 10000, (slice_size, 2)))
