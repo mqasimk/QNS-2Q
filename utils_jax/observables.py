@@ -47,26 +47,33 @@ def E_X(qubit, state, a_m, delta):
     return a_m[qubit-1]*np.sum(np.array([(state[i]*op).tr() for i in range(len(state))]), axis=0)/len(state) - delta[qubit-1]
 
 
-def E_X_hat(qubit, state, a_m, delta):
+def E_X_hat(qubit, state, a_m, delta, CM):
     povms = POVMs(a_m, delta)
     # counts = np.zeros(len(state))
     h = [np.kron(np.array([[1,1],[1,-1]])/np.sqrt(2), np.identity(2)), np.kron(np.identity(2), np.array([[1,1],[1,-1]])/np.sqrt(2)),
          np.kron(np.array([[1,1],[1,-1]])/np.sqrt(2), np.array([[1,1],[1,-1]])/np.sqrt(2))]
     for i in range(len(h)):
         h[i] = qt.Qobj(np.kron(h[i], np.identity(2)), dims=[[2, 2, 2], [2, 2, 2]])
-    p0 = np.zeros(len(state))
+    p0 = np.zeros((len(state), 4))
     for i in range(len(state)):
         if qubit == 1:
-            p0[i] = np.real((povms[0]*h[0]*state[i]*h[0]).tr())
-            if np.real(p0[i]) > 1:
-                p0[i] = 1
+            # p0[i] = np.real((povms[0]*h[0]*state[i]*h[0]).tr())
+            p0[i, :] = np.real(gen_probs(h[0], state[i], povms))
+            # if np.real(p0[i]) > 1:
+            #     p0[i] = 1
             # counts[i] = np.random.binomial(1, np.real(p0[i]))
+            Pi = p0.mean(axis=0)
+            P = np.linalg.inv(CM)@Pi
+            p = P[0] + P[1]
         else:
-            p0[i] = np.real((povms[2]*h[1]*state[i]*h[1]).tr())
-            if np.real(p0[i]) > 1:
-                p0[i] = 1
+            # p0[i] = np.real((povms[2]*h[1]*state[i]*h[1]).tr())
+            p0[i, :] = np.real(gen_probs(h[1], state[i], povms))
+            Pi = p0.mean(axis=0)
+            P = np.linalg.inv(CM)@Pi
+            p = P[0] + P[2]
+            # if np.real(p0[i]) > 1:
+            #     p0[i] = 1
             # counts[i] = np.random.binomial(1, np.real(p0[i]))
-    p = p0.mean()
     # p = counts.mean()
     return 2.*p-1.
 
@@ -79,26 +86,33 @@ def E_Y(qubit, state, a_m, delta):
     return a_m[qubit-1]*np.sum(np.array([(state[i]*op).tr() for i in range(len(state))]), axis=0)/len(state) - delta[qubit-1]
 
 
-def E_Y_hat(qubit, state, a_m, delta):
+def E_Y_hat(qubit, state, a_m, delta, CM):
     povms = POVMs(a_m, delta)
     # counts = np.zeros(len(state))
     rx = [np.kron(np.array([[1.,-1j],[-1j,1.]])/np.sqrt(2), np.identity(2)), np.kron(np.identity(2), np.array([[1.,-1j],[-1j,1.]])/np.sqrt(2)),
           np.kron(np.array([[1.,-1j],[-1j,1.]])/np.sqrt(2), np.array([[1.,-1j],[-1j,1.]])/np.sqrt(2))]
     for i in range(len(rx)):
         rx[i] = qt.Qobj(np.kron(rx[i], np.identity(2)), dims=[[2, 2, 2], [2, 2, 2]])
-    p0 = np.zeros(len(state))
+    p0 = np.zeros((len(state), 4))
     for i in range(len(state)):
         if qubit == 1:
-            p0[i] = np.real((povms[0]*rx[0]*state[i]*rx[0].dag()).tr())
-            if np.real(p0[i]) > 1:
-                p0[i] = 1
+            # p0[i] = np.real((povms[0]*rx[0]*state[i]*rx[0].dag()).tr())
+            p0[i, :] = np.real(gen_probs(rx[0], state[i], povms))
+            Pi = p0.mean(axis=0)
+            P = np.linalg.inv(CM)@Pi
+            p = P[0] + P[1]
+            # if np.real(p0[i]) > 1:
+            #     p0[i] = 1
             # counts[i] = np.random.binomial(1, np.real(p0[i]))
         else:
-            p0[i] = np.real((povms[2]*rx[1]*state[i]*rx[1].dag()).tr())
-            if np.real(p0[i]) > 1:
-                p0[i] = 1
+            # p0[i] = np.real((povms[2]*rx[1]*state[i]*rx[1].dag()).tr())
+            p0[i, :] = np.real(gen_probs(rx[1], state[i], povms))
+            Pi = p0.mean(axis=0)
+            P = np.linalg.inv(CM)@Pi
+            p = P[0] + P[2]
+            # if np.real(p0[i]) > 1:
+            #     p0[i] = 1
             # counts[i] = np.random.binomial(1, np.real(p0[i]))
-    p = p0.mean()
     # p = counts.mean()
     return 2.*p-1.
 
@@ -113,7 +127,7 @@ def E_XX(state, a_m, delta):
     return delta[0]*delta[1] + a_m[0]*a_m[1]*XX - delta[0]*a_m[1]*X2 - a_m[0]*delta[1]*X1
 
 
-def E_XX_hat(state, a_m, delta):
+def E_XX_hat(state, a_m, delta, CM):
     povms = POVMs(a_m, delta)
     # counts = np.zeros((len(state)))
     h = [np.kron(np.array([[1,1],[1,-1]])/np.sqrt(2), np.identity(2)), np.kron(np.identity(2), np.array([[1,1],[1,-1]])/np.sqrt(2)),
@@ -123,7 +137,9 @@ def E_XX_hat(state, a_m, delta):
     probs = np.zeros((len(state), 4))
     for i in range(len(state)):
         probs[i, :] = np.real(gen_probs(h[2], state[i], povms))
-    p = (probs[:, 0]+probs[:, 3]).mean()
+    Pi = probs.mean(axis=0)
+    P = np.linalg.inv(CM)@Pi
+    p = P[0]+P[3]
     # p01 = np.random.binomial(len(state), probs[:, 1].mean())/len(state)
     # p10 = np.random.binomial(len(state), probs[:, 2].mean())/len(state)
     # p11 = np.random.binomial(len(state), probs[:, 3].mean())/len(state)
@@ -143,7 +159,7 @@ def E_XY(state, a_m, delta):
     return delta[0]*delta[1] + a_m[0]*a_m[1]*XY - delta[0]*a_m[1]*Y2 - a_m[0]*delta[1]*X1
 
 
-def E_XY_hat(state, a_m, delta):
+def E_XY_hat(state, a_m, delta, CM):
     povms = POVMs(a_m, delta)
     # counts = np.zeros((len(state)))
     h = [np.kron(np.array([[1,1],[1,-1]])/np.sqrt(2), np.identity(2)), np.kron(np.identity(2), np.array([[1,1],[1,-1]])/np.sqrt(2)),
@@ -156,7 +172,9 @@ def E_XY_hat(state, a_m, delta):
     probs = np.zeros((len(state), 4))
     for i in range(len(state)):
         probs[i, :] = np.real(gen_probs(h[0]*rx[1], state[i], povms))
-    p = (probs[:, 0]+probs[:, 3]).mean()
+    Pi = probs.mean(axis=0)
+    P = np.linalg.inv(CM)@Pi
+    p = P[0]+P[3]
     # p01 = np.random.binomial(len(state), probs[:, 1].mean())/len(state)
     # p10 = np.random.binomial(len(state), probs[:, 2].mean())/len(state)
     # p11 = np.random.binomial(len(state), probs[:, 3].mean())/len(state)
@@ -176,7 +194,7 @@ def E_YX(state, a_m, delta):
     return delta[0]*delta[1] + a_m[0]*a_m[1]*YX - delta[0]*a_m[1]*X2 - a_m[0]*delta[1]*Y1
 
 
-def E_YX_hat(state, a_m, delta):
+def E_YX_hat(state, a_m, delta, CM):
     povms = POVMs(a_m, delta)
     # counts = np.zeros((len(state)))
     h = [np.kron(np.array([[1,1],[1,-1]])/np.sqrt(2), np.identity(2)), np.kron(np.identity(2), np.array([[1,1],[1,-1]])/np.sqrt(2)),
@@ -189,7 +207,9 @@ def E_YX_hat(state, a_m, delta):
     probs = np.zeros((len(state), 4))
     for i in range(len(state)):
         probs[i, :] = np.real(gen_probs(rx[0]*h[1], state[i], povms))
-    p = (probs[:, 0]+probs[:, 3]).mean()
+    Pi = probs.mean(axis=0)
+    P = np.linalg.inv(CM)@Pi
+    p = P[0]+P[3]
     # p01 = np.random.binomial(len(state), probs[:, 1].mean())/len(state)
     # p10 = np.random.binomial(len(state), probs[:, 2].mean())/len(state)
     # p11 = np.random.binomial(len(state), probs[:, 3].mean())/len(state)
@@ -209,7 +229,7 @@ def E_YY(state, a_m, delta):
     return delta[0]*delta[1] + a_m[0]*a_m[1]*YY - delta[0]*a_m[1]*Y2 - a_m[0]*delta[1]*Y1
 
 
-def E_YY_hat(state, a_m, delta):
+def E_YY_hat(state, a_m, delta, CM):
     povms = POVMs(a_m, delta)
     # counts = np.zeros((len(state)))
     h = [np.kron(np.array([[1,1],[1,-1]])/np.sqrt(2), np.identity(2)), np.kron(np.identity(2), np.array([[1,1],[1,-1]])/np.sqrt(2)),
@@ -222,7 +242,9 @@ def E_YY_hat(state, a_m, delta):
     probs = np.zeros((len(state), 4))
     for i in range(len(state)):
         probs[i, :] = np.real(gen_probs(rx[2], state[i], povms))
-    p = (probs[:, 0]+probs[:, 3]).mean()
+    Pi = probs.mean(axis=0)
+    P = np.linalg.inv(CM)@Pi
+    p = P[0]+P[3]
     # p01 = np.random.binomial(len(state), probs[:, 1].mean())/len(state)
     # p10 = np.random.binomial(len(state), probs[:, 2].mean())/len(state)
     # p11 = np.random.binomial(len(state), probs[:, 3].mean())/len(state)
@@ -259,7 +281,7 @@ def frame_correct(sol, pulse):
     return sol
 
 
-def C_12_0_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, **kwargs):
+def C_12_0_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, CM, **kwargs):
     n_shots = kwargs.get('n_shots')
     M = kwargs.get('M')
     a_m = kwargs.get('a_m')
@@ -272,26 +294,26 @@ def C_12_0_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, **kwargs):
     # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     # sol = frame_correct(sol, pulse)
     # EX1X2 = E_XX(sol, a_m, delta)
-    EX1X2 = E_XX_hat(sol, a_m, delta)
+    EX1X2 = E_XX_hat(sol, a_m, delta, CM)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     # sol = frame_correct(sol, pulse)
     # EY1Y2 = E_YY(sol, a_m, delta)
-    EY1Y2 = E_YY_hat(sol, a_m, delta)
+    EY1Y2 = E_YY_hat(sol, a_m, delta, CM)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     # sol = frame_correct(sol, pulse)
     # EX1Y2 = E_XY(sol, a_m, delta)
-    EX1Y2 = E_XY_hat(sol, a_m, delta)
+    EX1Y2 = E_XY_hat(sol, a_m, delta, CM)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     # sol = frame_correct(sol, pulse)
     # EY1X2 = E_YX(sol, a_m, delta)
-    EY1X2 = E_YX_hat(sol, a_m, delta)
+    EY1X2 = E_YX_hat(sol, a_m, delta, CM)
     return np.real(D('+', (EX1X2, EY1Y2, EX1Y2, EY1X2)) + D('-', (EX1X2, EY1Y2, EX1Y2, EY1X2)))
 
 
-def make_C_12_0_MT(solver_ftn, pulse, t_vec, c_times, **kwargs):
+def make_C_12_0_MT(solver_ftn, pulse, t_vec, c_times, CM, **kwargs):
     n_shots = kwargs.get('n_shots')
     M = kwargs.get('M')
     t_b = kwargs.get('t_b')
@@ -305,12 +327,12 @@ def make_C_12_0_MT(solver_ftn, pulse, t_vec, c_times, **kwargs):
     rho_B = 0.5*qt.identity(2)#qt.basis(2, 0) * qt.basis(2, 0).dag()
     rho = jnp.array((qt.tensor(rho0, rho_B)).full())
     C_12_0_MT = Parallel(n_jobs=1)(delayed(C_12_0_MT_i)(solver_ftn, t_b, pulse, t_vec, rho,
-                                                         c_times[i], n_shots=n_shots, M=M, a_m=a_m,
+                                                         c_times[i], CM, n_shots=n_shots, M=M, a_m=a_m,
                                                          delta=delta, noise_mats=noise_mats) for i in range(np.size(c_times)))
     return C_12_0_MT
 
 
-def C_12_12_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, **kwargs):
+def C_12_12_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, CM, **kwargs):
     n_shots = kwargs.get('n_shots')
     M = kwargs.get('M')
     a_m = kwargs.get('a_m')
@@ -322,26 +344,26 @@ def C_12_12_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, **kwargs):
     # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     # sol = frame_correct(sol, pulse)
     # EX1X2 = E_XX(sol, a_m, delta)
-    EX1X2 = E_XX_hat(sol, a_m, delta)
+    EX1X2 = E_XX_hat(sol, a_m, delta, CM)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     # sol = frame_correct(sol, pulse)
     # EY1Y2 = E_YY(sol, a_m, delta)
-    EY1Y2 = E_YY_hat(sol, a_m, delta)
+    EY1Y2 = E_YY_hat(sol, a_m, delta, CM)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     # sol = frame_correct(sol, pulse)
     # EX1Y2 = E_XY(sol, a_m, delta)
-    EX1Y2 = E_XY_hat(sol, a_m, delta)
+    EX1Y2 = E_XY_hat(sol, a_m, delta, CM)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     # sol = frame_correct(sol, pulse)
     # EY1X2 = E_YX(sol, a_m, delta)
-    EY1X2 = E_YX_hat(sol, a_m, delta)
+    EY1X2 = E_YX_hat(sol, a_m, delta, CM)
     return np.real(D('+', (EX1X2, EY1Y2, EX1Y2, EY1X2)) - D('-', (EX1X2, EY1Y2, EX1Y2, EY1X2)))
 
 
-def make_C_12_12_MT(solver_ftn, pulse, t_vec, c_times, **kwargs):
+def make_C_12_12_MT(solver_ftn, pulse, t_vec, c_times, CM, **kwargs):
     n_shots = kwargs.get('n_shots')
     M = kwargs.get('M')
     t_b = kwargs.get('t_b')
@@ -355,12 +377,12 @@ def make_C_12_12_MT(solver_ftn, pulse, t_vec, c_times, **kwargs):
     rho0 = make_init_state(a_sp, c, state = state)
     rho_B = 0.5*qt.identity(2) #qt.basis(2, 0) * qt.basis(2, 0).dag()
     rho = jnp.array((qt.tensor(rho0, rho_B)).full())
-    return Parallel(n_jobs=1)(delayed(C_12_12_MT_i)(solver_ftn, t_b, pulse, t_vec, rho, c_times[i],
+    return Parallel(n_jobs=1)(delayed(C_12_12_MT_i)(solver_ftn, t_b, pulse, t_vec, rho, c_times[i], CM,
                                                            n_shots=n_shots, M=M, a_m=a_m,
                                                            delta=delta, noise_mats = noise_mats) for i in range(np.size(c_times)))
 
 
-def C_a_b_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, **kwargs):
+def C_a_b_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, CM, **kwargs):
     n_shots = kwargs.get('n_shots')
     M = kwargs.get('M')
     a_m = kwargs.get('a_m')
@@ -375,28 +397,28 @@ def C_a_b_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, **kwargs):
     # sol = solver_ftn(y_uv, w, t_vec, rhop, n_shots)
     # sol = frame_correct(sol, pulse)
     # EXlp = E_X(l, sol, a_m, delta)
-    EXlp = E_X_hat(l, sol, a_m, delta)
+    EXlp = E_X_hat(l, sol, a_m, delta, CM)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhop, n_shots)
     # sol = solver_ftn(y_uv, w, t_vec, rhop, n_shots)
     # sol = frame_correct(sol, pulse)
     # EYlp = E_Y(l, sol, a_m, delta)
-    EYlp = E_Y_hat(l, sol, a_m, delta)
+    EYlp = E_Y_hat(l, sol, a_m, delta, CM)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhom, n_shots)
     # sol = solver_ftn(y_uv, w, t_vec, rhom, n_shots)
     # sol = frame_correct(sol, pulse)
     Ap = A([EXlp, EYlp])
     # EXlm = E_X(l, sol, a_m, delta)
-    EXlm = E_X_hat(l, sol, a_m, delta)
+    EXlm = E_X_hat(l, sol, a_m, delta, CM)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhom, n_shots)
     # sol = solver_ftn(y_uv, w, t_vec, rhom, n_shots)
     # sol = frame_correct(sol, pulse)
     # EYlm = E_Y(l, sol, a_m, delta)
-    EYlm = E_Y_hat(l, sol, a_m, delta)
+    EYlm = E_Y_hat(l, sol, a_m, delta, CM)
     Am = A([EXlm, EYlm])
     return Ap - Am
 
 
-def make_C_a_b_MT(solver_ftn, pulse, t_vec, c_times, **kwargs):
+def make_C_a_b_MT(solver_ftn, pulse, t_vec, c_times, CM, **kwargs):
     M = kwargs.get('M')
     t_b = kwargs.get('t_b')
     a_m = kwargs.get('a_m')
@@ -422,12 +444,12 @@ def make_C_a_b_MT(solver_ftn, pulse, t_vec, c_times, **kwargs):
     rho0m = make_init_state(a_sp, c, state = state_m)
     rho_B = 0.5*qt.identity(2)
     rhom = jnp.array((qt.tensor(rho0m, rho_B)).full())
-    return Parallel(n_jobs=1)(delayed(C_a_b_MT_i)(solver_ftn, t_b, pulse, t_vec, [rhop, rhom], c_times[i],
+    return Parallel(n_jobs=1)(delayed(C_a_b_MT_i)(solver_ftn, t_b, pulse, t_vec, [rhop, rhom], c_times[i], CM,
                                                    n_shots=n_shots, M=M, a_m=a_m, l=l,
                                                    delta=delta, noise_mats = noise_mats) for i in range(np.size(c_times))) # keep n_jobs=1 on Linux
 
 
-def C_a_0_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, **kwargs):
+def C_a_0_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, CM, **kwargs):
     n_shots = kwargs.get('n_shots')
     M = kwargs.get('M')
     a_m = kwargs.get('a_m')
@@ -442,28 +464,28 @@ def C_a_0_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, **kwargs):
     # sol = solver_ftn(y_uv, w, t_vec, rhop, n_shots)
     # sol = frame_correct(sol, pulse)
     # EXlp = E_X(l, sol, a_m, delta)
-    EXlp = E_X_hat(l, sol, a_m, delta)
+    EXlp = E_X_hat(l, sol, a_m, delta, CM)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhop, n_shots)
     # sol = solver_ftn(y_uv, w, t_vec, rhop, n_shots)
     # sol = frame_correct(sol, pulse)
     # EYlp = E_Y(l, sol, a_m, delta)
-    EYlp = E_Y_hat(l, sol, a_m, delta)
+    EYlp = E_Y_hat(l, sol, a_m, delta, CM)
     Ap = A([EXlp, EYlp])
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhom, n_shots)
     # sol = solver_ftn(y_uv, w, t_vec, rhom, n_shots)
     # sol = frame_correct(sol, pulse)
     # EXlm = E_X(l, sol, a_m, delta)
-    EXlm = E_X_hat(l, sol, a_m, delta)
+    EXlm = E_X_hat(l, sol, a_m, delta, CM)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhom, n_shots)
     # sol = solver_ftn(y_uv, w, t_vec, rhom, n_shots)
     # sol = frame_correct(sol, pulse)
     # EYlm = E_Y(l, sol, a_m, delta)
-    EYlm = E_Y_hat(l, sol, a_m, delta)
+    EYlm = E_Y_hat(l, sol, a_m, delta, CM)
     Am = A([EXlm, EYlm])
     return Ap + Am
 
 
-def make_C_a_0_MT(solver_ftn, pulse, t_vec, c_times, **kwargs):
+def make_C_a_0_MT(solver_ftn, pulse, t_vec, c_times, CM, **kwargs):
     M = kwargs.get('M')
     t_b = kwargs.get('t_b')
     a_m = kwargs.get('a_m')
@@ -488,7 +510,7 @@ def make_C_a_0_MT(solver_ftn, pulse, t_vec, c_times, **kwargs):
     rho0m = make_init_state(a_sp, c, state = state_m)
     rho_B = 0.5*qt.identity(2)
     rhom = jnp.array((qt.tensor(rho0m, rho_B)).full())
-    return Parallel(n_jobs=1)(delayed(C_a_0_MT_i)(solver_ftn, t_b, pulse, t_vec, [rhop, rhom], c_times[i],
+    return Parallel(n_jobs=1)(delayed(C_a_0_MT_i)(solver_ftn, t_b, pulse, t_vec, [rhop, rhom], c_times[i], CM,
                                                    n_shots=n_shots, M=M, a_m=a_m, l=l,
                                                    delta=delta, noise_mats = noise_mats) for i in range(np.size(c_times)))
 
