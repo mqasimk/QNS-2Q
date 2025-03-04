@@ -287,6 +287,7 @@ def C_12_0_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, CM, **kwargs):
     a_m = kwargs.get('a_m')
     delta = kwargs.get('delta')
     noise_mats = kwargs.get('noise_mats')
+    a_sp = kwargs.get('a_sp')
     # w = kwargs.get('w')
     y_uv = jnp.array(make_y(t_b, pulse, ctime=ct, M=M))
     rho = jnp.array(rho)
@@ -294,26 +295,26 @@ def C_12_0_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, CM, **kwargs):
     # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     # sol = frame_correct(sol, pulse)
     # EX1X2 = E_XX(sol, a_m, delta)
-    EX1X2 = E_XX_hat(sol, a_m, delta, CM)
+    EX1X2 = E_XX_hat(sol, a_m, delta, CM)/(a_sp[0]*a_sp[1])
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     # sol = frame_correct(sol, pulse)
     # EY1Y2 = E_YY(sol, a_m, delta)
-    EY1Y2 = E_YY_hat(sol, a_m, delta, CM)
+    EY1Y2 = E_YY_hat(sol, a_m, delta, CM)/(a_sp[0]*a_sp[1])
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     # sol = frame_correct(sol, pulse)
     # EX1Y2 = E_XY(sol, a_m, delta)
-    EX1Y2 = E_XY_hat(sol, a_m, delta, CM)
+    EX1Y2 = E_XY_hat(sol, a_m, delta, CM)/(a_sp[0]*a_sp[1])
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     # sol = frame_correct(sol, pulse)
     # EY1X2 = E_YX(sol, a_m, delta)
-    EY1X2 = E_YX_hat(sol, a_m, delta, CM)
+    EY1X2 = E_YX_hat(sol, a_m, delta, CM)/(a_sp[0]*a_sp[1])
     return np.real(D('+', (EX1X2, EY1Y2, EX1Y2, EY1X2)) + D('-', (EX1X2, EY1Y2, EX1Y2, EY1X2)))
 
 
-def make_C_12_0_MT(solver_ftn, pulse, t_vec, c_times, CM, **kwargs):
+def make_C_12_0_MT(solver_ftn, pulse, t_vec, c_times, CM, spMit, **kwargs):
     n_shots = kwargs.get('n_shots')
     M = kwargs.get('M')
     t_b = kwargs.get('t_b')
@@ -326,9 +327,11 @@ def make_C_12_0_MT(solver_ftn, pulse, t_vec, c_times, CM, **kwargs):
     rho0 = make_init_state(a_sp, c, state = state)
     rho_B = 0.5*qt.identity(2)#qt.basis(2, 0) * qt.basis(2, 0).dag()
     rho = jnp.array((qt.tensor(rho0, rho_B)).full())
+    if not spMit:
+        a_sp = np.array([1., 1.])
     C_12_0_MT = Parallel(n_jobs=1)(delayed(C_12_0_MT_i)(solver_ftn, t_b, pulse, t_vec, rho,
                                                          c_times[i], CM, n_shots=n_shots, M=M, a_m=a_m,
-                                                         delta=delta, noise_mats=noise_mats) for i in range(np.size(c_times)))
+                                                         delta=delta, noise_mats=noise_mats, a_sp=a_sp) for i in range(np.size(c_times)))
     return C_12_0_MT
 
 
@@ -337,6 +340,7 @@ def C_12_12_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, CM, **kwargs):
     M = kwargs.get('M')
     a_m = kwargs.get('a_m')
     delta = kwargs.get('delta')
+    a_sp=kwargs.get('a_sp')
     # w = kwargs.get('w')
     noise_mats = kwargs.get('noise_mats')
     y_uv = jnp.array(make_y(t_b, pulse, ctime=ct, M=M))
@@ -344,26 +348,26 @@ def C_12_12_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, CM, **kwargs):
     # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     # sol = frame_correct(sol, pulse)
     # EX1X2 = E_XX(sol, a_m, delta)
-    EX1X2 = E_XX_hat(sol, a_m, delta, CM)
+    EX1X2 = E_XX_hat(sol, a_m, delta, CM)/(a_sp[0]*a_sp[1])
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     # sol = frame_correct(sol, pulse)
     # EY1Y2 = E_YY(sol, a_m, delta)
-    EY1Y2 = E_YY_hat(sol, a_m, delta, CM)
+    EY1Y2 = E_YY_hat(sol, a_m, delta, CM)/(a_sp[0]*a_sp[1])
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     # sol = frame_correct(sol, pulse)
     # EX1Y2 = E_XY(sol, a_m, delta)
-    EX1Y2 = E_XY_hat(sol, a_m, delta, CM)
+    EX1Y2 = E_XY_hat(sol, a_m, delta, CM)/(a_sp[0]*a_sp[1])
     sol = solver_ftn(y_uv, noise_mats, t_vec, rho, n_shots)
     # sol = solver_ftn(y_uv, w, t_vec, rho, n_shots)
     # sol = frame_correct(sol, pulse)
     # EY1X2 = E_YX(sol, a_m, delta)
-    EY1X2 = E_YX_hat(sol, a_m, delta, CM)
+    EY1X2 = E_YX_hat(sol, a_m, delta, CM)/(a_sp[0]*a_sp[1])
     return np.real(D('+', (EX1X2, EY1Y2, EX1Y2, EY1X2)) - D('-', (EX1X2, EY1Y2, EX1Y2, EY1X2)))
 
 
-def make_C_12_12_MT(solver_ftn, pulse, t_vec, c_times, CM, **kwargs):
+def make_C_12_12_MT(solver_ftn, pulse, t_vec, c_times, CM, spMit, **kwargs):
     n_shots = kwargs.get('n_shots')
     M = kwargs.get('M')
     t_b = kwargs.get('t_b')
@@ -377,9 +381,11 @@ def make_C_12_12_MT(solver_ftn, pulse, t_vec, c_times, CM, **kwargs):
     rho0 = make_init_state(a_sp, c, state = state)
     rho_B = 0.5*qt.identity(2) #qt.basis(2, 0) * qt.basis(2, 0).dag()
     rho = jnp.array((qt.tensor(rho0, rho_B)).full())
+    if not spMit:
+        a_sp = np.array([1., 1.])
     return Parallel(n_jobs=1)(delayed(C_12_12_MT_i)(solver_ftn, t_b, pulse, t_vec, rho, c_times[i], CM,
                                                            n_shots=n_shots, M=M, a_m=a_m,
-                                                           delta=delta, noise_mats = noise_mats) for i in range(np.size(c_times)))
+                                                           delta=delta, noise_mats = noise_mats, a_sp=a_sp) for i in range(np.size(c_times)))
 
 
 def C_a_b_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, CM, **kwargs):
@@ -388,6 +394,7 @@ def C_a_b_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, CM, **kwargs):
     a_m = kwargs.get('a_m')
     l = kwargs.get('l')
     delta = kwargs.get('delta')
+    a_sp=kwargs.get('a_sp')
     # w = kwargs.get('w')
     noise_mats = kwargs.get('noise_mats')
     rhop = rho[0]
@@ -406,7 +413,6 @@ def C_a_b_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, CM, **kwargs):
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhom, n_shots)
     # sol = solver_ftn(y_uv, w, t_vec, rhom, n_shots)
     # sol = frame_correct(sol, pulse)
-    Ap = A([EXlp, EYlp])
     # EXlm = E_X(l, sol, a_m, delta)
     EXlm = E_X_hat(l, sol, a_m, delta, CM)
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhom, n_shots)
@@ -414,11 +420,20 @@ def C_a_b_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, CM, **kwargs):
     # sol = frame_correct(sol, pulse)
     # EYlm = E_Y(l, sol, a_m, delta)
     EYlm = E_Y_hat(l, sol, a_m, delta, CM)
+    aX = 0.5*(EXlp+EXlm)/a_sp[l-1]
+    bX = 0.5*(EXlp-EXlm)/(a_sp[0]*a_sp[1])
+    aY = 0.5*(EYlp+EYlm)/a_sp[l-1]
+    bY = 0.5*(EYlp-EYlm)/(a_sp[0]*a_sp[1])
+    EXlp = aX+bX
+    EXlm = aX-bX
+    EYlp = aY+bY
+    EYlm = aY-bY
+    Ap = A([EXlp, EYlp])
     Am = A([EXlm, EYlm])
     return Ap - Am
 
 
-def make_C_a_b_MT(solver_ftn, pulse, t_vec, c_times, CM, **kwargs):
+def make_C_a_b_MT(solver_ftn, pulse, t_vec, c_times, CM, spMit, **kwargs):
     M = kwargs.get('M')
     t_b = kwargs.get('t_b')
     a_m = kwargs.get('a_m')
@@ -444,9 +459,11 @@ def make_C_a_b_MT(solver_ftn, pulse, t_vec, c_times, CM, **kwargs):
     rho0m = make_init_state(a_sp, c, state = state_m)
     rho_B = 0.5*qt.identity(2)
     rhom = jnp.array((qt.tensor(rho0m, rho_B)).full())
+    if not spMit:
+        a_sp = np.array([1., 1.])
     return Parallel(n_jobs=1)(delayed(C_a_b_MT_i)(solver_ftn, t_b, pulse, t_vec, [rhop, rhom], c_times[i], CM,
                                                    n_shots=n_shots, M=M, a_m=a_m, l=l,
-                                                   delta=delta, noise_mats = noise_mats) for i in range(np.size(c_times))) # keep n_jobs=1 on Linux
+                                                   delta=delta, noise_mats = noise_mats, a_sp=a_sp) for i in range(np.size(c_times))) # keep n_jobs=1 on Linux
 
 
 def C_a_0_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, CM, **kwargs):
@@ -455,6 +472,7 @@ def C_a_0_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, CM, **kwargs):
     a_m = kwargs.get('a_m')
     l = kwargs.get('l')
     delta = kwargs.get('delta')
+    a_sp=kwargs.get('a_sp')
     # w = kwargs.get('w')
     noise_mats = kwargs.get('noise_mats')
     rhop = rho[0]
@@ -470,7 +488,6 @@ def C_a_0_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, CM, **kwargs):
     # sol = frame_correct(sol, pulse)
     # EYlp = E_Y(l, sol, a_m, delta)
     EYlp = E_Y_hat(l, sol, a_m, delta, CM)
-    Ap = A([EXlp, EYlp])
     sol = solver_ftn(y_uv, noise_mats, t_vec, rhom, n_shots)
     # sol = solver_ftn(y_uv, w, t_vec, rhom, n_shots)
     # sol = frame_correct(sol, pulse)
@@ -481,11 +498,20 @@ def C_a_0_MT_i(solver_ftn, t_b, pulse, t_vec, rho, ct, CM, **kwargs):
     # sol = frame_correct(sol, pulse)
     # EYlm = E_Y(l, sol, a_m, delta)
     EYlm = E_Y_hat(l, sol, a_m, delta, CM)
+    aX = 0.5*(EXlp+EXlm)/a_sp[l-1]
+    bX = 0.5*(EXlp-EXlm)/(a_sp[0]*a_sp[1])
+    aY = 0.5*(EYlp+EYlm)/a_sp[l-1]
+    bY = 0.5*(EYlp-EYlm)/(a_sp[0]*a_sp[1])
+    EXlp = aX+bX
+    EXlm = aX-bX
+    EYlp = aY+bY
+    EYlm = aY-bY
+    Ap = A([EXlp, EYlp])
     Am = A([EXlm, EYlm])
     return Ap + Am
 
 
-def make_C_a_0_MT(solver_ftn, pulse, t_vec, c_times, CM, **kwargs):
+def make_C_a_0_MT(solver_ftn, pulse, t_vec, c_times, CM, spMit, **kwargs):
     M = kwargs.get('M')
     t_b = kwargs.get('t_b')
     a_m = kwargs.get('a_m')
@@ -510,7 +536,9 @@ def make_C_a_0_MT(solver_ftn, pulse, t_vec, c_times, CM, **kwargs):
     rho0m = make_init_state(a_sp, c, state = state_m)
     rho_B = 0.5*qt.identity(2)
     rhom = jnp.array((qt.tensor(rho0m, rho_B)).full())
+    if not spMit:
+        a_sp = np.array([1., 1.])
     return Parallel(n_jobs=1)(delayed(C_a_0_MT_i)(solver_ftn, t_b, pulse, t_vec, [rhop, rhom], c_times[i], CM,
                                                    n_shots=n_shots, M=M, a_m=a_m, l=l,
-                                                   delta=delta, noise_mats = noise_mats) for i in range(np.size(c_times)))
+                                                   delta=delta, noise_mats = noise_mats, a_sp=a_sp) for i in range(np.size(c_times)))
 

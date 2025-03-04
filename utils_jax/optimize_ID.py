@@ -416,7 +416,7 @@ def makeSMat_k_ideal(wk, gamma, gamma12):
 
 # Load the system parameters
 parent_dir = os.pardir
-fname = "DraftRun_NoSPAM"
+fname = "DraftRun_SPAM_hat"
 path = os.path.join(parent_dir, fname)
 specs = np.load(os.path.join(path, "specs.npz"))
 params = np.load(os.path.join(path, "params.npz"))
