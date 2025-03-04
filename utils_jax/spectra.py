@@ -34,11 +34,11 @@ def S_11(w):
     :param w: ndarray of the frequencies at which to evaluate the spectrum.
     :return: ndarray of the value of the function.
     """
-    tc=1.5e-6
+    tc=1.2e-6
     S0 =1e3
     St2 = 1e6
-    w0=0.5*10**7
-    return (S0*(2*L(w, 0, tc)+L(w, w0, 3*tc)+Gauss(w, 1.5*w0, 1/tc)+1.3*L(w, 2.5*w0, 0.75*tc))
+    w0=0.75*10**7
+    return (S0*(2*L(w, 0, tc)+L(w, w0, tc)+Gauss(w, 1.5*w0, 1/tc)+1.3*L(w, 2.5*w0, 0.75*tc))
             +St2*L(w, 0, 1e3*tc))
 
 
@@ -49,10 +49,10 @@ def S_22(w):
     :param w: ndarray of the frequencies at which to evaluate the spectrum.
     :return: ndarray of the value of the function.
     """
-    tc=1.5e-6
+    tc=1.2e-6
     S0 = 1.25e3
     St2 = 1e6
-    w0=0.5*10**7
+    w0=0.75*10**7
     return (S0*(2*L(w, 0, tc)+L(w, 1.2*w0, tc)+(2/3)*Gauss(w, 2.5*w0, 2/tc))
             +St2*L(w, 0, 1e3*tc))
 
@@ -64,7 +64,7 @@ def S_1212(w):
     :param w: ndarray of the frequencies at which to evaluate the spectrum.
     :return: ndarray of the value of the function.
     """
-    tc=1.5e-6
+    tc=1.2e-6
     S0 = 0.6e3
     w0=1*10**7
     return S0*L(w, w0, tc)+2*S0/(1+(2*tc*w))
