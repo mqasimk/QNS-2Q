@@ -8,7 +8,7 @@ from trajectories import solver_prop#, solver_prop_noMats
 import jax.numpy as jnp
 import os
 #time the code
-from spectra import S_11, S_22, S_1212
+from spectraIn import S_11, S_22, S_1212
 import time
 
 

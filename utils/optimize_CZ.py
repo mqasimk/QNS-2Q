@@ -3,7 +3,7 @@ import jax
 import matplotlib.pyplot as plt
 import numpy as np
 import jaxopt
-from spectra import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
+from spectraIn import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
 import os
 jax.config.update("jax_enable_x64", True)
 
