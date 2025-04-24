@@ -106,9 +106,9 @@ def inf_ID(params, i, j, SMat, M, T, w):
     L_diag = Lambda_diags(SMat, Gp, w)
     dt = tau
     fid=jnp.sum(L_diag, axis=0)/16.
-    clustering=(1/(vt[0].shape[0]+vt[1].shape[0]-2))*jnp.sum(jnp.array([jnp.tanh(vt[i].shape[0]*((vt[i][j+1]-vt[i][j])/dt-1)) for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)
-    #jnp.sum(jnp.array([((vt[i][j+1]-vt[i][j])-dt)**2 for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)
-    return -fid-clustering*1e-3
+    clustering=jnp.sum(jnp.array([((vt[i][j+1]-vt[i][j])-dt)**2 for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)
+    #(1/(vt[0].shape[0]+vt[1].shape[0]-2))*jnp.sum(jnp.array([jnp.tanh(vt[i].shape[0]*((vt[i][j+1]-vt[i][j])/dt-1)) for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0))
+    return -fid-clustering*1e-2
 
 
 def inf_ID_wk(params, i, j, SMat_k, M, T, wk):
@@ -125,8 +125,8 @@ def inf_ID_wk(params, i, j, SMat_k, M, T, wk):
     L_diag = Lambda_diags_wk(SMat_k, Gp, M, T)
     dt = tau
     fid=jnp.sum(L_diag, axis=0)/16.
-    clustering=(1/(vt[0].shape[0]+vt[1].shape[0]-2))*jnp.sum(jnp.array([jnp.tanh(vt[i].shape[0]*((vt[i][j+1]-vt[i][j])/dt-1)) for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)#jnp.sum(jnp.array([((vt[i][j+1]-vt[i][j])-dt)**2 for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)
-    return -fid-clustering*1e-3
+    clustering=jnp.sum(jnp.array([((vt[i][j+1]-vt[i][j])-dt)**2 for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)#jnp.sum(jnp.array([((vt[i][j+1]-vt[i][j])-dt)**2 for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)
+    return -fid-clustering*1e-2
 
 
 def infidelity(params, SMat, M, w):
@@ -383,13 +383,13 @@ def makeSMat_k(specs, wk, wkqns, gamma, gamma12):
     SMat = jnp.zeros((3, 3, wk.size), dtype=jnp.complex64)
     SMat = SMat.at[0, 0].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_11(wk[0])]), specs["S11"]))))
     SMat = SMat.at[1, 1].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_22(wk[0])]), specs["S22"]))))
-    # SMat = SMat.at[2, 2].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_1212(wk[0])]), specs["S1212"]))))
+    SMat = SMat.at[2, 2].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_1212(wk[0])]), specs["S1212"]))))
     SMat = SMat.at[0, 1].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_1_2(wk[0], gamma)]), specs["S12"]))))
     SMat = SMat.at[1, 0,].set(jnp.interp(wk, wkqns, jnp.conj(jnp.concatenate((jnp.array([S_1_2(wk[0], gamma)]), specs["S12"])))))
-    # SMat = SMat.at[0, 2].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_1_12(wk[0], gamma12)]), specs["S112"]))))
-    # SMat = SMat.at[2, 0].set(jnp.interp(wk, wkqns, jnp.conj(jnp.concatenate((jnp.array([S_1_12(wk[0], gamma12)]), specs["S112"])))))
-    # SMat = SMat.at[1, 2].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_2_12(wk[0], gamma12-gamma)]), specs["S212"]))))
-    # SMat = SMat.at[2, 1].set(jnp.interp(wk, wkqns, jnp.conj(jnp.concatenate((jnp.array([S_2_12(wk[0], gamma12-gamma)]), specs["S212"])))))
+    SMat = SMat.at[0, 2].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_1_12(wk[0], gamma12)]), specs["S112"]))))
+    SMat = SMat.at[2, 0].set(jnp.interp(wk, wkqns, jnp.conj(jnp.concatenate((jnp.array([S_1_12(wk[0], gamma12)]), specs["S112"])))))
+    SMat = SMat.at[1, 2].set(jnp.interp(wk, wkqns, jnp.concatenate((jnp.array([S_2_12(wk[0], gamma12-gamma)]), specs["S212"]))))
+    SMat = SMat.at[2, 1].set(jnp.interp(wk, wkqns, jnp.conj(jnp.concatenate((jnp.array([S_2_12(wk[0], gamma12-gamma)]), specs["S212"])))))
     return SMat
 
 
@@ -416,7 +416,7 @@ def makeSMat_k_ideal(wk, gamma, gamma12):
 
 # Load the system parameters
 parent_dir = os.pardir
-fname = "DraftRun_SPAM_hat"
+fname = "DraftRun_NoSPAM_hat"
 path = os.path.join(parent_dir, fname)
 specs = np.load(os.path.join(path, "specs.npz"))
 params = np.load(os.path.join(path, "params.npz"))
@@ -525,7 +525,7 @@ best_inf = np.inf
 best_M = 0
 
 
-for i in [1/40, 1/20,1/10,1/5,1/4,1/2,1]:
+for i in [1/20,1/10,1/5,1/4,1/2,1]:
     pLib=[]
     cddLib = []
     Tknown = i*T
@@ -584,10 +584,10 @@ print([best_seq[i].shape[0]-2 for i in range(2)])
 opt_seq = 0
 opt_inf = np.inf
 opt_M = 0
-for i in [1]:
+for i in [1/10]:
     Topt = i*T
     Mopt = M/i
-    nPs = [[55,56],[75,76]]
+    nPs = [[4,6],[4,6]]
     if Mopt >= 10:
         wk = jnp.array([0.01]+[2*jnp.pi*(n+1)/Tknown for n in range(int(jnp.floor(mc*i)))])
         wk_ideal = jnp.array([0.01]+[2*jnp.pi*(n+1)/Tknown for n in range(int(jnp.floor(4*mc*i)))])
