@@ -26,8 +26,8 @@ w = jnp.linspace(0, wmax, w_grain)
 spec_vec = [S_11, S_22, S_1212]
 
 
-a_sp = np.array([0.97, 0.99])
-c = np.array([np.array(0.+0.*1j), np.array(0.+0.*1j)])
+a_sp = np.array([0.97, 0.98])
+c = np.array([np.array(0.+0.2*1j), np.array(0.-0.1*1j)])
 a1 = 0.99
 b1 = 0.97
 a2 = 0.995
@@ -37,17 +37,17 @@ delta = np.array([a1-b1, a2-b2])
 CM = jnp.kron(jnp.array([[0.5*(1+a_m[0]+delta[0]),0.5*(1-a_m[0]+delta[0])],[0.5*(1-a_m[0]-delta[0]),0.5*(1+a_m[0]-delta[0])]]),
                 jnp.array([[0.5*(1+a_m[1]+delta[1]),0.5*(1-a_m[1]+delta[1])],[0.5*(1-a_m[1]-delta[1]),0.5*(1+a_m[1]-delta[1])]]))
 # CM = jnp.eye(4)
-spMit = True
+spMit = False
 
 
 gamma = T/7
 gamma_12 = T/14
 t_vec = jnp.linspace(0, M*T, M*jnp.size(t_b))
 c_times = jnp.array([T/n for n in range(1, truncate+1)])
-n_shots = 2000
+n_shots = 4000
 # create a folder in the parent directory where the data will be stored
 parent_dir = os.pardir
-fname = "DraftRun_SPAMmit_hat"
+fname = "DraftRun_SPAM_hat"
 if not os.path.exists(os.path.join(parent_dir, fname)):
     path = os.path.join(parent_dir, fname)
     os.mkdir(path)
