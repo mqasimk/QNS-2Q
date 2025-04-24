@@ -2,7 +2,7 @@ import numpy as np
 import qutip as qt
 import jax
 import jax.numpy as jnp
-from spectra import S_11, S_22, S_1212
+from spectraIn import S_11, S_22, S_1212
 
 
 def make_noise_mat_arr(act, **kwargs):
