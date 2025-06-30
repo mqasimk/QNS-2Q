@@ -16,22 +16,22 @@ start_time = time.time()
 
 
 T = 4.e-6
-M = 12
+M = 16
 t_grain = int(1e3)
 t_b = jnp.linspace(0, T, t_grain)
 truncate = 20
 wmax = 2*np.pi*truncate/T
-w_grain = 4000
+w_grain = 3000
 w = jnp.linspace(0, wmax, w_grain)
 spec_vec = [S_11, S_22, S_1212]
 
 
-a_sp = np.array([0.97, 0.98])
-c = np.array([np.array(0.+0.2*1j), np.array(0.-0.1*1j)])
-a1 = 0.99
-b1 = 0.97
-a2 = 0.995
-b2 = 0.98
+a_sp = np.array([1, 1])
+c = np.array([np.array(0.+0.*1j), np.array(0.+0.*1j)])
+a1 = 1
+b1 = 1
+a2 = 1
+b2 = 1
 a_m = np.array([a1+b1-1, a2+b2-1])
 delta = np.array([a1-b1, a2-b2])
 CM = jnp.kron(jnp.array([[0.5*(1+a_m[0]+delta[0]),0.5*(1-a_m[0]+delta[0])],[0.5*(1-a_m[0]-delta[0]),0.5*(1+a_m[0]-delta[0])]]),
@@ -47,7 +47,7 @@ c_times = jnp.array([T/n for n in range(1, truncate+1)])
 n_shots = 4000
 # create a folder in the parent directory where the data will be stored
 parent_dir = os.pardir
-fname = "DraftRun_SPAM_hat"
+fname = "DraftRun_NoSPAM"
 if not os.path.exists(os.path.join(parent_dir, fname)):
     path = os.path.join(parent_dir, fname)
     os.mkdir(path)
