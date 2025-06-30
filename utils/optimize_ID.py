@@ -75,7 +75,7 @@ def Lambda_diags(SMat, Gp, w):
                                    in_axes=(None, None, None, 0, None, None)),
                           in_axes=(0, None, None, None, None, None))
     CO = jnp.sum(CO_sum_map(p2q, SMat, Gp, inds, inds, w), axis=(1, 2))
-    return jnp.real(jnp.array([jnp.trace(p2q[i]@jax.scipy.linalg.expm(-CO[i])@p2q[i])*0.25 for i in range(CO.shape[0])]))
+    return jnp.real(jnp.array([jnp.trace(jax.scipy.linalg.expm(-CO[i]))*0.25 for i in range(CO.shape[0])]))
 
 
 @jax.jit
@@ -89,7 +89,7 @@ def Lambda_diags_wk(SMat_k, Gp, M, T):
                                    in_axes=(None, None, None, 0, None, None, None)),
                           in_axes=(0, None, None, None, None, None, None))
     CO = jnp.sum(CO_sum_map(p2q, SMat_k, Gp, inds, inds, M, T), axis=(1, 2))
-    return jnp.real(jnp.array([jnp.trace(p2q[i]@jax.scipy.linalg.expm(-CO[i])@p2q[i])*0.25 for i in range(CO.shape[0])]))
+    return jnp.real(jnp.array([jnp.trace(jax.scipy.linalg.expm(-CO[i]))*0.25 for i in range(CO.shape[0])]))
 
 
 def inf_ID(params, i, j, SMat, M, T, w):
@@ -125,7 +125,7 @@ def inf_ID_wk(params, i, j, SMat_k, M, T, wk):
     L_diag = Lambda_diags_wk(SMat_k, Gp, M, T)
     dt = tau
     fid=jnp.sum(L_diag, axis=0)/16.
-    clustering=jnp.sum(jnp.array([((vt[i][j+1]-vt[i][j])-dt)**2 for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)#jnp.sum(jnp.array([((vt[i][j+1]-vt[i][j])-dt)**2 for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)
+    clustering=jnp.sum(jnp.array([((vt[i][j+1]-vt[i][j])-dt)**2 for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)
     return -fid-clustering*1e-2
 
 
@@ -416,7 +416,7 @@ def makeSMat_k_ideal(wk, gamma, gamma12):
 
 # Load the system parameters
 parent_dir = os.pardir
-fname = "DraftRun_NoSPAM_hat"
+fname = "DraftRun_NoSPAM"
 path = os.path.join(parent_dir, fname)
 specs = np.load(os.path.join(path, "specs.npz"))
 params = np.load(os.path.join(path, "params.npz"))
@@ -433,7 +433,7 @@ a_m = params['a_m']
 delta = params['delta']
 c_times = params['c_times']
 n_shots = params['n_shots']
-# M = params['M']
+M = params['M']
 a_sp = params['a_sp']
 c = params['c']
 Tqns = params['T']
@@ -504,19 +504,12 @@ print(f"T2 time for qubit 2 is {np.round(T2q2/T, 2)} T")
 print("###########################################################################################")
 
 
-
-
-uddLib = []
-
-
 # Parameters for the optimization over known pulse sequences
 tau = T/80
-Tknown = M*T
-Mknown = 1
-
+Tg = 5*14*1e-6
 
 print("###########################################################################################")
-print(f"Optimizing the Idling gate for {np.round(Mknown*Tknown/T2q1, 2)} T2q1 or {np.round(Mknown*Tknown/T2q2, 2)} T2q2")
+print(f"Optimizing the Idling gate for {np.round(Tg/T2q1, 2)} T2q1 or {np.round(Tg/T2q2, 2)} T2q2")
 print("###########################################################################################")
 
 
@@ -524,12 +517,11 @@ best_seq = 0
 best_inf = np.inf
 best_M = 0
 
-
-for i in [1/20,1/10,1/5,1/4,1/2,1]:
+for i in [1,2,3,4,5,6,7,8,9,10]:
     pLib=[]
     cddLib = []
-    Tknown = i*T
-    Mknown = int(M/i)
+    Tknown = Tg/i
+    Mknown = int(i)
     if Mknown >= 10:
         wk = jnp.array([0.01]+[2*jnp.pi*(n+1)/Tknown for n in range(int(jnp.floor(mc*i)))])
         wk_ideal = jnp.array([0.01]+[2*jnp.pi*(n+1)/Tknown for n in range(int(jnp.floor(4*mc*i)))])
@@ -552,7 +544,7 @@ for i in [1/20,1/10,1/5,1/4,1/2,1]:
         known_opt, known_inf = opt_known_pulses_k(pLib, SMat_k, Mknown, wk)
         inf_known = infidelity_k(known_opt, SMat_k_ideal, Mknown, wk_ideal)
     else:
-        cddOrd = 5
+        cddOrd = 1
         make = True
         while make:
             pul = cddn(Tknown, cddOrd)
