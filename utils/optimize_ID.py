@@ -107,13 +107,12 @@ def inf_ID(params, i, j, SMat, M, T, w):
     dt = tau
     fid=jnp.sum(L_diag, axis=0)/16.
     clustering=jnp.sum(jnp.array([((vt[i][j+1]-vt[i][j])-dt)**2 for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)
-    #(1/(vt[0].shape[0]+vt[1].shape[0]-2))*jnp.sum(jnp.array([jnp.tanh(vt[i].shape[0]*((vt[i][j+1]-vt[i][j])/dt-1)) for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0))
     return -fid-clustering*1e-2
 
 
-def inf_ID_wk(params, i, j, SMat_k, M, T, wk):
-    vt1 = jnp.sort(jnp.concatenate((jnp.array([0]), params[:i], jnp.array([T]))))
-    vt2 = jnp.sort(jnp.concatenate((jnp.array([0]), params[i:], jnp.array([T]))))
+def inf_ID_wk(params, ind, j, SMat_k, M, T, wk):
+    vt1 = jnp.sort(jnp.concatenate((jnp.array([0]), params[:ind], jnp.array([T]))))
+    vt2 = jnp.sort(jnp.concatenate((jnp.array([0]), params[ind:], jnp.array([T]))))
     vt12 = make_tk12(vt1, vt2)
     vt = [vt1, vt2, vt12]
     Gp_re_map = jax.vmap(Gp_re, in_axes=(None, None, 0, None))
@@ -441,14 +440,14 @@ Tqns = params['T']
 
 
 T=Tqns
-M=40
 p1q = jnp.array([[[1, 0], [0, 1]], [[0, 1], [1, 0]], [[0, -1j], [1j, 0]], [[1, 0], [0, -1]]])
 p2q = jnp.array([jnp.kron(p1q[i], p1q[j]) for i in range(4) for j in range(4)])
-w = jnp.linspace(0.01, 2*jnp.pi*mc/Tqns, 4000)
-w_ideal = jnp.linspace(0.01, 2*jnp.pi*2*mc/Tqns, 8000)
+w = jnp.linspace(0.0001, 2*jnp.pi*mc/Tqns, 4000)
+w_ideal = jnp.linspace(0.0001, 2*jnp.pi*2*mc/Tqns, 8000)
 wkqns = jnp.array([2*jnp.pi*(n+1)/Tqns for n in range(mc)])
 wkqns_ideal = jnp.array([2*jnp.pi*(n)/Tqns for n in range(2*mc+1)])
 SMat = jnp.zeros((3, 3, w.size), dtype=jnp.complex64)
+
 
 
 # Interpolate the loaded spectra to use in the optimization
@@ -477,6 +476,7 @@ SMat_ideal = SMat_ideal.at[1, 2].set(S_2_12(w_ideal, gamma12-gamma))
 SMat_ideal = SMat_ideal.at[2, 1].set(jnp.conj(S_2_12(w_ideal, gamma12-gamma)))
 
 
+
 # Calculate the T2 time for each qubit to be used as a point of reference
 L_map = jax.vmap(jax.vmap(Lambda, in_axes=(None, 0, None, None, None, None)), in_axes=(0, None, None, None, None, None))
 taxis = jnp.linspace(1*T, 20*T, 20)
@@ -493,6 +493,9 @@ for i in range(q2T2.size):
     if q2T2[i]<0.5:
         T2q2 = (taxis[i] + taxis[i-1])*0.5
         break
+
+
+
 print("###########################################################################################")
 print(f"The base sequence time T = {T/1e-6} us")
 print(f"T2 time for qubit 1 is {np.round(T2q1/1e-6, 2)} us")
@@ -504,27 +507,41 @@ print(f"T2 time for qubit 2 is {np.round(T2q2/T, 2)} T")
 print("###########################################################################################")
 
 
+
 # Parameters for the optimization over known pulse sequences
 tau = T/80
 Tg = 5*14*1e-6
+
+
 
 print("###########################################################################################")
 print(f"Optimizing the Idling gate for {np.round(Tg/T2q1, 2)} T2q1 or {np.round(Tg/T2q2, 2)} T2q2")
 print("###########################################################################################")
 
 
+
 best_seq = 0
 best_inf = np.inf
 best_M = 0
 
-for i in [1,2,3,4,5,6,7,8,9,10]:
+
+
+reps_known = [1, 4, 8, 10, 20, 40, 100, 200, 300, 400]
+reps_opt = [10, 20, 40, 100, 200, 300, 400]
+
+
+
+for i in reps_known:
     pLib=[]
     cddLib = []
     Tknown = Tg/i
-    Mknown = int(i)
+    Mknown = i
+    print("####################")
+    print("T="+str(Tknown)+" and M="+str(i))
+    print("####################")
     if Mknown >= 10:
-        wk = jnp.array([0.01]+[2*jnp.pi*(n+1)/Tknown for n in range(int(jnp.floor(mc*i)))])
-        wk_ideal = jnp.array([0.01]+[2*jnp.pi*(n+1)/Tknown for n in range(int(jnp.floor(4*mc*i)))])
+        wk = jnp.array([0.0001]+[2*jnp.pi*(n+1)/Tknown for n in range(int(jnp.floor(Tg*mc/(i*Tqns))))])
+        wk_ideal = jnp.array([0.0001]+[2*jnp.pi*(n+1)/Tknown for n in range(int(jnp.floor(4*Tg*mc/(i*Tqns))))])
         SMat_k = makeSMat_k(specs, wk, jnp.concatenate((jnp.array([wk[0]]), wkqns)), gamma, gamma12)
         SMat_k_ideal = makeSMat_k_ideal(wk_ideal, gamma, gamma12)
         # Make CDD_n libraries that respect the minimum pulse separation constraint
@@ -533,7 +550,7 @@ for i in [1,2,3,4,5,6,7,8,9,10]:
         while make:
             pul = cddn(Tknown, cddOrd)
             cddOrd += 1
-            for j in range(1, pul.size-2):
+            for j in range(1, pul.size-1):
                 if pul[j+1] - pul[j] < tau:
                     make = False
             if make == False:
@@ -567,22 +584,25 @@ for i in [1,2,3,4,5,6,7,8,9,10]:
     print(f"# repetitions considered = {Mknown}")
 
 
+
 print('infidelity over known seqs: ')
 print(best_inf)
 print('number of pulses: ')
 print([best_seq[i].shape[0]-2 for i in range(2)])
 
 
+
 opt_seq = 0
 opt_inf = np.inf
 opt_M = 0
-for i in [1/10]:
-    Topt = i*T
-    Mopt = M/i
-    nPs = [[4,6],[4,6]]
+for i in reps_opt:
+    Topt = Tg/i
+    Mopt = i
+    nPs = np.random.randint(1, Topt/tau, (2,4))
+    print(nPs)
     if Mopt >= 10:
-        wk = jnp.array([0.01]+[2*jnp.pi*(n+1)/Tknown for n in range(int(jnp.floor(mc*i)))])
-        wk_ideal = jnp.array([0.01]+[2*jnp.pi*(n+1)/Tknown for n in range(int(jnp.floor(4*mc*i)))])
+        wk = jnp.array([0.0001]+[2*jnp.pi*(n+1)/Topt for n in range(int(jnp.floor(Tg*mc/(i*Tqns))))])
+        wk_ideal = jnp.array([0.0001]+[2*jnp.pi*(n+1)/Topt for n in range(int(jnp.floor(4*Tg*mc/(i*Tqns))))])
         SMat_k = makeSMat_k(specs, wk, jnp.concatenate((jnp.array([wk[0]]), wkqns)), gamma, gamma12)
         SMat_k_ideal = makeSMat_k_ideal(wk_ideal, gamma, gamma12)
         # Generate an Idling gate that is optimized over a given number of pulses on each qubit
@@ -599,10 +619,17 @@ for i in [1/10]:
     print(f"# repetitions considered = {Mopt}")
 
 
+
 print('infidelity over optimized seqs: ')
 print(opt_inf)
 print('number of pulses: ')
 print([opt_seq[i].shape[0]-2 for i in range(2)])
+
+
+
+np.savez(os.path.join(path, 'optimize.npz'), Gtime=Tg, best_inf=best_inf, best_seq=best_seq, best_M=best_M,
+         opt_inf=opt_inf, opt_seq=opt_seq, opt_M=opt_M)
+
 
 
 ########################################################################################################################
@@ -777,7 +804,7 @@ bx.set_ylim(-max_lim*1.01, max_lim*1.01)
 bx.legend([r'Re[$G^{+,\text{opt}}_{2,2;12,12}(\omega, T)$]', r'Im[$G^{+,\text{opt}}_{2,2;12,12}(\omega, T)$]',
            r'Re[$G^{+,\text{known}}_{2,2;12,12}(\omega, T)$]', r'Im[$G^{+,\text{known}}_{2,2;12,12}(\omega, T)$]']
           , fontsize=legendfont, loc='lower right')
-plt.savefig(os.path.join(path, 'IDGate.png'), dpi = 1200)
+plt.savefig(os.path.join(path, 'IDGate.pdf'))
 # plt.show()
 print('End')
 

@@ -129,7 +129,7 @@ ax6.tick_params(direction='in')
 ax6.tick_params(axis='both', labelsize=tickfont)
 ax6.legend([r'Re[$\hat{S}_{2,12}^+(\omega_k)$]', r'Re[$S_{2,12}^+(\omega)$]', r'Im[$\hat{S}_{2,12}^+(\omega_k)$]',
             r'Im[$S_{2,12}^+(\omega)$]'], fontsize=legendfont)
-plt.savefig(os.path.join(path, 'reconstruct.png'), dpi = 600)
+plt.savefig(os.path.join(path, 'reconstruct.pdf'))
 plt.show()
 
 
