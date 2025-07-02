@@ -38,7 +38,7 @@ def S_11(w):
     S0 =1e3
     St2 = 1e6
     w0=0.75*10**7
-    return (S0*(2*L(w, 0, tc)+L(w, w0, tc)+Gauss(w, 1.5*w0, 1/tc)+1.3*L(w, 2.5*w0, 0.75*tc))
+    return (S0*(2*L(w, 0, tc)+L(w, w0, tc)+Gauss(w, 1.75*w0, 1/tc)+1.3*L(w, 3*w0, 0.75*tc))
             +St2*L(w, 0, 1e3*tc))
 
 
@@ -53,7 +53,7 @@ def S_22(w):
     S0 = 1.25e3
     St2 = 1e6
     w0=0.75*10**7
-    return (S0*(2*L(w, 0, tc)+L(w, 1.2*w0, tc)+(2/3)*Gauss(w, 2.5*w0, 2/tc))
+    return (S0*(2*L(w, 0, tc)+L(w, 1.5*w0, 0.5*tc)+0.5*Gauss(w, 3.25*w0, 3/tc))
             +St2*L(w, 0, 1e3*tc))
 
 
