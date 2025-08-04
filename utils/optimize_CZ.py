@@ -358,7 +358,7 @@ def makeSMat_k_ideal(wk, gamma, gamma12):
 
 
 parent_dir = os.pardir
-fname = "DraftRun_Mmit_hat"
+fname = "DraftRun_NoSPAM"
 path = os.path.join(parent_dir, fname)
 specs = np.load(os.path.join(path, "specs.npz"))
 params = np.load(os.path.join(path, "params.npz"))
@@ -502,7 +502,7 @@ for i in [1,2,3,3.5,4,4.5,5]:
             best_seq = known_opt
             Jopt_best = Jopt
             print(f'number of pulses: {[best_seq[i].shape[0]-2 for i in range(2)]}')
-            print(f"The coupling strength J: {Jopt_best}")
+            print(f"The coupling strength J: {Jopt_best/Jmax}")
             print(f'best infidelity till now: {best_inf}, # of repetitions considered: {Mknown}')
             print("###########################################################################################")
     yaxis_Tg.append(best_inf)
@@ -555,7 +555,7 @@ for i in [1,2,3,3.5,4,4.5,5]:
             best_seq = vt_opt
             Jopt_best = Jopt
             print(f'number of pulses: {[best_seq[i].shape[0]-2 for i in range(2)]}')
-            print(f"The coupling strength J: {Jopt_best}")
+            print(f"The coupling strength J: {Jopt_best/Jmax}")
             print(f'best infidelity till now: {best_inf}, # of repetitions considered: {Mopt}')
             print("###########################################################################################")
     yaxis_opt.append(best_inf)
