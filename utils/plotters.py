@@ -4,7 +4,7 @@ import os
 from trajectories import f
 
 
-params = np.load("/home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM/optimizeLog.npz")
+params = np.load(os.path.join(os.pardir, "DraftRun_NoSPAM", "optimizeLog.npz"))
 
 print(params["best_inf"])
 print(params["opt_inf"])

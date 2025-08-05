@@ -9,7 +9,7 @@ def f1_cpmg(ct, T, w):
     t_vec = np.linspace(0, T, 10**5)
     return np.trapz(y[0, 0]*np.exp(1j*w*t_vec), t_vec)
 
-def f1_fid(ct, T, w):
+def f1_fid(T, w):
     t_vec = np.linspace(0, T, 10**5)
     return np.trapz(np.exp(1j*w*t_vec), t_vec)
 
@@ -139,4 +139,3 @@ def recon_S_2_12(coefs, **kwargs):
     Re_S_2_12_k = np.real(np.linalg.inv(U1)@C_2_1_MT_1)
     Im_S_2_12_k = -np.real(np.linalg.inv(U2)@C_2_1_MT_2)
     return Re_S_2_12_k + 1j*Im_S_2_12_k
-
