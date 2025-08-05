@@ -13,8 +13,8 @@ from typing import Dict, Any
 import numpy as np
 from matplotlib import pyplot as plt
 
-from .fixedAS import recon_S_11, recon_S_22, recon_S_1_2, recon_S_12_12, recon_S_1_12, recon_S_2_12
-from .spectraIn import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
+from fixedAS import recon_S_11, recon_S_22, recon_S_1_2, recon_S_12_12, recon_S_1_12, recon_S_2_12
+from spectraIn import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
 
 
 @dataclass

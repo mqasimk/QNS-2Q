@@ -1,5 +1,5 @@
 import numpy as np
-from .trajectories import make_y
+from trajectories import make_y
 
 def ff(y, t, w):
     return np.trapz(np.exp(1j*w*t)*y, t)
