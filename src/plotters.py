@@ -1,7 +1,7 @@
 from matplotlib import pyplot as plt
 import numpy as np
 import os
-from trajectories import f
+from .trajectories import f
 
 
 params = np.load(os.path.join(os.pardir, "DraftRun_NoSPAM", "optimizeLog.npz"))

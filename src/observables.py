@@ -12,7 +12,7 @@ import qutip as qt
 from joblib import Parallel, delayed
 from qutip.qip.operations import snot
 
-from trajectories import make_init_state, make_y
+from .trajectories import make_init_state, make_y
 
 
 # --- Helper functions for creating operators ---

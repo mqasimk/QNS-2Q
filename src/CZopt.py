@@ -3,7 +3,7 @@ import jax
 import matplotlib.pyplot as plt
 import numpy as np
 import jaxopt
-from spectraIn import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
+from .spectraIn import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
 import os
 from dataclasses import dataclass, field
 
@@ -502,7 +502,7 @@ def plot_results(config_arg: CZOptConfig, results_arg: dict):
     opt_data = results_arg["opt_data"]
 
     plt.figure(figsize=(16, 9))
-    plt.plot(known_data["taxis"], known_data["infs_base"], "r^-" )
+    plt.plot(known_data["taxis"], known_data["infs_base"], "r^-")
     plt.plot(known_data["taxis"], known_data["infs_known"], "bs-")
     plt.plot(opt_data["taxis"], opt_data["infs_opt"], "ko-")
     plt.legend(["Uncorrected Gate", "DD Gate", "NT Gate"], fontsize=legendfont)
