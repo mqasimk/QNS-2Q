@@ -1,5 +1,5 @@
 import numpy as np
-from trajectories import make_y
+from .trajectories import make_y
 
 def ff(y, t, w):
     return np.trapz(np.exp(1j*w*t)*y, t)
@@ -98,7 +98,6 @@ def recon_S_12_12(coefs, **kwargs):
             U[i, j] = (2*M/T)*(np.real(np.square(np.absolute(ff(y_arr[i][0, 0], tb, wk[j])))))
     return np.linalg.inv(U)@np.real(C_1_0_MT_1+C_2_0_MT_1-C_12_0_MT_4)
 
-
 def recon_S_1_12(coefs, **kwargs):
     c_times = kwargs.get('c_times')
     M = kwargs.get('M')
@@ -118,7 +117,6 @@ def recon_S_1_12(coefs, **kwargs):
     Re_S_1_12_k = np.real(np.linalg.inv(U1)@C_1_2_MT_1)
     Im_S_1_12_k = -np.real(np.linalg.inv(U2)@C_1_2_MT_2)
     return Re_S_1_12_k + 1j*Im_S_1_12_k
-
 
 def recon_S_2_12(coefs, **kwargs):
     c_times = kwargs.get('c_times')

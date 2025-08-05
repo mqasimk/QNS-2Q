@@ -18,10 +18,10 @@ from dataclasses import dataclass, field
 import jax.numpy as jnp
 import numpy as np
 
-from observables import (make_C_12_0_MT, make_C_12_12_MT, make_C_a_0_MT,
+from .observables import (make_C_12_0_MT, make_C_12_12_MT, make_C_a_0_MT,
                          make_C_a_b_MT)
-from spectraIn import S_11, S_22, S_1212
-from trajectories import make_noise_mat_arr, solver_prop
+from .spectraIn import S_11, S_22, S_1212
+from .trajectories import make_noise_mat_arr, solver_prop
 
 
 @dataclass
