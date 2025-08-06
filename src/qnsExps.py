@@ -50,7 +50,7 @@ class QNSExperimentConfig:
     M: int = 16
     t_grain: int = 1000
     truncate: int = 20
-    w_grain: int = 3000
+    w_grain: int = 4000
     spec_vec: list = field(default_factory=lambda: [S_11, S_22, S_1212])
     a_sp: np.ndarray = field(default_factory=lambda: np.array([1, 1]))
     c: np.ndarray = field(
@@ -74,6 +74,8 @@ class QNSExperimentConfig:
         self.t_vec = jnp.linspace(0, self.M * self.T,
                                  self.M * jnp.size(self.t_b))
         self.c_times = jnp.array([self.T / n for n in range(1, self.truncate + 1)])
+        # Store names of spectra functions for saving, as functions aren't picklable
+        self.spec_vec_names = [f.__name__ for f in self.spec_vec]
         self.a_m = np.array([self.a1 + self.b1 - 1, self.a2 + self.b2 - 1])
         self.delta = np.array([self.a1 - self.b1, self.a2 - self.b2])
         self.CM = jnp.kron(
@@ -185,9 +187,15 @@ class ExperimentRunner:
         """
         Saves the parameters and results to .npz files.
         """
+        # Create a copy of the config dict to avoid modifying the original object.
+        # The 'spec_vec' attribute contains function objects, which cannot be
+        # pickled by `np.savez`. We pop it from the dictionary before saving.
+        # The names of the spectra are saved in 'spec_vec_names' for reference.
+        params_to_save = self.config.__dict__.copy()
+        params_to_save.pop('spec_vec', None)
         np.savez(
             os.path.join(self.path, "params.npz"),
-            **self.config.__dict__)
+            **params_to_save)
         np.savez(os.path.join(self.path, "results.npz"), **self.results)
         print(f"Results saved to {self.path}")
 
