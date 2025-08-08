@@ -18,8 +18,8 @@ from dataclasses import dataclass, field
 import jax.numpy as jnp
 import numpy as np
 
-from observables import (make_C_12_0_MT, make_C_12_12_MT, make_C_a_0_MT,
-                         make_C_a_b_MT)
+from observables import (make_c_12_0_mt, make_c_12_12_mt, make_c_a_0_mt,
+                         make_c_a_b_mt)
 from spectraIn import S_11, S_22, S_1212
 from trajectories import make_noise_mat_arr, solver_prop
 
@@ -153,10 +153,10 @@ class ExperimentRunner:
         start_time = time.time()
 
         exp_map = {
-            'C_12_0': make_C_12_0_MT,
-            'C_12_12': make_C_12_12_MT,
-            'C_a_0': make_C_a_0_MT,
-            'C_a_b': make_C_a_b_MT,
+            'C_12_0': make_c_12_0_mt,
+            'C_12_12': make_c_12_12_mt,
+            'C_a_0': make_c_a_0_mt,
+            'C_a_b': make_c_a_b_mt,
         }
         if exp_type not in exp_map:
             raise ValueError(f"Invalid experiment type: {exp_type}")
