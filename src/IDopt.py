@@ -34,9 +34,9 @@ class PulseOptimizerConfig:
             tau_divisor (int): The divisor for the pulse separation.
         """
         if reps_opt is None:
-            reps_opt = [300, 400, 600]
+            reps_opt = [100, 200, 300, 400]
         if reps_known is None:
-            reps_known = [300, 400, 600]
+            reps_known = [100, 200, 300, 400]
 
         self.fname = fname
         self.parent_dir = parent_dir
