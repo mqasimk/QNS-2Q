@@ -3,143 +3,109 @@ import numpy as np
 import os
 from spectraIn import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
 
+# --- Configuration ---
+# Directories for the two datasets to be compared
+DIR1 = "DraftRun_NoSPAM"
+DIR2 = "DraftRun_SPAM"
 
-specs1 = np.load('DraftRun_SPAM_hat/specs.npz')
-specs2 = np.load('DraftRun_SPAMmit_hat/specs.npz')
+# Directory for saving plots
+OUTPUT_DIR = "SPAM_Mitigation_Plots"
 
-parent_dir = os.pardir
-fname = "DraftRun_SP_hat"
-path = os.path.join(fname)
-params = np.load(os.path.join(path, "params.npz"))
-t_vec = params['t_vec']
-w_grain = params['w_grain']
-wmax = params['wmax']
-truncate = params['truncate']
-gamma = params['gamma']
-gamma_12 = params['gamma_12']
-t_b = params['t_b']
-a_m = params['a_m']
-delta = params['delta']
-c_times = params['c_times']
-n_shots = params['n_shots']
-M = params['M']
-a_sp = params['a_sp']
-c = params['c']
-T = params['T']
+# The directory containing the params.npz file
+PARAMS_DIR = DIR1
 
-S_11_k = specs1['S11']
-S_22_k = specs1['S22']
-S_12_12_k = specs1['S1212']
-S_1_2_k = specs1['S12']
-S_1_12_k = specs1['S112']
-S_2_12_k = specs1['S212']
+# Plotting parameters
+FIG_SIZE = (16, 9)
+LINE_WIDTH = 1
+LEGEND_FONT_SIZE = 8
+X_LABEL_FONT_SIZE = 16
+Y_LABEL_FONT_SIZE = 16
+TICK_FONT_SIZE = 12
+X_UNITS = 1e6
+Y_UNITS = 1
+# --- End Configuration ---
 
-S_11_k_mit = specs2['S11']
-S_22_k_mit = specs2['S22']
-S_12_12_k_mit = specs2['S1212']
-S_1_2_k_mit = specs2['S12']
-S_1_12_k_mit = specs2['S112']
-S_2_12_k_mit = specs2['S212']
+def load_data(project_dir):
+    """Loads spectral data and parameters from the specified directories."""
+    dir1_path = os.path.join(project_dir, DIR1)
+    dir2_path = os.path.join(project_dir, DIR2)
+    params_path = os.path.join(project_dir, PARAMS_DIR)
 
+    specs1 = np.load(os.path.join(dir1_path, 'specs.npz'))
+    specs2 = np.load(os.path.join(dir2_path, 'specs.npz'))
+    params = np.load(os.path.join(params_path, "params.npz"))
 
-w = np.linspace(0.1, wmax, w_grain)
-wk = np.array([2*np.pi*(n+1)/T for n in range(truncate)])
+    return specs1, specs2, params
 
+def plot_real_spectrum(ax, w, wk, y_k, y_k_mit, y_theory, title, xlabel, ylabel, legend_labels):
+    """Helper function to plot a real-valued spectrum."""
+    ax.plot(wk / X_UNITS, y_k / Y_UNITS, 'r.--', lw=0.5 * LINE_WIDTH, label=legend_labels[0])
+    ax.plot(wk / X_UNITS, y_k_mit / Y_UNITS, 'b^--', lw=0.5 * LINE_WIDTH, label=legend_labels[1])
+    ax.plot(w / X_UNITS, y_theory / Y_UNITS, 'k-', lw=0.75 * LINE_WIDTH, label=legend_labels[2])
 
-# Plot the reconstruction
-fig, axs = plt.subplots(2, 3, figsize=(16,9))
-ax1 = axs[0, 0]
-ax2 = axs[0, 1]
-ax3 = axs[0, 2]
-ax4 = axs[1, 0]
-ax5 = axs[1, 1]
-ax6 = axs[1, 2]
-lw = 1
-legendfont = 8
-xlabelfont = 16
-ylabelfont = 16
-tickfont = 12
+    ax.set_title(title)
+    ax.set_xlabel(xlabel, fontsize=X_LABEL_FONT_SIZE)
+    ax.set_ylabel(ylabel, fontsize=Y_LABEL_FONT_SIZE)
+    ax.tick_params(direction='in', labelsize=TICK_FONT_SIZE)
+    ax.legend(fontsize=LEGEND_FONT_SIZE)
 
+def plot_complex_spectrum(ax, w, wk, y_k, y_k_mit, y_theory, title, xlabel, ylabel, legend_labels):
+    """Helper function to plot a complex-valued spectrum."""
+    ax.plot(wk / X_UNITS, np.real(y_k) / Y_UNITS, 'r.--', lw=0.5 * LINE_WIDTH, label=legend_labels[0])
+    ax.plot(wk / X_UNITS, np.real(y_k_mit) / Y_UNITS, 'b^--', lw=0.5 * LINE_WIDTH, label=legend_labels[1])
+    ax.plot(w / X_UNITS, np.real(y_theory) / Y_UNITS, 'k-', lw=0.75 * LINE_WIDTH, label=legend_labels[2])
 
-yunits = 1
-xunits = 1e6
+    ax.plot(wk / X_UNITS, np.imag(y_k) / Y_UNITS, 'g.--', lw=0.5 * LINE_WIDTH, label=legend_labels[3])
+    ax.plot(wk / X_UNITS, np.imag(y_k_mit) / Y_UNITS, 'm^--', lw=0.5 * LINE_WIDTH, label=legend_labels[4])
+    ax.plot(w / X_UNITS, np.imag(y_theory) / Y_UNITS, 'c-', lw=0.75 * LINE_WIDTH, label=legend_labels[5])
 
+    ax.set_title(title)
+    ax.set_xlabel(xlabel, fontsize=X_LABEL_FONT_SIZE)
+    ax.set_ylabel(ylabel, fontsize=Y_LABEL_FONT_SIZE)
+    ax.tick_params(direction='in', labelsize=TICK_FONT_SIZE)
+    ax.legend(fontsize=LEGEND_FONT_SIZE)
 
-w=w[100:]
-ax1.plot(wk/xunits, S_11_k/yunits, 'r.--', lw=0.5*lw)
-ax1.plot(wk/xunits, S_11_k_mit/yunits, 'b^--', lw=0.5*lw)
-ax1.plot(w/xunits, S_11(w)/yunits, 'k-', lw=0.75*lw)
-ax1.set_ylabel(r'$S^+_{a,b}(\omega)$ Hz', fontsize=ylabelfont)
-ax1.set_xlabel(r'$\omega$(MHz)', fontsize=xlabelfont)
-ax1.tick_params(direction='in')
-ax1.tick_params(axis='both', labelsize=tickfont)
-ax1.legend([r'$\hat{S}_{1,1}^+(\omega_k)$', r'$S_{1,1}^+(\omega)$'], fontsize=legendfont)
-# ax1.set_yscale('log')
-# ax1.set_xscale('log')
-ax2.plot(wk/xunits, S_22_k/yunits, 'r.--', lw=0.5*lw)
-ax2.plot(wk/xunits, S_22_k_mit/yunits, 'b^--', lw=0.5*lw)
-ax2.plot(w/xunits, S_22(w)/yunits, 'k-', lw=0.75*lw)
-ax2.set_xlabel(r'$\omega$(MHz)', fontsize=xlabelfont)
-ax2.tick_params(direction='in')
-ax2.tick_params(axis='both', labelsize=tickfont)
-ax2.legend([r'$\hat{S}_{2,2}^+(\omega_k)$', r'$S_{2,2}^+(\omega)$'], fontsize=legendfont)
-# ax2.set_yscale('log')
-# ax2.set_xscale('log')
-ax3.plot(wk/xunits, S_12_12_k/yunits, 'r.--', lw=0.5*lw)
-ax3.plot(wk/xunits, S_12_12_k_mit/yunits, 'b^--', lw=0.5*lw)
-ax3.plot(w/xunits, S_1212(w)/yunits, 'k-', lw=0.75*lw)
-ax3.set_xlabel(r'$\omega$(MHz)', fontsize=xlabelfont)
-ax3.tick_params(direction='in')
-ax3.tick_params(axis='both', labelsize=tickfont)
-ax3.legend([r'$\hat{S}_{12,12}^+(\omega_k)$', r'$S_{12,12}^+(\omega)$'], fontsize=legendfont)
-# ax3.set_yscale('log')
-# ax3.set_xscale('log')
-ax4.plot(wk/xunits, np.real(S_1_2_k)/yunits, 'r.--', lw=0.5*lw)
-ax4.plot(wk/xunits, np.real(S_1_2_k_mit)/yunits, 'b^--', lw=0.5*lw)
-ax4.plot(wk/xunits, np.imag(S_1_2_k)/yunits, 'g.--', lw=0.5*lw)
-ax4.plot(wk/xunits, np.imag(S_1_2_k_mit)/yunits, 'm^--', lw=0.5*lw)
-ax4.plot(w/xunits, np.real(S_1_2(w, gamma))/yunits, 'k-', lw=0.75*lw)
-ax4.plot(w/xunits, np.imag(S_1_2(w, gamma))/yunits, 'c-', lw=0.75*lw)
-ax4.set_ylabel(r'$S^+_{a,b}(\omega)$ Hz', fontsize=ylabelfont)
-ax4.set_xlabel(r'$\omega$(MHz)', fontsize=xlabelfont)
-ax4.tick_params(direction='in')
-ax4.tick_params(axis='both', labelsize=tickfont)
-ax4.legend([r'Re[$\hat{S}_{1,2}^+(\omega_k)$]', r'Re[$S_{1,2}^+(\omega)$]', r'Im[$\hat{S}_{1,2}^+(\omega_k)$]',
-            r'Im[$S_{1,2}^+(\omega)$]'], fontsize=legendfont)
-ax5.plot(wk/xunits, np.real(S_1_12_k)/yunits, 'r.--', lw=0.5*lw)
-ax5.plot(wk/xunits, np.real(S_1_12_k_mit)/yunits, 'b^--', lw=0.5*lw)
-ax5.plot(wk/xunits, np.imag(S_1_12_k)/yunits, 'g.--', lw=0.5*lw)
-ax5.plot(wk/xunits, np.imag(S_1_12_k_mit)/yunits, 'm^--', lw=0.5*lw)
-ax5.plot(w/xunits, np.real(S_1_12(w, gamma_12))/yunits, 'k-', lw=0.75*lw)
-ax5.plot(w/xunits, np.imag(S_1_12(w, gamma_12))/yunits, 'c-', lw=0.75*lw)
-ax5.set_xlabel(r'$\omega$(MHz)', fontsize=xlabelfont)
-ax5.tick_params(direction='in')
-ax5.tick_params(axis='both', labelsize=tickfont)
-ax5.legend([r'Re[$\hat{S}_{1,12}^+(\omega_k)$]', r'Re[$S_{1,12}^+(\omega)$]', r'Im[$\hat{S}_{1,12}^+(\omega_k)$]',
-            r'Im[$S_{1,12}^+(\omega)$]'], fontsize=legendfont)
-ax6.plot(wk/xunits, np.real(S_2_12_k)/yunits, 'r.--', lw=0.5*lw)
-ax6.plot(wk/xunits, np.real(S_2_12_k_mit)/yunits, 'b^--', lw=0.5*lw)
-ax6.plot(wk/xunits, np.imag(S_2_12_k)/yunits, 'g.--', lw=0.5*lw)
-ax6.plot(wk/xunits, np.imag(S_2_12_k_mit)/yunits, 'm^--', lw=0.5*lw)
-ax6.plot(w/xunits, np.real(S_2_12(w, gamma_12-gamma))/yunits, 'k-', lw=0.75*lw)
-ax6.plot(w/xunits, np.imag(S_2_12(w, gamma_12-gamma))/yunits, 'c-', lw=0.75*lw)
-ax6.set_xlabel(r'$\omega$(MHz)', fontsize=xlabelfont)
-ax6.tick_params(direction='in')
-ax6.tick_params(axis='both', labelsize=tickfont)
-ax6.legend([r'Re[$\hat{S}_{2,12}^+(\omega_k)$]', r'Re[$S_{2,12}^+(\omega)$]', r'Im[$\hat{S}_{2,12}^+(\omega_k)$]',
-            r'Im[$S_{2,12}^+(\omega)$]'], fontsize=legendfont)
+def plot_all_spectrums(axs, w_plot, wk, specs1, specs2, params):
+    """Creates all the spectrum subplots."""
+    # Extract spectral data
+    s1 = {k: specs1[k] for k in specs1.files}
+    s2 = {k: specs2[k] for k in specs2.files}
+    gamma, gamma_12 = params['gamma'], params['gamma_12']
 
-fname = "SPAM_Mitigation_Plots"
-path = os.path.join(fname)
-if not os.path.exists(fname):
-    path = fname
-    os.mkdir(path)
-else:
-    path = fname
-plt.savefig(os.path.join(path, 'reconstruct_SPAMmit.png'), dpi = 600)
-plt.show()
+    plot_real_spectrum(axs[0, 0], w_plot, wk, s1['S11'], s2['S11'], S_11(w_plot), r'$S_{1,1}^+(\omega)$', r'$\omega$(MHz)', r'$S^+_{a,b}(\omega)$ Hz', [r'$\hat{S}_{1,1}^+(\omega_k)$', r'$\hat{S}_{1,1,mit}^+(\omega_k)$', r'$S_{1,1}^+(\omega)$'])
+    plot_real_spectrum(axs[0, 1], w_plot, wk, s1['S22'], s2['S22'], S_22(w_plot), r'$S_{2,2}^+(\omega)$', r'$\omega$(MHz)', '', [r'$\hat{S}_{2,2}^+(\omega_k)$', r'$\hat{S}_{2,2,mit}^+(\omega_k)$', r'$S_{2,2}^+(\omega)$'])
+    plot_real_spectrum(axs[0, 2], w_plot, wk, s1['S1212'], s2['S1212'], S_1212(w_plot), r'$S_{12,12}^+(\omega)$', r'$\omega$(MHz)', '', [r'$\hat{S}_{12,12}^+(\omega_k)$', r'$\hat{S}_{12,12,mit}^+(\omega_k)$', r'$S_{12,12}^+(\omega)$'])
 
+    plot_complex_spectrum(axs[1, 0], w_plot, wk, s1['S12'], s2['S12'], S_1_2(w_plot, gamma), r'$S_{1,2}^+(\omega)$', r'$\omega$(MHz)', r'$S^+_{a,b}(\omega)$ Hz', [r'Re[$\hat{S}_{1,2}^+(\omega_k)$]', r'Re[$\hat{S}_{1,2,mit}^+(\omega_k)$]', r'Re[$S_{1,2}^+(\omega)$]', r'Im[$\hat{S}_{1,2}^+(\omega_k)$]', r'Im[$\hat{S}_{1,2,mit}^+(\omega_k)$]', r'Im[$S_{1,2}^+(\omega)$]'])
+    plot_complex_spectrum(axs[1, 1], w_plot, wk, s1['S112'], s2['S112'], S_1_12(w_plot, gamma_12), r'$S_{1,12}^+(\omega)$', r'$\omega$(MHz)', '', [r'Re[$\hat{S}_{1,12}^+(\omega_k)$]', r'Re[$\hat{S}_{1,12,mit}^+(\omega_k)$]', r'Re[$S_{1,12}^+(\omega)$]', r'Im[$\hat{S}_{1,12}^+(\omega_k)$]', r'Im[$\hat{S}_{1,12,mit}^+(\omega_k)$]', r'Im[$S_{1,12}^+(\omega)$]'])
+    plot_complex_spectrum(axs[1, 2], w_plot, wk, s1['S212'], s2['S212'], S_2_12(w_plot, gamma_12 - gamma), r'$S_{2,12}^+(\omega)$', r'$\omega$(MHz)', '', [r'Re[$\hat{S}_{2,12}^+(\omega_k)$]', r'Re[$\hat{S}_{2,12,mit}^+(\omega_k)$]', r'Re[$S_{2,12}^+(\omega)$]', r'Im[$\hat{S}_{2,12}^+(\omega_k)$]', r'Im[$\hat{S}_{2,12,mit}^+(\omega_k)$]', r'Im[$S_{2,12}^+(\omega)$]'])
 
-# Save the reconstruction to be used in the optimization
-# np.savez(os.path.join(path, "specs.npz"), S11=S_11_k, S22=S_22_k, S12=S_1_2_k, S1212=S_12_12_k, S112=S_1_12_k,
-#          S212=S_2_12_k)
+def main():
+    """Main function to load data, plot, and save the results."""
+    project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    output_path = os.path.join(project_dir, OUTPUT_DIR)
+
+    specs1, specs2, params = load_data(project_dir)
+
+    # Prepare frequency data for plotting
+    wmax = params['wmax']
+    w_grain = params['w_grain']
+    truncate = params['truncate']
+    T = params['T']
+    w = np.linspace(0.1, wmax, w_grain)
+    wk = np.array([2 * np.pi * (n + 1) / T for n in range(truncate)])
+    w_plot = w[100:]
+
+    # Create and save the plot
+    fig, axs = plt.subplots(2, 3, figsize=FIG_SIZE)
+    plot_all_spectrums(axs, w_plot, wk, specs1, specs2, params)
+
+    if not os.path.exists(output_path):
+        os.mkdir(output_path)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_path, 'reconstruct_SPAMmit.png'), dpi=600)
+    plt.show()
+
+if __name__ == "__main__":
+    main()

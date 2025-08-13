@@ -191,7 +191,7 @@ def cdd3(t, m):
 
 def make_y(t_b, pulse, **kwargs):
     ctime = kwargs.get('ctime')
-    M = kwargs.get('M')
+    M = kwargs.get('m')
     n = int((t_b[-1] / ctime).round(0))
     y = np.zeros((3, 3, np.size(t_b)))
 
