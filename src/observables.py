@@ -10,7 +10,7 @@ import jax.numpy as jnp
 import numpy as np
 import qutip as qt
 from joblib import Parallel, delayed
-from qutip.qip.gates import snot
+from qutip_qip.operations import snot
 
 from trajectories import make_init_state, make_y
 

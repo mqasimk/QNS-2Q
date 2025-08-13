@@ -42,9 +42,39 @@ class SpectraReconConfig:
         params_path = os.path.join(path, "params.npz")
         self.params = np.load(params_path)
 
-        # Assign parameters to attributes
-        for key, value in self.params.items():
-            setattr(self, key, value)
+        required_params = {
+            't_vec': np.ndarray,
+            'w_grain': int,
+            'wmax': float,
+            'truncate': int,
+            'gamma': float,
+            'gamma_12': float,
+            'c_times': np.ndarray,
+            'M': int,
+            'T': float
+        }
+
+        for param_name, expected_type in required_params.items():
+            if param_name not in self.params:
+                raise KeyError(f"Missing required parameter: '{param_name}' in params.npz")
+
+            value = self.params[param_name]
+
+            # For numerical types, extract scalar from 0-d numpy array
+            if expected_type in [int, float] and hasattr(value, 'item'):
+                value = value.item()
+
+            if value is None:
+                raise ValueError(f"Parameter '{param_name}' cannot be None.")
+
+            try:
+                if expected_type in [int, float]:
+                    setattr(self, param_name, expected_type(value))
+                else:  # For np.ndarray and other types
+                    setattr(self, param_name, value)
+            except (ValueError, TypeError):
+                raise TypeError(
+                    f"Parameter '{param_name}' has an invalid value '{value}' for expected type {expected_type.__name__}.")
 
 
 class SpectraReconstructor:
@@ -69,12 +99,12 @@ class SpectraReconstructor:
         self.wk = np.array([2 * np.pi * (n + 1) / c.T for n in range(c.truncate)])
 
         self.reconstructed_spectra = {
-            "S_11_k": recon_S_11([obs['C_12_0_MT_1'], obs['C_12_0_MT_2']], c_times=c.c_times, M=c.M, T=c.T),
-            "S_22_k": recon_S_22([obs['C_12_0_MT_1'], obs['C_12_0_MT_3']], c_times=c.c_times, M=c.M, T=c.T),
-            "S_1_2_k": recon_S_1_2([obs['C_12_12_MT_1'], obs['C_12_12_MT_2']], c_times=c.c_times, M=c.M, T=c.T),
-            "S_12_12_k": recon_S_12_12([obs['C_1_0_MT_1'], obs['C_2_0_MT_1'], obs['C_12_0_MT_4']], c_times=c.c_times, M=c.M, T=c.T),
-            "S_1_12_k": recon_S_1_12([obs['C_1_2_MT_1'], obs['C_1_2_MT_2']], c_times=c.c_times, M=c.M, T=c.T),
-            "S_2_12_k": recon_S_2_12([obs['C_2_1_MT_1'], obs['C_2_1_MT_2']], c_times=c.c_times, M=c.M, T=c.T),
+            "S_11_k": recon_S_11([obs['C_12_0_MT_1'], obs['C_12_0_MT_2']], c_times=c.c_times, m=c.M, T=c.T),
+            "S_22_k": recon_S_22([obs['C_12_0_MT_1'], obs['C_12_0_MT_3']], c_times=c.c_times, m=c.M, T=c.T),
+            "S_1_2_k": recon_S_1_2([obs['C_12_12_MT_1'], obs['C_12_12_MT_2']], c_times=c.c_times, m=c.M, T=c.T),
+            "S_12_12_k": recon_S_12_12([obs['C_1_0_MT_1'], obs['C_2_0_MT_1'], obs['C_12_0_MT_4']], c_times=c.c_times, m=c.M, T=c.T),
+            "S_1_12_k": recon_S_1_12([obs['C_1_2_MT_1'], obs['C_1_2_MT_2']], c_times=c.c_times, m=c.M, T=c.T),
+            "S_2_12_k": recon_S_2_12([obs['C_2_1_MT_1'], obs['C_2_1_MT_2']], c_times=c.c_times, m=c.M, T=c.T),
         }
 
     def plot_reconstruction(self):

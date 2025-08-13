@@ -46,22 +46,23 @@ class QNSExperimentConfig:
         fname: The name of the folder to save the results in.
         parent_dir: The parent directory to save the results in.
     """
-    T: float = 4.e-6
-    M: int = 16
-    t_grain: int = 1000
+    tau = 2.5e-8
+    M: int = 12
+    t_grain: int = 2000
     truncate: int = 20
     w_grain: int = 4000
     spec_vec: list = field(default_factory=lambda: [S_11, S_22, S_1212])
-    a_sp: np.ndarray = field(default_factory=lambda: np.array([1, 1]))
+    a_sp: np.ndarray = field(default_factory=lambda: jnp.array([1., 1.]))
     c: np.ndarray = field(
         default_factory=lambda: np.array(
-            [np.array(0. + 0. * 1j),
-             np.array(0. + 0. * 1j)]))
-    a1: int = 1
-    b1: int = 1
-    a2: int = 1
-    b2: int = 1
+            [jnp.array(0. + 0. * 1j),
+             jnp.array(0. - 0. * 1j)]))
+    a1: jnp.float64 = 1.
+    b1: jnp.float64 = 1.
+    a2: jnp.float64 = 1.
+    b2: jnp.float64 = 1.
     spMit: bool = False
+    T: float = 160*tau
     gamma: float = T / 7
     gamma_12: float = T / 14
     n_shots: int = 4000
@@ -170,7 +171,7 @@ class ExperimentRunner:
             self.config.CM,
             self.config.spMit,
             n_shots=self.config.n_shots,
-            M=self.config.M,
+            m=self.config.M,
             t_b=self.config.t_b,
             a_m=self.config.a_m,
             delta=self.config.delta,
@@ -193,6 +194,7 @@ class ExperimentRunner:
         # The names of the spectra are saved in 'spec_vec_names' for reference.
         params_to_save = self.config.__dict__.copy()
         params_to_save.pop('spec_vec', None)
+        params_to_save['tau'] = self.config.tau
         np.savez(
             os.path.join(self.path, "params.npz"),
             **params_to_save)
