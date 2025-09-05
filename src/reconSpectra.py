@@ -111,7 +111,7 @@ class SpectraReconstructor:
         """Plots the reconstructed spectra against the original spectra."""
         fig, axs = plt.subplots(2, 3, figsize=(16, 9))
         w = np.linspace(0.1, self.config.wmax, self.config.w_grain)
-        w = w[100:]
+        w = w[80:]
         xunits = 1e6
 
         plot_params = {
