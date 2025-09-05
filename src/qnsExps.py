@@ -11,6 +11,7 @@ The main components are:
 - A main execution block that demonstrates how to use these components.
 """
 
+
 import os
 import time
 from dataclasses import dataclass, field
@@ -46,26 +47,26 @@ class QNSExperimentConfig:
         fname: The name of the folder to save the results in.
         parent_dir: The parent directory to save the results in.
     """
-    tau = 2.5e-8
-    M: int = 12
-    t_grain: int = 2000
-    truncate: int = 20
-    w_grain: int = 4000
+    tau: jnp.float32 = 2.5e-8
+    M: jnp.int32 = 15
+    t_grain: jnp.int32 = 1000
+    truncate: jnp.int32 = 20
+    w_grain: jnp.int32 = 2000
     spec_vec: list = field(default_factory=lambda: [S_11, S_22, S_1212])
     a_sp: np.ndarray = field(default_factory=lambda: jnp.array([1., 1.]))
     c: np.ndarray = field(
         default_factory=lambda: np.array(
             [jnp.array(0. + 0. * 1j),
              jnp.array(0. - 0. * 1j)]))
-    a1: jnp.float64 = 1.
-    b1: jnp.float64 = 1.
-    a2: jnp.float64 = 1.
-    b2: jnp.float64 = 1.
+    a1: jnp.float32 = 1.
+    b1: jnp.float32 = 1.
+    a2: jnp.float32 = 1.
+    b2: jnp.float32 = 1.
     spMit: bool = False
-    T: float = 160*tau
-    gamma: float = T / 7
-    gamma_12: float = T / 14
-    n_shots: int = 4000
+    T: jnp.float32 = 160*tau
+    gamma: jnp.float32 = T / 7
+    gamma_12: jnp.float32 = T / 14
+    n_shots: jnp.int32 = 4000
     fname: str = "DraftRun_NoSPAM"
     parent_dir: str = os.pardir
 
