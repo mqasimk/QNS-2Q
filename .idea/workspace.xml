@@ -4,19 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="6258686c-39ec-4d47-99d3-26c96c78fa3a" name="Changes" comment="Comparing the effect of SPAM">
-      <change afterPath="$PROJECT_DIR$/src/optPlot.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/optWindow.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_8_8_25,_6_05 PM_[Changes]/shelved.patch" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_8_8_25__6_05PM__Changes_.xml" beforeDir="false" />
+    <list default="true" id="6258686c-39ec-4d47-99d3-26c96c78fa3a" name="Changes" comment="Optimization window plots being made.">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/params.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM/params.npz" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/reconstruct.pdf" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM/reconstruct.pdf" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/results.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM/results.npz" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/specs.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM/specs.npz" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/qnsExps.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/qnsExps.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/reconSpectra.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/reconSpectra.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/trajectories.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/trajectories.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/optWindow.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/optWindow.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -65,41 +55,41 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "Python tests.Doctests in lax_numpy.executor": "Debug",
-    "Python.IDopt.executor": "Run",
-    "Python.QNSPlots.executor": "Run",
-    "Python.Unnamed.executor": "Run",
-    "Python.analyze_this.executor": "Run",
-    "Python.main.executor": "Run",
-    "Python.observables.executor": "Run",
-    "Python.optPlot.executor": "Run",
-    "Python.optWindow.executor": "Run",
-    "Python.optimize_CZ.executor": "Run",
-    "Python.optimize_ID.executor": "Run",
-    "Python.plotters.executor": "Run",
-    "Python.qnsExps.executor": "Run",
-    "Python.qnsplots.executor": "Run",
-    "Python.reconSpectra.executor": "Run",
-    "Python.reconstruction.executor": "Run",
-    "Python.scratch.executor": "Run",
-    "Python.spectra.executor": "Debug",
-    "Python.test.executor": "Run",
-    "Python.trajectories.executor": "Run",
-    "Python.util.executor": "Run",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "main",
-    "kotlin-language-version-configured": "true",
-    "last_opened_file_path": "/home/mqasimk/IdeaProjects/QNS-2Q/src1",
-    "project.structure.last.edited": "Project",
-    "project.structure.proportion": "0.15",
-    "project.structure.side.proportion": "0.2",
-    "settings.editor.selected.configurable": "preferences.pluginManager"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;Python tests.Doctests in lax_numpy.executor&quot;: &quot;Debug&quot;,
+    &quot;Python.IDopt.executor&quot;: &quot;Run&quot;,
+    &quot;Python.QNSPlots.executor&quot;: &quot;Run&quot;,
+    &quot;Python.Unnamed.executor&quot;: &quot;Run&quot;,
+    &quot;Python.analyze_this.executor&quot;: &quot;Run&quot;,
+    &quot;Python.main.executor&quot;: &quot;Run&quot;,
+    &quot;Python.observables.executor&quot;: &quot;Run&quot;,
+    &quot;Python.optPlot.executor&quot;: &quot;Run&quot;,
+    &quot;Python.optWindow.executor&quot;: &quot;Run&quot;,
+    &quot;Python.optimize_CZ.executor&quot;: &quot;Run&quot;,
+    &quot;Python.optimize_ID.executor&quot;: &quot;Run&quot;,
+    &quot;Python.plotters.executor&quot;: &quot;Run&quot;,
+    &quot;Python.qnsExps.executor&quot;: &quot;Run&quot;,
+    &quot;Python.qnsplots.executor&quot;: &quot;Run&quot;,
+    &quot;Python.reconSpectra.executor&quot;: &quot;Run&quot;,
+    &quot;Python.reconstruction.executor&quot;: &quot;Run&quot;,
+    &quot;Python.scratch.executor&quot;: &quot;Run&quot;,
+    &quot;Python.spectra.executor&quot;: &quot;Debug&quot;,
+    &quot;Python.test.executor&quot;: &quot;Run&quot;,
+    &quot;Python.trajectories.executor&quot;: &quot;Run&quot;,
+    &quot;Python.util.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/home/mqasimk/IdeaProjects/QNS-2Q/src1&quot;,
+    &quot;project.structure.last.edited&quot;: &quot;Project&quot;,
+    &quot;project.structure.proportion&quot;: &quot;0.15&quot;,
+    &quot;project.structure.side.proportion&quot;: &quot;0.2&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;
   }
-}]]></component>
+}</component>
   <component name="PyConsoleOptionsProvider">
     <option name="myPythonConsoleState">
       <console-settings module-name="QNS-2Q" sdk-home="/usr/bin/python3.12">
@@ -541,7 +531,15 @@
       <option name="project" value="LOCAL" />
       <updated>1755095800268</updated>
     </task>
-    <option name="localTasksCounter" value="47" />
+    <task id="LOCAL-00047" summary="Optimization window plots being made.">
+      <option name="closed" value="true" />
+      <created>1757080679699</created>
+      <option name="number" value="00047" />
+      <option name="presentableId" value="LOCAL-00047" />
+      <option name="project" value="LOCAL" />
+      <updated>1757080679699</updated>
+    </task>
+    <option name="localTasksCounter" value="48" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -580,7 +578,8 @@
     <MESSAGE value="Runs" />
     <MESSAGE value="Fixed some function naming inconsistencies." />
     <MESSAGE value="Comparing the effect of SPAM" />
-    <option name="LAST_COMMIT_MESSAGE" value="Comparing the effect of SPAM" />
+    <MESSAGE value="Optimization window plots being made." />
+    <option name="LAST_COMMIT_MESSAGE" value="Optimization window plots being made." />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
