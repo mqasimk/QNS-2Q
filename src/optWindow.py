@@ -16,6 +16,9 @@ plt.rcParams.update({
     'legend.fontsize': 16,
 })
 
+def lorentzian(x, x0, gamma, A):
+    """Returns the value of a Lorentzian peak with height A."""
+    return A * gamma**2 / ((x - x0)**2 + gamma**2)
 
 # Define tau
 tau = 1
@@ -27,6 +30,22 @@ fig, axes = plt.subplots(len(T_values), 1, figsize=(8, 12))
 # Common settings
 xlim_val = 1.7 * np.pi
 nyquist_freq = np.pi / tau
+
+# --- Lorentzian peak parameters ---
+lorentz_x0 = 1.5  # Peak center (non-zero)
+lorentz_gamma = 0.4  # Peak width
+lorentz_A = 0.8  # Peak height
+
+# --- Calculate the specific sampling frequencies from the T=10*tau case ---
+T_for_sampling = 10 * tau
+omega_harmonic_for_sampling = 2 * np.pi / T_for_sampling
+max_harmonic_for_sampling = int(np.floor(xlim_val / omega_harmonic_for_sampling))
+sample_frequencies = []
+for n in range(-max_harmonic_for_sampling, max_harmonic_for_sampling + 1):
+    sample_frequencies.append(n * omega_harmonic_for_sampling)
+sample_frequencies = np.array(sample_frequencies)
+lorentzian_at_samples = lorentzian(sample_frequencies, lorentz_x0, lorentz_gamma, lorentz_A)
+
 
 # Loop through the different T values and create a subplot for each
 for i, T in enumerate(T_values):
@@ -40,7 +59,7 @@ for i, T in enumerate(T_values):
     ax.axvline(nyquist_freq, color='black', linestyle='-', linewidth=2.5, label=r'$|\omega_\text{Ny}|$')
     ax.axvline(-nyquist_freq, color='black', linestyle='-', linewidth=2.5)
 
-    # Plot dashed lines for harmonics
+    # Plot dashed lines for harmonics for the current T
     omega_harmonic = 2 * np.pi / T
     max_harmonic = int(np.floor(xlim_val / omega_harmonic))
     
@@ -63,6 +82,10 @@ for i, T in enumerate(T_values):
                 harmonic_labels.append(r'$-\omega_\text{Ny}$')
         else:
             harmonic_labels.append(rf'$\omega_{{{n}}}$')
+
+    # Superpose the pre-calculated sampled Lorentzian spectrum using a stem plot
+    ax.stem(sample_frequencies, lorentzian_at_samples, linefmt='r-', markerfmt='ro', basefmt=' ',
+            label='Spectrum (Sampled at T=10$\tau$)' if i == 0 else "")
 
     # Set subplot title and legend
     ax.set_title(fr'$T = {int(T/tau)}\tau$')
