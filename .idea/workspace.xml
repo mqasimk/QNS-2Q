@@ -6,7 +6,15 @@
   <component name="ChangeListManager">
     <list default="true" id="6258686c-39ec-4d47-99d3-26c96c78fa3a" name="Changes" comment="Optimization window plots being made.">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/params.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM/params.npz" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/reconstruct.pdf" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM/reconstruct.pdf" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/results.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM/results.npz" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/specs.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM/specs.npz" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/figures/optimization_windows.pdf" beforeDir="false" afterPath="$PROJECT_DIR$/src/figures/optimization_windows.pdf" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/optWindow.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/optWindow.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/qnsExps.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/qnsExps.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/spectraIn.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/spectraIn.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/trajectories.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/trajectories.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -539,7 +547,15 @@
       <option name="project" value="LOCAL" />
       <updated>1757080679699</updated>
     </task>
-    <option name="localTasksCounter" value="48" />
+    <task id="LOCAL-00048" summary="Optimization window plots being made.">
+      <option name="closed" value="true" />
+      <created>1757081788203</created>
+      <option name="number" value="00048" />
+      <option name="presentableId" value="LOCAL-00048" />
+      <option name="project" value="LOCAL" />
+      <updated>1757081788203</updated>
+    </task>
+    <option name="localTasksCounter" value="49" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">

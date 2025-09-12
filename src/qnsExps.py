@@ -48,8 +48,8 @@ class QNSExperimentConfig:
         parent_dir: The parent directory to save the results in.
     """
     tau: jnp.float32 = 2.5e-8
-    M: jnp.int32 = 15
-    t_grain: jnp.int32 = 1000
+    M: jnp.int32 = 10
+    t_grain: jnp.int32 = 3100
     truncate: jnp.int32 = 20
     w_grain: jnp.int32 = 2000
     spec_vec: list = field(default_factory=lambda: [S_11, S_22, S_1212])
@@ -64,8 +64,8 @@ class QNSExperimentConfig:
     b2: jnp.float32 = 1.
     spMit: bool = False
     T: jnp.float32 = 160*tau
-    gamma: jnp.float32 = T / 7
-    gamma_12: jnp.float32 = T / 14
+    gamma: jnp.float32 = T / 14
+    gamma_12: jnp.float32 = T / 28
     n_shots: jnp.int32 = 4000
     fname: str = "DraftRun_NoSPAM"
     parent_dir: str = os.pardir
