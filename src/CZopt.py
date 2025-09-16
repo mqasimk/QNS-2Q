@@ -26,7 +26,7 @@ class CZOptConfig:
                                                  [[38, 39], [38, 39]], [[38, 39], [38, 39]]])
     output_path_known: str = "infs_known_cz.npz"
     output_path_opt: str = "infs_opt_cz.npz"
-    plot_filename: str = "infs_GateTime_cz.png"
+    plot_filename: str = "infs_GateTime_cz.pdf"
 
     # These will be loaded from the run files
     T: float = field(init=False)
@@ -58,8 +58,8 @@ class CZOptConfig:
         self.gamma12 = params['gamma_12']
 
         self.w_ideal = jnp.linspace(0.0001, 2 * jnp.pi * 2 * self.mc / self.T, 12000)
-        self.wqns = jnp.linspace(0.001, 2 * jnp.pi * self.mc / self.T, 4000)
-        self.wkqns = jnp.array([2 * jnp.pi * (n + 1) / self.T for n in range(self.mc)])
+        self.wqns = jnp.linspace(0.0001, 2 * jnp.pi * self.mc / self.T, 4000)
+        self.wkqns = jnp.array([2 * jnp.pi * n / self.T for n in range(self.mc + 1)])
 
         self.SMat = makeSMat_k(self.specs, self.wqns, self.wkqns, self.gamma)
         self.SMat_ideal = makeSMat_k_ideal(self.w_ideal, self.gamma, self.gamma12)
@@ -309,7 +309,7 @@ def cddn(T, n):
     tk.append(T)
     tk.insert(0, 0)
     # remove duplicates
-    tk = list(dict.fromkeys(tk))
+    #tk = list(dict.fromkeys(tk))
     return jnp.array(tk)
 
 
@@ -511,7 +511,7 @@ def plot_results(config_arg: CZOptConfig, results_arg: dict):
     plt.xscale('log')
     plt.yscale('log')
     plt.grid(True, which="both", ls="--")
-    plt.savefig(os.path.join(config_arg.path, config_arg.plot_filename), dpi=800)
+    plt.savefig(os.path.join(config_arg.path, config_arg.plot_filename))
     plt.show()
 
 
@@ -519,3 +519,4 @@ if __name__ == '__main__':
     config = CZOptConfig()
     results = run_optimization(config)
     plot_results(config, results)
+
