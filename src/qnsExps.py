@@ -48,10 +48,10 @@ class QNSExperimentConfig:
         parent_dir: The parent directory to save the results in.
     """
     tau: jnp.float32 = 2.5e-8
-    M: jnp.int32 = 10
-    t_grain: jnp.int32 = 3100
+    M: jnp.int32 = 18
+    t_grain: jnp.int32 = 3500
     truncate: jnp.int32 = 20
-    w_grain: jnp.int32 = 2000
+    w_grain: jnp.int32 = 1000
     spec_vec: list = field(default_factory=lambda: [S_11, S_22, S_1212])
     a_sp: np.ndarray = field(default_factory=lambda: jnp.array([1., 1.]))
     c: np.ndarray = field(

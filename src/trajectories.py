@@ -254,7 +254,7 @@ def solver_prop(y_uv, noise_mats, t_vec, rho, n_shots):
     slice_size = 100
     n_slices = int(np.ceil(n_shots / slice_size))
     for i in range(n_slices):
-        n_arr = jnp.array(np.random.randint(0, 100, (slice_size, 2)))
+        n_arr = jnp.array(np.random.randint(0, 10000, (slice_size, 2)))
         result = jax.vmap(single_shot_prop, in_axes=[None, None, None, None, 0])(noise_mats, t_vec, y_uv, rho, n_arr)
         output.extend([qt.Qobj(jnp.array(res), dims=[[2, 2, 2], [2, 2, 2]]) for res in result])
     return output
