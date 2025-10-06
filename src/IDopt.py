@@ -6,6 +6,7 @@ import numpy as np
 import jaxopt
 import os
 from spectraIn import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
+import itertools
 
 
 ########################################################################################################################
@@ -34,9 +35,9 @@ class PulseOptimizerConfig:
             tau_divisor (int): The divisor for the pulse separation.
         """
         if reps_opt is None:
-            reps_opt = [100, 200, 300, 400]
+            reps_opt = [350, 400]
         if reps_known is None:
-            reps_known = [100, 200, 300, 400]
+            reps_known = [400]
 
         self.fname = fname
         self.parent_dir = parent_dir
@@ -67,8 +68,8 @@ class PulseOptimizerConfig:
 
         self.p1q = jnp.array([[[1, 0], [0, 1]], [[0, 1], [1, 0]], [[0, -1j], [1j, 0]], [[1, 0], [0, -1]]])
         self.p2q = jnp.array([jnp.kron(self.p1q[i], self.p1q[j]) for i in range(4) for j in range(4)])
-        self.w = jnp.linspace(0.0001, 2 * jnp.pi * self.mc / self.Tqns, 4000)
-        self.w_ideal = jnp.linspace(0.0001, 2 * jnp.pi * 2 * self.mc / self.Tqns, 8000)
+        self.w = jnp.linspace(0.00001, 2 * jnp.pi * self.mc / self.Tqns, 10000)
+        self.w_ideal = jnp.linspace(0.00001, 2 * jnp.pi * 2 * self.mc / self.Tqns, 20000)
         self.wkqns = jnp.array([2 * jnp.pi * (n + 1) / self.Tqns for n in range(self.mc)])
         self.wkqns_ideal = jnp.array([2 * jnp.pi * n / self.Tqns for n in range(2 * self.mc + 1)])
 
@@ -161,7 +162,6 @@ def Lambda_diags_wk(SMat_k_arg, Gp, M_arg, T_arg):
     p1q_local_lambda = jnp.array([[[1, 0], [0, 1]], [[0, 1], [1, 0]], [[0, -1j], [1j, 0]], [[1, 0], [0, -1]]])
     p2q_local_lambda = jnp.array(
         [jnp.kron(p1q_local_lambda[i], p1q_local_lambda[j]) for i in range(4) for j in range(4)])
-    # CO = jnp.array([CO_sum_els_wk(p2q[i], SMat_k, Gp, j, k, M, T) for i in range(p2q.size) for j in range(3) for k in range(3)])
     inds = jnp.array([0, 1, 2])
     CO_sum_map = jax.vmap(jax.vmap(jax.vmap(CO_sum_els_wk,
                                             in_axes=(None, None, None, None, 0, None, None)),
@@ -206,10 +206,9 @@ def inf_ID_wk(params_arg, ind, SMat_k_arg, M_arg, T_arg, wk_arg, tau_arg):
     L_diag = Lambda_diags_wk(SMat_k_arg, Gp, M_arg, T_arg)
     dt = tau_arg
     fid = jnp.sum(L_diag, axis=0) / 16.
-    # clustering=jnp.sum(jnp.array([((vt[i][j+1]-vt[i][j])-dt)**2/(vt[i].shape[0]) for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)
-    clustering = -jnp.sum(jnp.array(
-        [jnp.exp(-(9 / (2 * dt ** 2)) * (vt[k][l + 1] - vt[k][l]) ** 2) / vt[k].shape[0] for k in range(2) for l in
-         range(vt[k].shape[0] - 1)]), axis=0)
+    clustering = 0#-jnp.sum(jnp.array(
+        # [jnp.exp(-(9 / (2 * dt ** 2)) * (vt[k][l + 1] - vt[k][l]) ** 2) / vt[k].shape[0] for k in range(2) for l in
+        #  range(vt[k].shape[0] - 1)]), axis=0)
     return -fid - clustering
 
 
@@ -316,7 +315,7 @@ def hyperOpt_k(SMat_k_arg, nPs_arg, M_arg, T_arg, wk_arg, tau_arg):
         opt_out.append(opt_out_temp)
     inf_ID_out = jnp.array([[opt_out[i][j].state[0] for j in range(len(opt_out[0]))] for i in range(len(opt_out))])
     inds_min = jnp.unravel_index(jnp.argmin(inf_ID_out),
-                                 inf_ID_out.shape)  # jnp.where(inf_ID_out == jnp.min(inf_ID_out))
+                                 inf_ID_out.shape)
     vt_min_arr = opt_out[inds_min[0]][inds_min[1]].params
     vt_opt_0 = params_to_tk(vt_min_arr, T_arg, jnp.array([0, nPs_arg[0][inds_min[0]]]))
     vt_opt_1 = params_to_tk(vt_min_arr, T_arg, jnp.array(
@@ -391,23 +390,48 @@ def comb_vks(vk1, vk2):
         return np.concatenate((vk1[:-1], vk2[1:]))
     return np.concatenate((vk1, vk2))
 
-
-def cddn_rec(T_arg, n):
+def remove_consecutive_duplicates(input_list):
+    output_list = []
+    i = 0
+    while i < len(input_list):
+        if i + 1 < len(input_list) and input_list[i] == input_list[i+1]:
+            i += 2 # Skip both duplicates
+        else:
+            output_list.append(input_list[i])
+            i += 1
+    return output_list
+def cdd(t0, T, n):
     if n == 1:
-        return np.array([0., T_arg / 2])
-    return comb_vks([0.], comb_vks(comb_vks(cddn_rec(T_arg / 2, n - 1), [T_arg / 2]), cddn_rec(T_arg / 2, n - 1) + T_arg / 2))
-
-
-def cddn(T_arg, n):
-    return np.concatenate((np.array([0]), comb_vks(cddn_rec(T_arg, n), [T_arg])))
+        return [t0, t0 + T*0.5]
+    else:
+        return [t0] + cdd(t0, T*0.5, n-1) + [t0 + T*0.5] + cdd(t0 + T*0.5, T*0.5, n-1)
+def cddn(t0, T, n):
+    out = remove_consecutive_duplicates(cdd(t0, T, n))
+    if out[0] == 0.:
+        return out + [T]
+    else:
+        return [0.] + out + [T]
+def cddn_util(t0, T, n):
+    return remove_consecutive_duplicates(cdd(t0, T, n))
+def mqCDD(T, n, m):
+    tk1 = cddn_util(0., T, n)
+    tk2 = []
+    for i in range(len(tk1)-1):
+        tk2 += cddn_util(tk1[i], tk1[i+1]-tk1[i], m)
+    tk2 += cddn_util(tk1[-1], T-tk1[-1], m)
+    if tk1[0] != 0.:
+        tk1 = [0.] + tk1
+    if tk2[0] != 0.:
+        tk2 = [0.] + tk2
+    return [tk1 + [T], tk2 + [T]]
 
 
 def pddn(T_arg, n, M_arg):
-    out = cddn(T_arg, n)
+    out = cddn(0., T_arg, n)
     if M_arg == 1:
         return out
     for i in range(M_arg):
-        out = np.concatenate((out, cddn(T_arg, n) + (i + 1) * T_arg))
+        out = np.concatenate((out, cddn(0., T_arg, n) + (i + 1) * T_arg))
     return out
 
 
@@ -415,63 +439,85 @@ def opt_known_pulses(pLib_arg, SMat_arg, M_arg, w_arg):
     infmin = jnp.inf
     inds_min = 0
     for i in range(len(pLib_arg)):
-        for j in range(len(pLib_arg)):
-            for k in range(len(pLib_arg[i])):
-                for l in range(len(pLib_arg[j])):
-                    tk1 = pLib_arg[i][k]
-                    tk2 = pLib_arg[j][l]
-                    tk12 = make_tk12(tk1, tk2)
-                    vt = [tk1, tk2, tk12]
-                    Gp_re_map = jax.vmap(Gp_re, in_axes=(None, None, 0, None))
-                    Gp_im_map = jax.vmap(Gp_im, in_axes=(None, None, 0, None))
-                    Gp = jnp.zeros((3, 3, w_arg.size), dtype=jnp.complex64)
-                    for m in range(3):
-                        for n in range(3):
-                            Gp = Gp.at[m, n].set(
-                                Gp_re_map(vt[m], vt[n], w_arg, M_arg) + 1j * Gp_im_map(vt[m], vt[n], w_arg, M_arg))
-                    L_diag = Lambda_diags(SMat_arg, Gp, w_arg)
-                    # infidelity_arr = infidelity_arr.at[i, j, k, l].set(1-jnp.sum(L_diag, axis=0)/16)
-                    inf_ijkl = 1. - jnp.sum(L_diag, axis=0) / 16
-                    if inf_ijkl < infmin:
-                        infmin = inf_ijkl
-                        inds_min = (i, j, k, l)
-    tk1 = pLib_arg[inds_min[0]][inds_min[2]]
-    tk2 = pLib_arg[inds_min[1]][inds_min[3]]
+        tk1 = pLib_arg[i][0]
+        tk2 = pLib_arg[i][1]
+        tk12 = make_tk12(tk1, tk2)
+        vt = [tk1, tk2, tk12]
+        Gp_re_map = jax.vmap(Gp_re, in_axes=(None, None, 0, None))
+        Gp_im_map = jax.vmap(Gp_im, in_axes=(None, None, 0, None))
+        Gp = jnp.zeros((3, 3, w_arg.size), dtype=jnp.complex64)
+        for m in range(3):
+            for n in range(3):
+                Gp = Gp.at[m, n].set(
+                    Gp_re_map(vt[m], vt[n], w_arg, M_arg) + 1j * Gp_im_map(vt[m], vt[n], w_arg, M_arg))
+        L_diag = Lambda_diags(SMat_arg, Gp, w_arg)
+        # infidelity_arr = infidelity_arr.at[i, j, k, l].set(1-jnp.sum(L_diag, axis=0)/16)
+        inf_ijkl = 1. - jnp.sum(L_diag, axis=0) / 16
+        if inf_ijkl < infmin:
+            infmin = inf_ijkl
+            inds_min = i
+    tk1 = pLib_arg[inds_min][0]
+    tk2 = pLib_arg[inds_min][1]
     tk12 = make_tk12(tk1, tk2)
     vt_opt_local = [tk1, tk2, tk12]
-    return vt_opt_local, infmin
+    return vt_opt_local, infmin, inds_min
 
-
-def opt_known_pulses_k(pLib_arg, SMat_k_arg, M_arg, T_arg, wk_arg):
+def opt_known_pulses_k(pLib_arg, SMat_k_arg, M_arg, wk_arg):
     infmin = jnp.inf
     inds_min = 0
     for i in range(len(pLib_arg)):
-        for j in range(len(pLib_arg)):
-            for k in range(len(pLib_arg[i])):
-                for l in range(len(pLib_arg[j])):
-                    tk1 = pLib_arg[i][k]
-                    tk2 = pLib_arg[j][l]
-                    tk12 = make_tk12(tk1, tk2)
-                    vt = [tk1, tk2, tk12]
-                    Gp_re_map = jax.vmap(Gp_re, in_axes=(None, None, 0, None))
-                    Gp_im_map = jax.vmap(Gp_im, in_axes=(None, None, 0, None))
-                    Gp = jnp.zeros((3, 3, wk_arg.size), dtype=jnp.complex64)
-                    for m in range(3):
-                        for n in range(3):
-                            Gp = Gp.at[m, n].set(
-                                Gp_re_map(vt[m], vt[n], wk_arg, 1) + 1j * Gp_im_map(vt[m], vt[n], wk_arg, 1))
-                    L_diag = Lambda_diags_wk(SMat_k_arg, Gp, M_arg, T_arg)
-                    # infidelity_arr = infidelity_arr.at[i, j, k, l].set(1-jnp.sum(L_diag, axis=0)/16)
-                    inf_ijkl = 1. - jnp.sum(L_diag, axis=0) / 16
-                    if inf_ijkl < infmin:
-                        infmin = inf_ijkl
-                        inds_min = (i, j, k, l)
-    tk1 = pLib_arg[inds_min[0]][inds_min[2]]
-    tk2 = pLib_arg[inds_min[1]][inds_min[3]]
-    tk12 = make_tk12(tk1, tk2)
-    vt_opt_local = [tk1, tk2, tk12]
-    return vt_opt_local, infmin
+        vt = [pLib_arg[i][0], pLib_arg[i][1], make_tk12(pLib_arg[i][0], pLib_arg[i][1])]
+        Gp_re_map = jax.vmap(Gp_re, in_axes=(None, None, 0, None))
+        Gp_im_map = jax.vmap(Gp_im, in_axes=(None, None, 0, None))
+        Gp = jnp.zeros((3, 3, wk_arg.size), dtype=jnp.complex64)
+        for m in range(3):
+            for n in range(3):
+                Gp = Gp.at[m, n].set(Gp_re_map(vt[m], vt[n], wk_arg, 1) + 1j * Gp_im_map(vt[m], vt[n], wk_arg, 1))
+        L_diag = Lambda_diags_wk(SMat_k_arg, Gp, M_arg, vt[0][-1])
+        inf_i = 1. - jnp.sum(L_diag, axis=0) / 16.
+        if inf_i < infmin:
+            infmin = inf_i
+            inds_min = i
+        tk1 = pLib_arg[inds_min][0]
+        tk2 = pLib_arg[inds_min][1]
+        tk12 = make_tk12(tk1, tk2)
+        vt_opt_local = [tk1, tk2, tk12]
+    return vt_opt_local, infmin, inds_min
 
+
+def get_cdd_orders_from_index(index, cdd_lib_len, mq_cdd_orders):
+    """
+    Infers the order of the CDD sequence from its index in pLib.
+
+    Args:
+        index (int): The index of the sequence in the pLib list.
+        cdd_lib_len (int): The length of the cddLib list.
+        mq_cdd_orders (list): A list of (n, m) tuples for mqCDD orders.
+
+    Returns:
+        str: A string describing the sequence type and orders.
+    """
+    num_cdd_permutations = cdd_lib_len * (cdd_lib_len - 1)
+
+    if index < num_cdd_permutations:
+        # It's a permutation of two cddn sequences
+        # The order of cddn(..., k) is k. cddLib is 0-indexed, so order is index + 1.
+        # itertools.permutations('ABC', 2) -> (A,B), (A,C), (B,A), (B,C), (C,A), (C,B)
+        # index = i * (cdd_lib_len - 1) + j_prime
+        i = index // (cdd_lib_len - 1)
+        j_prime = index % (cdd_lib_len - 1)
+        j = j_prime if j_prime < i else j_prime + 1
+        order1 = i + 1
+        order2 = j + 1
+        return f"cddn permutation with orders ({order1}, {order2})"
+    else:
+        # It's an mqCDD sequence
+        mq_index = index - num_cdd_permutations
+        if mq_index < len(mq_cdd_orders):
+            order_n, order_m = mq_cdd_orders[mq_index]
+            return f"mqCDD sequence with orders (n={order_n}, m={order_m})"
+        else:
+            return "Index out of bounds for known sequences."
 
 def makeSMat_k(specs_arg, wk_arg, wkqns_arg, gamma_arg, gamma12_arg):
     SMat_local = jnp.zeros((3, 3, wk_arg.size), dtype=jnp.complex64)
@@ -582,67 +628,74 @@ def main():
     best_seq = 0
     best_inf = np.inf
     best_M = 0
+    inf_vs_M_known = []
     for i in config.reps_known:
-        pLib = []
+        mq_cdd_orders_log = []
         cddLib = []
         Tknown = config.Tg / i
         Mknown = i
         print("####################")
         print("T=" + str(Tknown) + " and M=" + str(i))
         print("####################")
-        if Mknown >= 10:
-            wk_local = jnp.array(
-                [0.0001] + [2 * jnp.pi * (n + 1) / Tknown for n in range(int(jnp.floor(config.Tg * config.mc / (i * config.Tqns))))])
-            wk_ideal_local = jnp.array(
-                [0.0001] + [2 * jnp.pi * (n + 1) / Tknown for n in range(int(jnp.floor(4 * config.Tg * config.mc / (i * config.Tqns))))])
-            SMat_k_local = makeSMat_k(config.specs, wk_local, jnp.concatenate((jnp.array([wk_local[0]]), config.wkqns)),
-                                      config.gamma, config.gamma12)
-            SMat_k_ideal = makeSMat_k_ideal(wk_ideal_local, config.gamma, config.gamma12)
-            # Make CDD_n libraries that respect the minimum pulse separation constraint
-            cddOrd = 1
-            make = True
-            while make:
-                pul = cddn(Tknown, cddOrd)
-                cddOrd += 1
-                for j in range(1, pul.size - 1):
-                    if pul[j + 1] - pul[j] < config.tau:
-                        make = False
-                if not make:
+        cddOrd = 1
+        make = True
+        while make:
+            pul = jnp.array(cddn(0., Tknown, cddOrd))
+            cddOrd += 1
+            for j in range(1, len(pul) - 2):
+                if pul[j + 1] - pul[j] < config.tau:
+                    make = False
+            if not make:
+                break
+            cddLib.append(pul)
+        pLib = list(itertools.permutations(cddLib, 2))
+        ncddOrd1, ncddOrd2 = 1, 1
+        make1 = True
+        while make1:
+            make2 = True
+            while make2:
+                pul = mqCDD(Tknown, ncddOrd1, ncddOrd2)
+                ncddOrd2 += 1
+                for j in range(1, len(pul[0]) - 2):
+                    if pul[0][j + 1] - pul[0][j] < config.tau:
+                        make1 = False
+                for j in range(1, len(pul[1]) - 2):
+                    if pul[1][j + 1] - pul[1][j] < config.tau:
+                        make2 = False
+                if not make2 or not make1:
                     break
-                cddLib.append(pul)
-            pLib.append(cddLib)
-            # Generate an Idling gate that is optimized using known sequences
-            known_opt, known_inf = opt_known_pulses_k(pLib, SMat_k_local, Mknown, Tknown, wk_local)
-            inf_known = infidelity_k(known_opt, SMat_k_ideal, Mknown, wk_ideal_local)
-        else:
-            cddOrd = 1
-            make = True
-            while make:
-                pul = cddn(Tknown, cddOrd)
-                cddOrd += 1
-                for j in range(1, pul.size - 2):
-                    if pul[j + 1] - pul[j] < config.tau:
-                        make = False
-                if not make:
-                    break
-                cddLib.append(pul)
-            pLib.append(cddLib)
-            # Generate an Idling gate that is optimized using known sequences
-            known_opt, known_inf = opt_known_pulses(pLib, SMat, Mknown, config.w)
+                pLib.append((jnp.array(pul[0]), jnp.array(pul[1])))
+                mq_cdd_orders_log.append((ncddOrd1, ncddOrd2 - 1))
+            ncddOrd1 += 1
+            ncddOrd2 = 1
+        # Generate an Idling gate that is optimized using known sequences
+        wk_local = jnp.array(
+            [0.00001] + [2 * jnp.pi * (n + 1) / Tknown for n in range(int(jnp.floor(config.Tg * config.mc / (i * config.Tqns))))])
+        wk_ideal_local = jnp.array(
+            [0.00001] + [2 * jnp.pi * (n + 1) / Tknown for n in range(int(jnp.floor(4 * config.Tg * config.mc / (i * config.Tqns))))])
+        SMat_k_local = makeSMat_k(config.specs, wk_local, jnp.concatenate((jnp.array([wk_local[0]]), config.wkqns)),
+                                  config.gamma, config.gamma12)
+        SMat_k_ideal = makeSMat_k_ideal(wk_ideal_local, config.gamma, config.gamma12)
+        if i < 10:
+            known_opt, known_inf, known_ind = opt_known_pulses(pLib, SMat, Mknown, config.w)
             inf_known = infidelity(known_opt, SMat_ideal, Mknown, config.w_ideal)
+        else:
+            known_opt, known_inf, known_ind = opt_known_pulses_k(pLib, SMat_k_local, Mknown, wk_local)
+            inf_known = infidelity_k(known_opt, SMat_k_ideal, Mknown, wk_ideal_local)
+        inf_vs_M_known.append((Mknown, inf_known))
         if known_inf <= best_inf:
             best_seq = known_opt
             best_inf = inf_known
             best_M = Mknown
+            best_orders_str = get_cdd_orders_from_index(known_ind, len(cddLib), mq_cdd_orders_log)
             print(
-                f"The best infidelity till now is {best_inf}; number of pulses {[best_seq[0].shape[0] - 2, best_seq[1].shape[0] - 2]}")
+                f"The best infidelity till now is {best_inf}; "
+                f"number of pulses {[best_seq[0].shape[0], best_seq[1].shape[0]]} from {best_orders_str}")
         print(f"# repetitions considered = {Mknown}")
-
     print('infidelity over known seqs: ')
     print(best_inf)
     print('number of pulses: ')
-    print([best_seq[i].shape[0] - 2 for i in range(2)])
-
+    print([best_seq[i].shape[0] for i in range(2)])
     # Optimization over new pulse sequences
     opt_seq = 0
     opt_inf = np.inf
@@ -654,9 +707,9 @@ def main():
         print(nPs)
         if Mopt >= 10:
             wk_local = jnp.array(
-                [0.0001] + [2 * jnp.pi * (n + 1) / Topt for n in range(int(jnp.floor(config.Tg * config.mc / (i * config.Tqns))))])
+                [0.00001] + [2 * jnp.pi * (n + 1) / Topt for n in range(int(jnp.floor(config.Tg * config.mc / (i * config.Tqns))))])
             wk_ideal_local = jnp.array(
-                [0.0001] + [2 * jnp.pi * (n + 1) / Topt for n in range(int(jnp.floor(4 * config.Tg * config.mc / (i * config.Tqns))))])
+                [0.00001] + [2 * jnp.pi * (n + 1) / Topt for n in range(int(jnp.floor(4 * config.Tg * config.mc / (i * config.Tqns))))])
             SMat_k_local = makeSMat_k(config.specs, wk_local, jnp.concatenate((jnp.array([wk_local[0]]), config.wkqns)),
                                       config.gamma, config.gamma12)
             SMat_k_ideal = makeSMat_k_ideal(wk_ideal_local, config.gamma, config.gamma12)
@@ -677,15 +730,43 @@ def main():
     print('infidelity over optimized seqs: ')
     print(opt_inf)
     print('number of pulses: ')
-    print([opt_seq[i].shape[0] - 2 for i in range(2)])
+    print([opt_seq[i].shape[0] for i in range(2)])
 
     np.savez(os.path.join(config.path, 'optimizeLog.npz'), gtime=config.Tg, best_inf=best_inf, best_seq_1=best_seq[0],
              best_seq_2=best_seq[1], best_seq_12=best_seq[2], best_M=best_M, opt_inf=opt_inf, opt_seq_1=opt_seq[0],
              opt_seq_2=opt_seq[1], opt_seq_12=opt_seq[2], opt_M=opt_M)
 
-    # Plotting
+    # Plotting results
     plot_results(config, best_seq, best_M, opt_seq, opt_M)
+    plot_inf_vs_m(config, inf_vs_M_known)
 
+
+def plot_inf_vs_m(config, inf_vs_m_data):
+    """
+    Plots the best infidelity found for each M against M for known sequences.
+
+    Args:
+        config (PulseOptimizerConfig): The configuration object.
+        inf_vs_m_data (list): A list of (M, infidelity) tuples.
+    """
+    if not inf_vs_m_data:
+        print("No data to plot for infidelity vs. M.")
+        return
+
+    m_values, infidelities = zip(*sorted(inf_vs_m_data))
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(m_values, infidelities, 'o-', label='Best Infidelity for Known Sequences')
+    plt.xlabel('Number of Repetitions (M)')
+    plt.ylabel('Best Infidelity')
+    plt.title('Best Infidelity vs. Number of Repetitions (M)')
+    plt.grid(True, which='both', linestyle='--')
+    plt.yscale('log')
+    plt.legend()
+    plt.tight_layout()
+    save_path = os.path.join(config.path, 'infidelity_vs_M_known.pdf')
+    plt.savefig(save_path)
+    print(f"Saved infidelity vs. M plot to {save_path}")
 
 def plot_results(config, known_opt, best_M, vt_opt, opt_M):
     """Plots the results of the optimization."""
@@ -860,7 +941,7 @@ def plot_results(config, known_opt, best_M, vt_opt, opt_M):
                r'Re[$G^{+,\text{known}}_{2,2;12,12}(\omega, T)$]',
                r'Im[$G^{+,\text{known}}_{2,2;12,12}(\omega, T)$]']
               , fontsize=legendfont, loc='lower right')
-    plt.savefig(os.path.join(config.path, 'IDGateLog.pdf'))
+    plt.savefig(os.path.join(config.path, 'IDGateLog.pdf'), bbox_inches='tight')
     # plt.show()
     print('End')
 

@@ -67,7 +67,7 @@ class QNSExperimentConfig:
     gamma: jnp.float32 = T / 14
     gamma_12: jnp.float32 = T / 28
     n_shots: jnp.int32 = 4000
-    fname: str = "DraftRun_NoSPAM"
+    fname: str = "DraftRun_NoSPAM_Boring"
     parent_dir: str = os.pardir
 
     def __post_init__(self):
