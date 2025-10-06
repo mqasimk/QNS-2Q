@@ -4,9 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="6258686c-39ec-4d47-99d3-26c96c78fa3a" name="Changes" comment="Testing IDopt">
+    <list default="true" id="6258686c-39ec-4d47-99d3-26c96c78fa3a" name="Changes" comment="IDopt confirmed">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/optimizeLog.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM/optimizeLog.npz" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/IDopt.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/IDopt.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -166,14 +165,6 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1718933215862</updated>
-    </task>
-    <task id="LOCAL-00003" summary="Pipeline Complete. SPAM mitigation left to implement.">
-      <option name="closed" value="true" />
-      <created>1732222309920</created>
-      <option name="number" value="00003" />
-      <option name="presentableId" value="LOCAL-00003" />
-      <option name="project" value="LOCAL" />
-      <updated>1732222309920</updated>
     </task>
     <task id="LOCAL-00004" summary="Pipeline Complete. SPAM mitigation left to implement.">
       <option name="closed" value="true" />
@@ -559,7 +550,15 @@
       <option name="project" value="LOCAL" />
       <updated>1759721254485</updated>
     </task>
-    <option name="localTasksCounter" value="52" />
+    <task id="LOCAL-00052" summary="IDopt confirmed">
+      <option name="closed" value="true" />
+      <created>1759783718268</created>
+      <option name="number" value="00052" />
+      <option name="presentableId" value="LOCAL-00052" />
+      <option name="project" value="LOCAL" />
+      <updated>1759783718268</updated>
+    </task>
+    <option name="localTasksCounter" value="53" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -574,7 +573,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="Pipeline Complete. SPAM mitigation left to implement." />
     <MESSAGE value="CZ optimization has been implemented." />
     <MESSAGE value="Finalizing plots for the paper." />
     <MESSAGE value="Changing the realistic measurement sims" />
@@ -599,7 +597,8 @@
     <MESSAGE value="Improving sims" />
     <MESSAGE value="NCDD and mqCDD implemented" />
     <MESSAGE value="Testing IDopt" />
-    <option name="LAST_COMMIT_MESSAGE" value="Testing IDopt" />
+    <MESSAGE value="IDopt confirmed" />
+    <option name="LAST_COMMIT_MESSAGE" value="IDopt confirmed" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -611,8 +610,13 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/IDopt.py</url>
-          <line>327</line>
-          <option name="timeStamp" value="42" />
+          <line>711</line>
+          <option name="timeStamp" value="44" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/IDopt.py</url>
+          <line>701</line>
+          <option name="timeStamp" value="48" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>

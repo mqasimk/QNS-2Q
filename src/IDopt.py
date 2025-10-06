@@ -35,9 +35,9 @@ class PulseOptimizerConfig:
             tau_divisor (int): The divisor for the pulse separation.
         """
         if reps_opt is None:
-            reps_opt = [400]
+            reps_opt = [100]
         if reps_known is None:
-            reps_known = [400]
+            reps_known = [i for i in range(1, 101)]
 
         self.fname = fname
         self.parent_dir = parent_dir
@@ -187,7 +187,7 @@ def inf_ID(params_arg, i, SMat_arg, M_arg, T_arg, w_arg, tau_arg):
     fid = jnp.sum(L_diag, axis=0) / 16.
     # clustering=jnp.sum(jnp.array([((vt[i][j+1]-vt[i][j])-dt)**2 for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)
     clustering = -jnp.sum(jnp.array(
-        [(vt[k][l + 1] - vt[k][l])**2 / vt[k].shape[0]**2 for k in range(2) for l in
+        [((vt[k][l + 1] - vt[k][l]) - dt)**2 / vt[k].shape[0]**2 for k in range(2) for l in
          range(vt[k].shape[0] - 1)]), axis=0)
     return -fid - clustering
 
@@ -207,7 +207,7 @@ def inf_ID_wk(params_arg, ind, SMat_k_arg, M_arg, T_arg, wk_arg, tau_arg):
     dt = tau_arg
     fid = jnp.sum(L_diag, axis=0) / 16.
     clustering = -jnp.sum(jnp.array(
-        [(vt[k][l + 1] - vt[k][l])**2 / vt[k].shape[0]**2 for k in range(2) for l in
+        [((vt[k][l + 1] - vt[k][l]) - dt)**2 / vt[k].shape[0]**2 for k in range(2) for l in
          range(vt[k].shape[0] - 1)]), axis=0)
     #-jnp.sum(jnp.array(
     #     [jnp.exp(-(9 / (2 * dt ** 2)) * (vt[k][l + 1] - vt[k][l]) ** 2) / vt[k].shape[0] for k in range(2) for l in
@@ -284,7 +284,7 @@ def hyperOpt(SMat_arg, nPs_arg, M_arg, T_arg, w_arg, tau_arg):
             bnds = (lower_bnd, upper_bnd)
             opt = optimizer.run(vt, bnds, i, SMat_arg, M_arg, T_arg, w_arg, tau_arg)
             opt_out_temp.append(opt)
-            print("Optimized Cost: " + str(opt.state[0]) + ", No. of pulses on qubits:" + str([i, j]))
+            print(f"    - Optimized with ({i}, {j}) pulses. Cost: {opt.state[0]:.4e}")
         opt_out.append(opt_out_temp)
     inf_ID_out = jnp.array([[opt_out[i][j].state[0] for j in range(len(opt_out[0]))] for i in range(len(opt_out))])
     inds_min = jnp.unravel_index(jnp.argmin(inf_ID_out),
@@ -315,7 +315,7 @@ def hyperOpt_k(SMat_k_arg, nPs_arg, M_arg, T_arg, wk_arg, tau_arg):
             bnds = (lower_bnd, upper_bnd)
             opt = optimizer.run(vt, bnds, i, SMat_k_arg, M_arg, T_arg, wk_arg, tau_arg)
             opt_out_temp.append(opt)
-            print("Optimized Cost: " + str(opt.state[0]) + ", No. of pulses on qubits:" + str([i, j]))
+            print(f"    - Optimized with ({i}, {j}) pulses. Cost: {opt.state[0]:.4e}")
         opt_out.append(opt_out_temp)
     inf_ID_out = jnp.array([[opt_out[i][j].state[0] for j in range(len(opt_out[0]))] for i in range(len(opt_out))])
     inds_min = jnp.unravel_index(jnp.argmin(inf_ID_out),
@@ -560,6 +560,65 @@ def makeSMat_k_ideal(wk_arg, gamma_arg, gamma12_arg):
     return SMat_ideal_local
 
 
+def construct_pulse_library(T_seq, tau_min, max_pulses=50):
+    """
+    Constructs a library of known pulse sequences (cddn permutations and mqCDD).
+
+    Args:
+        T_seq (float): The total time for a single sequence repetition.
+        tau_min (float): The minimum allowed time between pulses.
+        max_pulses (int): The maximum number of pulses allowed in a single sequence.
+
+    Returns:
+        tuple: A tuple containing:
+            - pLib (list): The library of pulse sequences. Each element is a tuple of two pulse time arrays.
+            - cddLib (list): The library of single-qubit cddn sequences used.
+            - mq_cdd_orders_log (list): A list of (n, m) orders for the mqCDD sequences.
+    """
+    # 1. Generate single-qubit cddn sequences until pulse separation is too small
+    cddLib = []
+    cddOrd = 1
+    while True:
+        pul = jnp.array(cddn(0., T_seq, cddOrd))
+        if any(pul[j + 1] - pul[j] < tau_min for j in range(1, len(pul) - 2)):
+            break
+        cddLib.append(pul)
+        cddOrd += 1
+
+    # 2. Create permutations of the single-qubit sequences
+    pLib = list(itertools.permutations(cddLib, 2))
+
+    # 3. Generate and add multi-qubit (mqCDD) sequences
+    mq_cdd_orders_log = []
+    ncddOrd1 = 1
+    while True:
+        ncddOrd2 = 1
+        pul_n = mqCDD(T_seq, ncddOrd1, ncddOrd2)[0]
+        if any(pul_n[j + 1] - pul_n[j] < tau_min for j in range(1, len(pul_n) - 2)):
+            break  # Stop if the outer sequence pulses are too close
+
+        while True:
+            pul = mqCDD(T_seq, ncddOrd1, ncddOrd2)
+            if any(pul[1][j + 1] - pul[1][j] < tau_min for j in range(1, len(pul[1]) - 2)):
+                break  # Stop if the inner sequence pulses are too close
+            pLib.append((jnp.array(pul[0]), jnp.array(pul[1])))
+            mq_cdd_orders_log.append((ncddOrd1, ncddOrd2))
+            ncddOrd2 += 1
+        ncddOrd1 += 1
+
+    # 4. Prune the library based on the maximum number of pulses
+    # Note: This is inefficient as it rebuilds lists. For very large libraries, a different approach may be needed.
+    pruned_pLib = [p for p in pLib if (len(p[0]) - 2) <= max_pulses and (len(p[1]) - 2) <= max_pulses]
+    
+    # We need to find which mq_cdd_orders correspond to the pruned pLib
+    num_cdd_perms = len(list(itertools.permutations(cddLib, 2)))
+    pruned_mq_cdd_orders_log = [mq_cdd_orders_log[i] for i, p in enumerate(pLib[num_cdd_perms:]) if (len(p[0]) - 2) <= max_pulses and (len(p[1]) - 2) <= max_pulses]
+
+    pLib = pruned_pLib
+    mq_cdd_orders_log = pruned_mq_cdd_orders_log
+    return pLib, cddLib, mq_cdd_orders_log
+
+
 ########################################################################################################################
 ########################################################################################################################
 #
@@ -614,64 +673,41 @@ def main():
             T2q2 = (taxis[i] + taxis[i - 1]) * 0.5
             break
 
-    print("###########################################################################################")
-    print(f"The base sequence time T = {config.T / 1e-6} us")
-    print(f"T2 time for qubit 1 is {np.round(T2q1 / 1e-6, 2)} us")
-    print(f"T2 time for qubit 2 is {np.round(T2q2 / 1e-6, 2)} us")
-    print("###########################################################################################")
-    print("In terms of T,")
-    print(f"T2 time for qubit 1 is {np.round(T2q1 / config.T, 2)} T")
-    print(f"T2 time for qubit 2 is {np.round(T2q2 / config.T, 2)} T")
-    print("###########################################################################################")
-
-    print("###########################################################################################")
-    print(f"Optimizing the Idling gate for {np.round(config.Tg / T2q1, 2)} T2q1 or {np.round(config.Tg / T2q2, 2)} T2q2")
-    print("###########################################################################################")
+    header_width = 80
+    print("\n" + "=" * header_width)
+    print(" " * 25 + "Pulse Sequence Optimization")
+    print("=" * header_width)
+    print(f" Gate Time (Tg): {config.Tg / 1e-6:<.2f} us")
+    print(f" Base Sequence Time (T_QNS): {config.T / 1e-6:<.2f} us")
+    print("-" * header_width)
+    print(" System Coherence:")
+    print(f"  - Qubit 1 T2: {T2q1 / 1e-6:<.2f} us  ({T2q1 / config.T:<.2f} T_QNS)")
+    print(f"  - Qubit 2 T2: {T2q2 / 1e-6:<.2f} us  ({T2q2 / config.T:<.2f} T_QNS)")
+    print(f" Target gate time is {config.Tg / T2q1:.2f}x T2_Q1 and {config.Tg / T2q2:.2f}x T2_Q2.")
+    print("=" * header_width + "\n")
 
     # Optimization over known pulse sequences
-    best_seq = 0
+    best_seq = [jnp.array([]), jnp.array([])]
     best_inf = np.inf
     best_M = 0
     inf_vs_M_known = []
+    nP_max = 100
     for i in config.reps_known:
-        mq_cdd_orders_log = []
-        cddLib = []
         Tknown = config.Tg / i
         Mknown = i
-        print("####################")
-        print("T=" + str(Tknown) + " and M=" + str(i))
-        print("####################")
-        cddOrd = 1
-        make = True
-        while make:
-            pul = jnp.array(cddn(0., Tknown, cddOrd))
-            cddOrd += 1
-            for j in range(1, len(pul) - 2):
-                if pul[j + 1] - pul[j] < config.tau:
-                    make = False
-            if not make:
-                break
-            cddLib.append(pul)
-        pLib = list(itertools.permutations(cddLib, 2))
-        ncddOrd1, ncddOrd2 = 1, 1
-        make1 = True
-        while make1:
-            make2 = True
-            while make2:
-                pul = mqCDD(Tknown, ncddOrd1, ncddOrd2)
-                ncddOrd2 += 1
-                for j in range(1, len(pul[0]) - 2):
-                    if pul[0][j + 1] - pul[0][j] < config.tau:
-                        make1 = False
-                for j in range(1, len(pul[1]) - 2):
-                    if pul[1][j + 1] - pul[1][j] < config.tau:
-                        make2 = False
-                if not make2 or not make1:
-                    break
-                pLib.append((jnp.array(pul[0]), jnp.array(pul[1])))
-                mq_cdd_orders_log.append((ncddOrd1, ncddOrd2 - 1))
-            ncddOrd1 += 1
-            ncddOrd2 = 1
+        print("-" * header_width)
+        print(f"Optimizing Known Sequences for M = {Mknown} (T_seq = {Tknown/1e-6:.4f} us)")
+        print("-" * header_width)
+
+        pLib, cddLib, mq_cdd_orders_log = construct_pulse_library(Tknown, config.tau, max_pulses=int(nP_max/Mknown))
+
+        # Check if the library is empty and terminate if so
+        if not pLib:
+            print("\n" + "!"*header_width)
+            print(f"Terminating known sequence optimization at M={Mknown}, T={Tknown} because no valid sequences could be generated.")
+            print("The sequence time is likely too short for the given pulse separation and max pulse constraints.")
+            break
+
         # Generate an Idling gate that is optimized using known sequences
         wk_local = jnp.array(
             [0.00001] + [2 * jnp.pi * (n + 1) / Tknown for n in range(int(jnp.floor(config.Tg * config.mc / (i * config.Tqns))))])
@@ -692,24 +728,32 @@ def main():
             best_inf = inf_known
             best_M = Mknown
             best_orders_str = get_cdd_orders_from_index(known_ind, len(cddLib), mq_cdd_orders_log)
-            print(
-                f"The best infidelity till now is {best_inf}; "
-                f"number of pulses {[best_seq[0].shape[0], best_seq[1].shape[0]]} from {best_orders_str}")
-        print(f"# repetitions considered = {Mknown}")
-    print('infidelity over known seqs: ')
-    print(best_inf)
-    print('number of pulses: ')
-    print([best_seq[i].shape[0] for i in range(2)])
+            print("\n>>> New Best Known Sequence Found!")
+            print(f"    Infidelity: {best_inf:.4e}")
+            print(f"    Pulses: [{best_seq[0].shape[0] - 2}, {best_seq[1].shape[0] - 2}]")
+            print(f"    Sequence Type: {best_orders_str}\n")
+
+    print("\n" + "=" * header_width)
+    print("Summary for Known Sequence Optimization")
+    print("-" * header_width)
+    print(f"Best Infidelity: {best_inf:.4e}")
+    print(f"Optimal Repetitions (M): {best_M}")
+    print(f"Number of Pulses: [{best_seq[0].shape[0] - 2}, {best_seq[1].shape[0] - 2}]")
+    print("=" * header_width + "\n")
+
     # Optimization over new pulse sequences
-    opt_seq = 0
+    opt_seq = [jnp.array([]), jnp.array([])]
     opt_inf = np.inf
     opt_M = 0
     inf_vs_M_opt = []
     for i in config.reps_opt:
         Topt = config.Tg / i
         Mopt = i
-        nPs = np.random.randint(1, Topt / config.tau, (2, 4))
-        print(nPs)
+        nPs = np.random.randint(1, max(2, Topt / config.tau), (2, 4))
+        print("-" * header_width)
+        print(f"Optimizing New Sequences for M = {Mopt} (T_seq = {Topt/1e-6:.4f} us)")
+        print(f"Pulse numbers to try: {nPs[0]} for Q1, {nPs[1]} for Q2")
+        print("-" * header_width)
         if Mopt >= 10:
             wk_local = jnp.array(
                 [0.00001] + [2 * jnp.pi * (n + 1) / Topt for n in range(int(jnp.floor(config.Tg * config.mc / (i * config.Tqns))))])
@@ -729,14 +773,17 @@ def main():
             opt_seq = vt_opt
             opt_inf = inf_opt
             opt_M = Mopt
-            print(
-                f"The best infidelity till now is {opt_inf}; number of pulses {[opt_seq[0].shape[0] - 2, opt_seq[1].shape[0] - 2]}")
-        print(f"# repetitions considered = {Mopt}")
+            print("\n>>> New Best Optimized Sequence Found!")
+            print(f"    Infidelity: {opt_inf:.4e}")
+            print(f"    Pulses: [{opt_seq[0].shape[0] - 2}, {opt_seq[1].shape[0] - 2}]\n")
 
-    print('infidelity over optimized seqs: ')
-    print(opt_inf)
-    print('number of pulses: ')
-    print([opt_seq[i].shape[0] for i in range(2)])
+    print("\n" + "=" * header_width)
+    print("Summary for New Sequence Optimization")
+    print("-" * header_width)
+    print(f"Best Infidelity: {opt_inf:.4e}")
+    print(f"Optimal Repetitions (M): {opt_M}")
+    print(f"Number of Pulses: [{opt_seq[0].shape[0] - 2}, {opt_seq[1].shape[0] - 2}]")
+    print("=" * header_width + "\n")
 
     np.savez(os.path.join(config.path, 'optimizeLog.npz'), gtime=config.Tg, best_inf=best_inf, best_seq_1=best_seq[0],
              best_seq_2=best_seq[1], best_seq_12=best_seq[2], best_M=best_M, opt_inf=opt_inf, opt_seq_1=opt_seq[0],
