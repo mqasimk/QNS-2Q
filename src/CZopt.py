@@ -20,7 +20,7 @@ class CZOptConfig:
     run_name: str = "DraftRun_NoSPAM"
     parent_dir: str = os.pardir
     Jmax: float = 3e6
-    gate_time_factors: list = field(default_factory=lambda: [1, 2, 3, 3.5, 4, 4.5, 5])
+    gate_time_factors: list = field(default_factory=lambda: [1, 2, 3, 4, 5, 6, 7, 8])
     nplist: list = field(default_factory=lambda: [[[158], [158]], [[78], [78]], [[38, 39], [38, 39]], [[38, 39], [38, 39]],
                                                  [[38, 39], [38, 39]], [[38, 39], [38, 39]], [[38, 39], [38, 39]],
                                                  [[38, 39], [38, 39]], [[38, 39], [38, 39]]])
@@ -254,21 +254,21 @@ def hyperOpt(SMat, nPs, M, T, w, Jmax, tau, vtin=None):
         for i, vt1 in enumerate(vtin):
             opt_out_temp = []
             for j, vt2 in enumerate(vtin):
-                vt = jnp.concatenate((vt1[1:-1], vt2[1:-1]))
+                vt = jnp.concatenate((vt1, vt2))
                 lower_bnd = jnp.zeros(vt.size)
                 upper_bnd = jnp.ones(vt.size) * T
                 bnds = (lower_bnd, upper_bnd)
-                opt = optimizer.run(vt, bnds, vt1[1:-1].size, vt2[1:-1].size, SMat, M, T, w, Jmax, tau)
+                opt = optimizer.run(vt, bnds, vt1.size, vt2.size, SMat, M, T, w, Jmax, tau)
                 opt_out_temp.append(opt)
                 print("Optimized Cost: " + str(opt.state[0]) + ", No. of pulses on qubits:" + str(
-                    [vt1[1:-1].size, vt2[1:-1].size]))
+                    [vt1.size, vt2.size]))
             opt_out.append(opt_out_temp)
         inf_ID_out = jnp.array([[opt_out[i][j].state[0] for j in range(len(opt_out[0]))] for i in range(len(opt_out))])
         inds_min = jnp.unravel_index(jnp.argmin(inf_ID_out), inf_ID_out.shape)
         vt_opt_0 = vtin[inds_min[0]]
         vt_opt_1 = vtin[inds_min[1]]
         vt_opt = [vt_opt_0, vt_opt_1, make_tk12(vt_opt_0, vt_opt_1)]
-        tax = jnp.linspace(0, T, 1000)
+        tax = jnp.linspace(0, T, 10000)
         Jopt = np.maximum(np.minimum(jnp.pi * 0.25 / (M * jax.scipy.integrate.trapezoid(y_t(tax, vt_opt[2]), tax)),
                                      Jmax), -Jmax)
     return vt_opt, infidelity(vt_opt, SMat, M, w, Jopt), Jopt
@@ -411,8 +411,8 @@ def run_optimization(config_arg: CZOptConfig):
         for j in [1]:
             pLib = []
             cddLib = []
-            Tknown = j * Tg
-            Mknown = int(1 / j)
+            Tknown = Tg/j
+            Mknown = j
             if Tknown < config_arg.tau:
                 continue
             
@@ -455,18 +455,18 @@ def run_optimization(config_arg: CZOptConfig):
         
         best_inf = np.inf
         for j in [1]:
-            Topt = j * Tg
-            Mopt = int(1 / j)
+            Topt = Tg/j
+            Mopt = int(j)
             if Topt < config_arg.tau:
                 continue
             
             nps = config_arg.nplist[count]
-            if 1 <= i <= 6:
-                vt_opt, opt_inf, Jopt = hyperOpt(config_arg.SMat, nps, Mopt, Topt, config_arg.wqns, config_arg.Jmax, config_arg.tau,
-                                                 [jnp.linspace(0, Topt, int(Topt / config_arg.tau))])
-            else:
-                vt_opt, opt_inf, Jopt = hyperOpt(config_arg.SMat, nps, Mopt, Topt, config_arg.wqns, config_arg.Jmax, config_arg.tau)
-                count += 1
+            #if 1 <= i <= 6:
+            vt_opt, opt_inf, Jopt = hyperOpt(config_arg.SMat, nps, Mopt, Topt, config_arg.wqns, config_arg.Jmax, config_arg.tau,
+                                                 [jnp.linspace(0, Topt, int(Topt / config_arg.tau)+2)[1:-1]])
+            #else:
+            #    vt_opt, opt_inf, Jopt = hyperOpt(config_arg.SMat, nps, Mopt, Topt, config_arg.wqns, config_arg.Jmax, config_arg.tau)
+            #    count += 1
             
             inf_opt = infidelity(vt_opt, config_arg.SMat_ideal, Mopt, config_arg.w_ideal, Jopt)
             if inf_opt <= best_inf:

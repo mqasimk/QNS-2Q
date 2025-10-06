@@ -4,18 +4,19 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="6258686c-39ec-4d47-99d3-26c96c78fa3a" name="Changes" comment="Improving sims">
+    <list default="true" id="6258686c-39ec-4d47-99d3-26c96c78fa3a" name="Changes" comment="NCDD and mqCDD implemented">
+      <change afterPath="$PROJECT_DIR$/DraftRun_NoSPAM/IDGateLog_1.pdf" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/plotter_cz.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/IDGateLog.pdf" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM/IDGateLog.pdf" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/IDGateLog.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/infs_known_cz.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM/infs_known_cz.npz" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/infs_opt_cz.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM/infs_opt_cz.npz" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/optimizeLog.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM/optimizeLog.npz" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/params.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM/params.npz" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/reconstruct.pdf" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM/reconstruct.pdf" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/results.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM/results.npz" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/specs.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM/specs.npz" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/CZopt.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/CZopt.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/IDopt.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/IDopt.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/qnsExps.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/qnsExps.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/reconSpectra.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/reconSpectra.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/trajectories.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/trajectories.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/spectraIn.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/spectraIn.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -69,7 +70,7 @@
     "ModuleVcsDetector.initialDetectionPerformed": "true",
     "Python tests.Doctests in lax_numpy.executor": "Debug",
     "Python.CZopt.executor": "Run",
-    "Python.IDopt.executor": "Run",
+    "Python.IDopt.executor": "Debug",
     "Python.QNSPlots.executor": "Run",
     "Python.Unnamed.executor": "Run",
     "Python.analyze_this.executor": "Run",
@@ -79,6 +80,7 @@
     "Python.optWindow.executor": "Run",
     "Python.optimize_CZ.executor": "Run",
     "Python.optimize_ID.executor": "Run",
+    "Python.plotter_cz.executor": "Run",
     "Python.plotters.executor": "Run",
     "Python.qnsExps.executor": "Run",
     "Python.qnsplots.executor": "Run",
@@ -86,6 +88,7 @@
     "Python.reconstruction.executor": "Run",
     "Python.scratch.executor": "Run",
     "Python.spectra.executor": "Debug",
+    "Python.spectraIn.executor": "Run",
     "Python.test.executor": "Run",
     "Python.trajectories.executor": "Run",
     "Python.util.executor": "Run",
@@ -97,7 +100,7 @@
     "project.structure.last.edited": "Project",
     "project.structure.proportion": "0.15",
     "project.structure.side.proportion": "0.2",
-    "settings.editor.selected.configurable": "preferences.pluginManager"
+    "settings.editor.selected.configurable": "com.android.studio.ml.bot.mainConfigurable"
   }
 }]]></component>
   <component name="PyConsoleOptionsProvider">
@@ -172,14 +175,6 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1718933215862</updated>
-    </task>
-    <task id="LOCAL-00001" summary="Included the calculation of the T2 time and the library is now made up of CDDn and UDDn pulses.">
-      <option name="closed" value="true" />
-      <created>1728416360973</created>
-      <option name="number" value="00001" />
-      <option name="presentableId" value="LOCAL-00001" />
-      <option name="project" value="LOCAL" />
-      <updated>1728416360973</updated>
     </task>
     <task id="LOCAL-00002" summary="Finalizing the optimization procedures, making them more generalized.">
       <option name="closed" value="true" />
@@ -565,7 +560,15 @@
       <option name="project" value="LOCAL" />
       <updated>1757684238158</updated>
     </task>
-    <option name="localTasksCounter" value="50" />
+    <task id="LOCAL-00050" summary="NCDD and mqCDD implemented">
+      <option name="closed" value="true" />
+      <created>1758056037207</created>
+      <option name="number" value="00050" />
+      <option name="presentableId" value="LOCAL-00050" />
+      <option name="project" value="LOCAL" />
+      <updated>1758056037208</updated>
+    </task>
+    <option name="localTasksCounter" value="51" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -580,7 +583,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="Saving all changes before making the objective function JITable." />
     <MESSAGE value="Finalizing the optimization procedures, making them more generalized." />
     <MESSAGE value="Pipeline Complete. SPAM mitigation left to implement." />
     <MESSAGE value="CZ optimization has been implemented." />
@@ -605,7 +607,8 @@
     <MESSAGE value="Comparing the effect of SPAM" />
     <MESSAGE value="Optimization window plots being made." />
     <MESSAGE value="Improving sims" />
-    <option name="LAST_COMMIT_MESSAGE" value="Improving sims" />
+    <MESSAGE value="NCDD and mqCDD implemented" />
+    <option name="LAST_COMMIT_MESSAGE" value="NCDD and mqCDD implemented" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -616,14 +619,14 @@
           <option name="timeStamp" value="8" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/CZopt.py</url>
-          <line>305</line>
-          <option name="timeStamp" value="12" />
+          <url>file://$PROJECT_DIR$/src/IDopt.py</url>
+          <line>706</line>
+          <option name="timeStamp" value="36" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/CZopt.py</url>
-          <line>312</line>
-          <option name="timeStamp" value="15" />
+          <url>file://$PROJECT_DIR$/src/IDopt.py</url>
+          <line>716</line>
+          <option name="timeStamp" value="37" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
