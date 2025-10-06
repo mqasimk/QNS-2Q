@@ -35,7 +35,7 @@ class PulseOptimizerConfig:
             tau_divisor (int): The divisor for the pulse separation.
         """
         if reps_opt is None:
-            reps_opt = [350, 400]
+            reps_opt = [400]
         if reps_known is None:
             reps_known = [400]
 
@@ -187,14 +187,14 @@ def inf_ID(params_arg, i, SMat_arg, M_arg, T_arg, w_arg, tau_arg):
     fid = jnp.sum(L_diag, axis=0) / 16.
     # clustering=jnp.sum(jnp.array([((vt[i][j+1]-vt[i][j])-dt)**2 for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)
     clustering = -jnp.sum(jnp.array(
-        [jnp.exp(-(9 / (2 * dt ** 2)) * (vt[k][l + 1] - vt[k][l]) ** 2) / vt[k].shape[0] for k in range(2) for l in
+        [(vt[k][l + 1] - vt[k][l])**2 / vt[k].shape[0]**2 for k in range(2) for l in
          range(vt[k].shape[0] - 1)]), axis=0)
     return -fid - clustering
 
 
 def inf_ID_wk(params_arg, ind, SMat_k_arg, M_arg, T_arg, wk_arg, tau_arg):
-    vt1 = jnp.sort(jnp.concatenate((jnp.array([0]), params_arg[:ind], jnp.array([T_arg]))))
-    vt2 = jnp.sort(jnp.concatenate((jnp.array([0]), params_arg[ind:], jnp.array([T_arg]))))
+    vt1 = jnp.sort(jnp.concatenate((jnp.array([0.]), params_arg[:ind], jnp.array([T_arg]))))
+    vt2 = jnp.sort(jnp.concatenate((jnp.array([0.]), params_arg[ind:], jnp.array([T_arg]))))
     vt12 = make_tk12(vt1, vt2)
     vt = [vt1, vt2, vt12]
     Gp_re_map = jax.vmap(Gp_re, in_axes=(None, None, 0, None))
@@ -206,9 +206,12 @@ def inf_ID_wk(params_arg, ind, SMat_k_arg, M_arg, T_arg, wk_arg, tau_arg):
     L_diag = Lambda_diags_wk(SMat_k_arg, Gp, M_arg, T_arg)
     dt = tau_arg
     fid = jnp.sum(L_diag, axis=0) / 16.
-    clustering = 0#-jnp.sum(jnp.array(
-        # [jnp.exp(-(9 / (2 * dt ** 2)) * (vt[k][l + 1] - vt[k][l]) ** 2) / vt[k].shape[0] for k in range(2) for l in
-        #  range(vt[k].shape[0] - 1)]), axis=0)
+    clustering = -jnp.sum(jnp.array(
+        [(vt[k][l + 1] - vt[k][l])**2 / vt[k].shape[0]**2 for k in range(2) for l in
+         range(vt[k].shape[0] - 1)]), axis=0)
+    #-jnp.sum(jnp.array(
+    #     [jnp.exp(-(9 / (2 * dt ** 2)) * (vt[k][l + 1] - vt[k][l]) ** 2) / vt[k].shape[0] for k in range(2) for l in
+    #      range(vt[k].shape[0] - 1)]), axis=0)
     return -fid - clustering
 
 
@@ -296,15 +299,16 @@ def hyperOpt(SMat_arg, nPs_arg, M_arg, T_arg, w_arg, tau_arg):
 
 
 def hyperOpt_k(SMat_k_arg, nPs_arg, M_arg, T_arg, wk_arg, tau_arg):
-    optimizer = jaxopt.ScipyBoundedMinimize(fun=inf_ID_wk, maxiter=200, jit=False, method='L-BFGS-B',
-                                            options={'disp': False, 'gtol': 1e-9, 'ftol': 1e-6,
-                                                     'maxfun': 1000, 'maxls': 20})
+    optimizer = jaxopt.ScipyBoundedMinimize(fun=inf_ID_wk, maxiter=400, jit=False, method='L-BFGS-B',
+                                            options={'disp': False, 'gtol': 1e-7, 'ftol': 1e-7,
+                                                     'maxfun': 1000, 'maxls': 40})
     opt_out = []
     init_params = []
     for i in nPs_arg[0]:
         opt_out_temp = []
         for j in nPs_arg[1]:
-            vt = jnp.array(np.random.rand(i + j) * T_arg)
+            vt = jnp.concatenate((jnp.linspace(0, T_arg, i + 2)[1:-1], jnp.linspace(0, T_arg, j + 2)[1:-1]))
+            # jnp.array(np.random.rand(i + j) * T_arg)
             init_params.append(vt)
             lower_bnd = jnp.zeros_like(vt)
             upper_bnd = jnp.ones_like(vt) * T_arg
@@ -700,6 +704,7 @@ def main():
     opt_seq = 0
     opt_inf = np.inf
     opt_M = 0
+    inf_vs_M_opt = []
     for i in config.reps_opt:
         Topt = config.Tg / i
         Mopt = i
@@ -719,7 +724,8 @@ def main():
         else:
             vt_opt, inf_min = hyperOpt(SMat, nPs, Mopt, Topt, config.w, config.tau)
             inf_opt = infidelity(vt_opt, SMat_ideal, Mopt, config.w_ideal)
-        if inf_min <= opt_inf:
+        inf_vs_M_opt.append((Mopt, inf_opt))
+        if inf_opt <= opt_inf:
             opt_seq = vt_opt
             opt_inf = inf_opt
             opt_M = Mopt
@@ -738,33 +744,43 @@ def main():
 
     # Plotting results
     plot_results(config, best_seq, best_M, opt_seq, opt_M)
-    plot_inf_vs_m(config, inf_vs_M_known)
+    plot_inf_vs_m(config, inf_vs_M_known, inf_vs_M_opt)
 
 
-def plot_inf_vs_m(config, inf_vs_m_data):
+def plot_inf_vs_m(config, inf_vs_m_known, inf_vs_m_opt):
     """
-    Plots the best infidelity found for each M against M for known sequences.
+    Plots the best infidelity found for each M against M for known and optimized sequences.
 
     Args:
         config (PulseOptimizerConfig): The configuration object.
-        inf_vs_m_data (list): A list of (M, infidelity) tuples.
+        inf_vs_m_known (list): A list of (M, infidelity) tuples for known sequences.
+        inf_vs_m_opt (list): A list of (M, infidelity) tuples for optimized sequences.
     """
-    if not inf_vs_m_data:
-        print("No data to plot for infidelity vs. M.")
+    plt.figure(figsize=(10, 6))
+
+    if inf_vs_m_known:
+        m_values_known, infidelities_known = zip(*sorted(inf_vs_m_known))
+        plt.plot(m_values_known, infidelities_known, 'o-', label='Best Infidelity (Known Seqs)')
+    else:
+        print("No data to plot for known sequences infidelity vs. M.")
+
+    if inf_vs_m_opt:
+        m_values_opt, infidelities_opt = zip(*sorted(inf_vs_m_opt))
+        plt.plot(m_values_opt, infidelities_opt, 's--', label='Best Infidelity (Optimized Seqs)')
+    else:
+        print("No data to plot for optimized sequences infidelity vs. M.")
+
+    if not inf_vs_m_known and not inf_vs_m_opt:
         return
 
-    m_values, infidelities = zip(*sorted(inf_vs_m_data))
-
-    plt.figure(figsize=(10, 6))
-    plt.plot(m_values, infidelities, 'o-', label='Best Infidelity for Known Sequences')
     plt.xlabel('Number of Repetitions (M)')
     plt.ylabel('Best Infidelity')
-    plt.title('Best Infidelity vs. Number of Repetitions (M)')
+    plt.title('Infidelity vs. Number of Repetitions (M)')
     plt.grid(True, which='both', linestyle='--')
     plt.yscale('log')
     plt.legend()
     plt.tight_layout()
-    save_path = os.path.join(config.path, 'infidelity_vs_M_known.pdf')
+    save_path = os.path.join(config.path, 'infidelity_vs_M.pdf')
     plt.savefig(save_path)
     print(f"Saved infidelity vs. M plot to {save_path}")
 
