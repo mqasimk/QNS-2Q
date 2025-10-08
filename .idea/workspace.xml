@@ -6,6 +6,8 @@
   <component name="ChangeListManager">
     <list default="true" id="6258686c-39ec-4d47-99d3-26c96c78fa3a" name="Changes" comment="IDopt confirmed">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/IDGateLog.pdf" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM/IDGateLog.pdf" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/optimizeLog.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM/optimizeLog.npz" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/IDopt.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/IDopt.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -55,44 +57,44 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "Python tests.Doctests in lax_numpy.executor": "Debug",
-    "Python.CZopt.executor": "Run",
-    "Python.IDopt.executor": "Run",
-    "Python.QNSPlots.executor": "Run",
-    "Python.Unnamed.executor": "Run",
-    "Python.analyze_this.executor": "Run",
-    "Python.main.executor": "Run",
-    "Python.observables.executor": "Run",
-    "Python.optPlot.executor": "Run",
-    "Python.optWindow.executor": "Run",
-    "Python.optimize_CZ.executor": "Run",
-    "Python.optimize_ID.executor": "Run",
-    "Python.plotter_cz.executor": "Run",
-    "Python.plotters.executor": "Run",
-    "Python.qnsExps.executor": "Run",
-    "Python.qnsplots.executor": "Run",
-    "Python.reconSpectra.executor": "Run",
-    "Python.reconstruction.executor": "Run",
-    "Python.scratch.executor": "Run",
-    "Python.spectra.executor": "Debug",
-    "Python.spectraIn.executor": "Run",
-    "Python.test.executor": "Run",
-    "Python.trajectories.executor": "Run",
-    "Python.util.executor": "Run",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "main",
-    "kotlin-language-version-configured": "true",
-    "last_opened_file_path": "/home/mqasimk/IdeaProjects/QNS-2Q/src1",
-    "project.structure.last.edited": "Project",
-    "project.structure.proportion": "0.15",
-    "project.structure.side.proportion": "0.2",
-    "settings.editor.selected.configurable": "com.android.studio.ml.bot.mainConfigurable"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;Python tests.Doctests in lax_numpy.executor&quot;: &quot;Debug&quot;,
+    &quot;Python.CZopt.executor&quot;: &quot;Run&quot;,
+    &quot;Python.IDopt.executor&quot;: &quot;Run&quot;,
+    &quot;Python.QNSPlots.executor&quot;: &quot;Run&quot;,
+    &quot;Python.Unnamed.executor&quot;: &quot;Run&quot;,
+    &quot;Python.analyze_this.executor&quot;: &quot;Run&quot;,
+    &quot;Python.main.executor&quot;: &quot;Run&quot;,
+    &quot;Python.observables.executor&quot;: &quot;Run&quot;,
+    &quot;Python.optPlot.executor&quot;: &quot;Run&quot;,
+    &quot;Python.optWindow.executor&quot;: &quot;Run&quot;,
+    &quot;Python.optimize_CZ.executor&quot;: &quot;Run&quot;,
+    &quot;Python.optimize_ID.executor&quot;: &quot;Run&quot;,
+    &quot;Python.plotter_cz.executor&quot;: &quot;Run&quot;,
+    &quot;Python.plotters.executor&quot;: &quot;Run&quot;,
+    &quot;Python.qnsExps.executor&quot;: &quot;Run&quot;,
+    &quot;Python.qnsplots.executor&quot;: &quot;Run&quot;,
+    &quot;Python.reconSpectra.executor&quot;: &quot;Run&quot;,
+    &quot;Python.reconstruction.executor&quot;: &quot;Run&quot;,
+    &quot;Python.scratch.executor&quot;: &quot;Run&quot;,
+    &quot;Python.spectra.executor&quot;: &quot;Debug&quot;,
+    &quot;Python.spectraIn.executor&quot;: &quot;Run&quot;,
+    &quot;Python.test.executor&quot;: &quot;Run&quot;,
+    &quot;Python.trajectories.executor&quot;: &quot;Run&quot;,
+    &quot;Python.util.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/home/mqasimk/IdeaProjects/QNS-2Q/src1&quot;,
+    &quot;project.structure.last.edited&quot;: &quot;Project&quot;,
+    &quot;project.structure.proportion&quot;: &quot;0.15&quot;,
+    &quot;project.structure.side.proportion&quot;: &quot;0.2&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;com.android.studio.ml.bot.mainConfigurable&quot;
   }
-}]]></component>
+}</component>
   <component name="PyConsoleOptionsProvider">
     <option name="myPythonConsoleState">
       <console-settings module-name="QNS-2Q" sdk-home="/usr/bin/python3.12">
@@ -165,14 +167,6 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1718933215862</updated>
-    </task>
-    <task id="LOCAL-00004" summary="Pipeline Complete. SPAM mitigation left to implement.">
-      <option name="closed" value="true" />
-      <created>1732222844099</created>
-      <option name="number" value="00004" />
-      <option name="presentableId" value="LOCAL-00004" />
-      <option name="project" value="LOCAL" />
-      <updated>1732222844099</updated>
     </task>
     <task id="LOCAL-00005" summary="Pipeline Complete. SPAM mitigation left to implement.">
       <option name="closed" value="true" />
@@ -558,7 +552,15 @@
       <option name="project" value="LOCAL" />
       <updated>1759783718268</updated>
     </task>
-    <option name="localTasksCounter" value="53" />
+    <task id="LOCAL-00053" summary="IDopt confirmed">
+      <option name="closed" value="true" />
+      <created>1759787353283</created>
+      <option name="number" value="00053" />
+      <option name="presentableId" value="LOCAL-00053" />
+      <option name="project" value="LOCAL" />
+      <updated>1759787353283</updated>
+    </task>
+    <option name="localTasksCounter" value="54" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -610,12 +612,12 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/IDopt.py</url>
-          <line>711</line>
+          <line>713</line>
           <option name="timeStamp" value="44" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/IDopt.py</url>
-          <line>701</line>
+          <line>702</line>
           <option name="timeStamp" value="48" />
         </line-breakpoint>
       </breakpoints>

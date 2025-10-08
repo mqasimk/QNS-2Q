@@ -21,8 +21,8 @@ import itertools
 class PulseOptimizerConfig:
     """A class to hold all the parameters for the optimization."""
 
-    def __init__(self, fname="DraftRun_NoSPAM", parent_dir=os.pardir, Tg=5 * 14 * 1e-6,
-                 reps_known=None, reps_opt=None, tau_divisor=80):
+    def __init__(self, fname="DraftRun_NoSPAM", parent_dir=os.pardir, Tg=5 * 14 * 1e-6, reps_known=None,
+                 reps_opt=None, tau_divisor=80, max_pulses=100):
         """
         Initializes the configuration for the pulse optimization.
 
@@ -33,9 +33,10 @@ class PulseOptimizerConfig:
             reps_known (list): A list of repetitions for the known pulse sequences.
             reps_opt (list): A list of repetitions for the optimized pulse sequences.
             tau_divisor (int): The divisor for the pulse separation.
+            max_pulses (int): The maximum total number of pulses allowed in the entire sequence (Tg).
         """
         if reps_opt is None:
-            reps_opt = [100]
+            reps_opt = [i for i in range(10, 101, 10)]
         if reps_known is None:
             reps_known = [i for i in range(1, 101)]
 
@@ -65,6 +66,7 @@ class PulseOptimizerConfig:
         self.Tg = Tg
         self.reps_known = reps_known
         self.reps_opt = reps_opt
+        self.max_pulses = max_pulses
 
         self.p1q = jnp.array([[[1, 0], [0, 1]], [[0, 1], [1, 0]], [[0, -1j], [1j, 0]], [[1, 0], [0, -1]]])
         self.p2q = jnp.array([jnp.kron(self.p1q[i], self.p1q[j]) for i in range(4) for j in range(4)])
@@ -189,7 +191,7 @@ def inf_ID(params_arg, i, SMat_arg, M_arg, T_arg, w_arg, tau_arg):
     clustering = -jnp.sum(jnp.array(
         [((vt[k][l + 1] - vt[k][l]) - dt)**2 / vt[k].shape[0]**2 for k in range(2) for l in
          range(vt[k].shape[0] - 1)]), axis=0)
-    return -fid - clustering
+    return -fid + clustering
 
 
 def inf_ID_wk(params_arg, ind, SMat_k_arg, M_arg, T_arg, wk_arg, tau_arg):
@@ -212,7 +214,7 @@ def inf_ID_wk(params_arg, ind, SMat_k_arg, M_arg, T_arg, wk_arg, tau_arg):
     #-jnp.sum(jnp.array(
     #     [jnp.exp(-(9 / (2 * dt ** 2)) * (vt[k][l + 1] - vt[k][l]) ** 2) / vt[k].shape[0] for k in range(2) for l in
     #      range(vt[k].shape[0] - 1)]), axis=0)
-    return -fid - clustering
+    return -fid + clustering
 
 
 def infidelity(params_arg, SMat_arg, M_arg, w_arg):
@@ -691,7 +693,6 @@ def main():
     best_inf = np.inf
     best_M = 0
     inf_vs_M_known = []
-    nP_max = 100
     for i in config.reps_known:
         Tknown = config.Tg / i
         Mknown = i
@@ -699,7 +700,8 @@ def main():
         print(f"Optimizing Known Sequences for M = {Mknown} (T_seq = {Tknown/1e-6:.4f} us)")
         print("-" * header_width)
 
-        pLib, cddLib, mq_cdd_orders_log = construct_pulse_library(Tknown, config.tau, max_pulses=int(nP_max/Mknown))
+        pLib, cddLib, mq_cdd_orders_log = construct_pulse_library(Tknown, config.tau,
+                                                                  max_pulses=int(config.max_pulses / Mknown))
 
         # Check if the library is empty and terminate if so
         if not pLib:
@@ -737,19 +739,42 @@ def main():
     print("Summary for Known Sequence Optimization")
     print("-" * header_width)
     print(f"Best Infidelity: {best_inf:.4e}")
-    print(f"Optimal Repetitions (M): {best_M}")
-    print(f"Number of Pulses: [{best_seq[0].shape[0] - 2}, {best_seq[1].shape[0] - 2}]")
+    if best_M > 0:
+        pulses_q1_per_rep = best_seq[0].shape[0] - 2
+        pulses_q2_per_rep = best_seq[1].shape[0] - 2
+        total_pulses_known = (pulses_q1_per_rep + pulses_q2_per_rep) * best_M
+        print(f"Optimal Repetitions (M): {best_M}")
+        print(f"Pulses per Repetition (Q1, Q2): [{pulses_q1_per_rep}, {pulses_q2_per_rep}]")
+        print(f"Total Pulses (Q1, Q2): [{pulses_q1_per_rep * best_M}, {pulses_q2_per_rep * best_M}] (Total: {total_pulses_known})")
+    else:
+        print("No optimal known sequence was found.")
     print("=" * header_width + "\n")
 
     # Optimization over new pulse sequences
-    opt_seq = [jnp.array([]), jnp.array([])]
+    opt_seq = best_seq  # Initialize with the best known sequence
     opt_inf = np.inf
     opt_M = 0
     inf_vs_M_opt = []
     for i in config.reps_opt:
         Topt = config.Tg / i
         Mopt = i
-        nPs = np.random.randint(1, max(2, Topt / config.tau), (2, 4))
+
+        max_pulses_per_rep = int(config.max_pulses / Mopt)
+        if max_pulses_per_rep < 1:
+            print("\n" + "!" * header_width)
+            print(f"Terminating new sequence optimization at M={Mopt} because max pulses per repetition is less than 1.")
+            break
+
+        # The upper bound for random pulse number selection is the minimum of what's physically possible
+        # with tau and what's allowed by the max_pulses_per_rep constraint.
+        upper_bound_pulses = min(max(2, int(Topt / config.tau)), max_pulses_per_rep + 1)
+
+        if upper_bound_pulses <= 1:
+            print(f"\nSkipping new sequence optimization for M={Mopt} because no valid number of pulses can be generated.")
+            print(f"The sequence time (T_seq={Topt / 1e-6:.4f} us) is likely too short for the given constraints.")
+            continue
+
+        nPs = np.random.randint(1, upper_bound_pulses, (2, 4))
         print("-" * header_width)
         print(f"Optimizing New Sequences for M = {Mopt} (T_seq = {Topt/1e-6:.4f} us)")
         print(f"Pulse numbers to try: {nPs[0]} for Q1, {nPs[1]} for Q2")
@@ -781,8 +806,15 @@ def main():
     print("Summary for New Sequence Optimization")
     print("-" * header_width)
     print(f"Best Infidelity: {opt_inf:.4e}")
-    print(f"Optimal Repetitions (M): {opt_M}")
-    print(f"Number of Pulses: [{opt_seq[0].shape[0] - 2}, {opt_seq[1].shape[0] - 2}]")
+    if opt_M > 0:
+        pulses_q1_per_rep_opt = opt_seq[0].shape[0] - 2
+        pulses_q2_per_rep_opt = opt_seq[1].shape[0] - 2
+        total_pulses_opt = (pulses_q1_per_rep_opt + pulses_q2_per_rep_opt) * opt_M
+        print(f"Optimal Repetitions (M): {opt_M}")
+        print(f"Pulses per Repetition (Q1, Q2): [{pulses_q1_per_rep_opt}, {pulses_q2_per_rep_opt}]")
+        print(f"Total Pulses (Q1, Q2): [{pulses_q1_per_rep_opt * opt_M}, {pulses_q2_per_rep_opt * opt_M}] (Total: {total_pulses_opt})")
+    else:
+        print("No optimal new sequence was found.")
     print("=" * header_width + "\n")
 
     np.savez(os.path.join(config.path, 'optimizeLog.npz'), gtime=config.Tg, best_inf=best_inf, best_seq_1=best_seq[0],
