@@ -22,9 +22,9 @@ class PulseOptimizerConfig:
     """A class to hold all the parameters for the optimization."""
 
     def __init__(self, fname="DraftRun_NoSPAM", parent_dir=os.pardir, Tg=5 * 14 * 1e-6, reps_known=None,
-                 reps_opt=None, tau_divisor=80, max_pulses=100):
+                 reps_opt=None, tau_divisor=160, max_pulses=800):
         """
-        Initializes the configuration for the pulse optimization.
+        Initializes the configuration for the pulse optimization.P109
 
         Args:
             fname (str): The name of the file containing the system parameters.
@@ -36,9 +36,9 @@ class PulseOptimizerConfig:
             max_pulses (int): The maximum total number of pulses allowed in the entire sequence (Tg).
         """
         if reps_opt is None:
-            reps_opt = [i for i in range(10, 101, 10)]
+            reps_opt = [i for i in range(40, 141, 10)]
         if reps_known is None:
-            reps_known = [i for i in range(1, 101)]
+            reps_known = [i for i in range(20, 141)]
 
         self.fname = fname
         self.parent_dir = parent_dir
@@ -188,10 +188,10 @@ def inf_ID(params_arg, i, SMat_arg, M_arg, T_arg, w_arg, tau_arg):
     dt = tau_arg
     fid = jnp.sum(L_diag, axis=0) / 16.
     # clustering=jnp.sum(jnp.array([((vt[i][j+1]-vt[i][j])-dt)**2 for i in range(2) for j in range(vt[i].shape[0]-1)]), axis=0)
-    clustering = -jnp.sum(jnp.array(
-        [((vt[k][l + 1] - vt[k][l]) - dt)**2 / vt[k].shape[0]**2 for k in range(2) for l in
+    clustering = jnp.sum(jnp.array(
+        [((vt[k][l + 1] - vt[k][l])-dt)**2 / vt[k].shape[0] for k in range(2) for l in
          range(vt[k].shape[0] - 1)]), axis=0)
-    return -fid + clustering
+    return -fid - clustering
 
 
 def inf_ID_wk(params_arg, ind, SMat_k_arg, M_arg, T_arg, wk_arg, tau_arg):
@@ -208,13 +208,13 @@ def inf_ID_wk(params_arg, ind, SMat_k_arg, M_arg, T_arg, wk_arg, tau_arg):
     L_diag = Lambda_diags_wk(SMat_k_arg, Gp, M_arg, T_arg)
     dt = tau_arg
     fid = jnp.sum(L_diag, axis=0) / 16.
-    clustering = -jnp.sum(jnp.array(
-        [((vt[k][l + 1] - vt[k][l]) - dt)**2 / vt[k].shape[0]**2 for k in range(2) for l in
+    clustering = jnp.sum(jnp.array(
+        [((vt[k][l + 1] - vt[k][l])-dt)**2 / vt[k].shape[0] for k in range(2) for l in
          range(vt[k].shape[0] - 1)]), axis=0)
     #-jnp.sum(jnp.array(
     #     [jnp.exp(-(9 / (2 * dt ** 2)) * (vt[k][l + 1] - vt[k][l]) ** 2) / vt[k].shape[0] for k in range(2) for l in
     #      range(vt[k].shape[0] - 1)]), axis=0)
-    return -fid + clustering
+    return -fid - clustering
 
 
 def infidelity(params_arg, SMat_arg, M_arg, w_arg):
@@ -309,8 +309,8 @@ def hyperOpt_k(SMat_k_arg, nPs_arg, M_arg, T_arg, wk_arg, tau_arg):
     for i in nPs_arg[0]:
         opt_out_temp = []
         for j in nPs_arg[1]:
-            vt = jnp.concatenate((jnp.linspace(0, T_arg, i + 2)[1:-1], jnp.linspace(0, T_arg, j + 2)[1:-1]))
-            # jnp.array(np.random.rand(i + j) * T_arg)
+            vt = jnp.array(np.random.rand(i + j) * T_arg)
+            #jnp.concatenate((jnp.linspace(0, T_arg, i + 2)[1:-1], jnp.linspace(0, T_arg, j + 2)[1:-1]))
             init_params.append(vt)
             lower_bnd = jnp.zeros_like(vt)
             upper_bnd = jnp.ones_like(vt) * T_arg
