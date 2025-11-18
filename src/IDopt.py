@@ -21,8 +21,8 @@ import itertools
 class PulseOptimizerConfig:
     """A class to hold all the parameters for the optimization."""
 
-    def __init__(self, fname="DraftRun_NoSPAM", parent_dir=os.pardir, Tg=5 * 14 * 1e-6, reps_known=None,
-                 reps_opt=None, tau_divisor=160, max_pulses=800):
+    def __init__(self, fname="DraftRun_NoSPAM", parent_dir=os.pardir, Tg=5 * 4 * 14 * 1e-6, reps_known=None,
+                 reps_opt=None, tau_divisor=160, max_pulses=400):
         """
         Initializes the configuration for the pulse optimization.P109
 
@@ -36,9 +36,9 @@ class PulseOptimizerConfig:
             max_pulses (int): The maximum total number of pulses allowed in the entire sequence (Tg).
         """
         if reps_opt is None:
-            reps_opt = [i for i in range(40, 141, 10)]
+            reps_opt = []
         if reps_known is None:
-            reps_known = [i for i in range(20, 141)]
+            reps_known = [i for i in range(10, 201, 5)]
 
         self.fname = fname
         self.parent_dir = parent_dir
@@ -275,29 +275,39 @@ def hyperOpt(SMat_arg, nPs_arg, M_arg, T_arg, w_arg, tau_arg):
                                             options={'disp': False, 'gtol': 1e-9, 'ftol': 1e-6,
                                                      'maxfun': 1000, 'maxls': 20})
     opt_out = []
-    init_params = []
-    for i in nPs_arg[0]:
+    infidelities_out = []
+    for i_idx, i in enumerate(nPs_arg[0]):
         opt_out_temp = []
-        for j in nPs_arg[1]:
-            vt = jnp.array(np.random.rand(i + j) * T_arg)
-            init_params.append(vt)
+        infidelities_temp = []
+        for j_idx, j in enumerate(nPs_arg[1]):
+            vt = jnp.concatenate((jnp.linspace(0, T_arg, i + 2)[1:-1], jnp.linspace(0, T_arg, j + 2)[1:-1]))
             lower_bnd = jnp.zeros_like(vt)
             upper_bnd = jnp.ones_like(vt) * T_arg
             bnds = (lower_bnd, upper_bnd)
             opt = optimizer.run(vt, bnds, i, SMat_arg, M_arg, T_arg, w_arg, tau_arg)
             opt_out_temp.append(opt)
-            print(f"    - Optimized with ({i}, {j}) pulses. Cost: {opt.state[0]:.4e}")
+
+            vt_params = opt.params
+            vt_opt_0 = params_to_tk(vt_params, T_arg, jnp.array([0, i]))
+            vt_opt_1 = params_to_tk(vt_params, T_arg, jnp.array([i, i + j]))
+            vt_opt_local = [vt_opt_0, vt_opt_1, make_tk12(vt_opt_0, vt_opt_1)]
+            inf = infidelity(vt_opt_local, SMat_arg, M_arg, w_arg)
+            infidelities_temp.append(inf)
+            print(f"    - Optimized with ({i}, {j}) pulses. Cost: {opt.state[0]:.4e}, Infidelity: {inf:.4e}")
         opt_out.append(opt_out_temp)
-    inf_ID_out = jnp.array([[opt_out[i][j].state[0] for j in range(len(opt_out[0]))] for i in range(len(opt_out))])
-    inds_min = jnp.unravel_index(jnp.argmin(inf_ID_out),
-                                 inf_ID_out.shape)  # jnp.where(inf_ID_out == jnp.min(inf_ID_out))
+        infidelities_out.append(infidelities_temp)
+
+    infidelities_out = jnp.array(infidelities_out)
+    inds_min = jnp.unravel_index(jnp.argmin(infidelities_out), infidelities_out.shape)
+
     vt_min_arr = opt_out[inds_min[0]][inds_min[1]].params
-    vt_opt_0 = params_to_tk(vt_min_arr, T_arg, jnp.array([0, nPs_arg[0][inds_min[0]]]))
-    vt_opt_1 = params_to_tk(vt_min_arr, T_arg, jnp.array(
-        [nPs_arg[0][inds_min[0]], nPs_arg[0][inds_min[0]] + nPs_arg[1][inds_min[1]]]))
+    num_pulses_1 = nPs_arg[0][inds_min[0]]
+    num_pulses_2 = nPs_arg[1][inds_min[1]]
+
+    vt_opt_0 = params_to_tk(vt_min_arr, T_arg, jnp.array([0, num_pulses_1]))
+    vt_opt_1 = params_to_tk(vt_min_arr, T_arg, jnp.array([num_pulses_1, num_pulses_1 + num_pulses_2]))
     vt_opt_local = [vt_opt_0, vt_opt_1, make_tk12(vt_opt_0, vt_opt_1)]
-    # vt_init = params_to_tk(init_params[jnp.argmin(inf_ID_out)], T)
-    return vt_opt_local, infidelity(vt_opt_local, SMat_arg, M_arg, w_arg)  # inf_ID_out[inds_min]
+    return vt_opt_local, infidelities_out[inds_min]
 
 
 def hyperOpt_k(SMat_k_arg, nPs_arg, M_arg, T_arg, wk_arg, tau_arg):
@@ -305,29 +315,39 @@ def hyperOpt_k(SMat_k_arg, nPs_arg, M_arg, T_arg, wk_arg, tau_arg):
                                             options={'disp': False, 'gtol': 1e-7, 'ftol': 1e-7,
                                                      'maxfun': 1000, 'maxls': 40})
     opt_out = []
-    init_params = []
-    for i in nPs_arg[0]:
+    infidelities_out = []
+    for i_idx, i in enumerate(nPs_arg[0]):
         opt_out_temp = []
-        for j in nPs_arg[1]:
-            vt = jnp.array(np.random.rand(i + j) * T_arg)
-            #jnp.concatenate((jnp.linspace(0, T_arg, i + 2)[1:-1], jnp.linspace(0, T_arg, j + 2)[1:-1]))
-            init_params.append(vt)
+        infidelities_temp = []
+        for j_idx, j in enumerate(nPs_arg[1]):
+            vt = jnp.concatenate((jnp.linspace(0, T_arg, i + 2)[1:-1], jnp.linspace(0, T_arg, j + 2)[1:-1]))
             lower_bnd = jnp.zeros_like(vt)
             upper_bnd = jnp.ones_like(vt) * T_arg
             bnds = (lower_bnd, upper_bnd)
             opt = optimizer.run(vt, bnds, i, SMat_k_arg, M_arg, T_arg, wk_arg, tau_arg)
             opt_out_temp.append(opt)
-            print(f"    - Optimized with ({i}, {j}) pulses. Cost: {opt.state[0]:.4e}")
+
+            vt_params = opt.params
+            vt_opt_0 = params_to_tk(vt_params, T_arg, jnp.array([0, i]))
+            vt_opt_1 = params_to_tk(vt_params, T_arg, jnp.array([i, i + j]))
+            vt_opt_local = [vt_opt_0, vt_opt_1, make_tk12(vt_opt_0, vt_opt_1)]
+            inf = infidelity_k(vt_opt_local, SMat_k_arg, M_arg, wk_arg)
+            infidelities_temp.append(inf)
+            print(f"    - Optimized with ({i}, {j}) pulses. Cost: {opt.state[0]:.4e}, Infidelity: {inf:.4e}")
         opt_out.append(opt_out_temp)
-    inf_ID_out = jnp.array([[opt_out[i][j].state[0] for j in range(len(opt_out[0]))] for i in range(len(opt_out))])
-    inds_min = jnp.unravel_index(jnp.argmin(inf_ID_out),
-                                 inf_ID_out.shape)
+        infidelities_out.append(infidelities_temp)
+
+    infidelities_out = jnp.array(infidelities_out)
+    inds_min = jnp.unravel_index(jnp.argmin(infidelities_out), infidelities_out.shape)
+
     vt_min_arr = opt_out[inds_min[0]][inds_min[1]].params
-    vt_opt_0 = params_to_tk(vt_min_arr, T_arg, jnp.array([0, nPs_arg[0][inds_min[0]]]))
-    vt_opt_1 = params_to_tk(vt_min_arr, T_arg, jnp.array(
-        [nPs_arg[0][inds_min[0]], nPs_arg[0][inds_min[0]] + nPs_arg[1][inds_min[1]]]))
+    num_pulses_1 = nPs_arg[0][inds_min[0]]
+    num_pulses_2 = nPs_arg[1][inds_min[1]]
+
+    vt_opt_0 = params_to_tk(vt_min_arr, T_arg, jnp.array([0, num_pulses_1]))
+    vt_opt_1 = params_to_tk(vt_min_arr, T_arg, jnp.array([num_pulses_1, num_pulses_1 + num_pulses_2]))
     vt_opt_local = [vt_opt_0, vt_opt_1, make_tk12(vt_opt_0, vt_opt_1)]
-    return vt_opt_local, infidelity_k(vt_opt_local, SMat_k_arg, M_arg, wk_arg)
+    return vt_opt_local, infidelities_out[inds_min]
 
 
 def Lambda(Oi, Oj, vt, SMat_arg, M_arg, w_arg):
@@ -515,7 +535,7 @@ def get_cdd_orders_from_index(index, cdd_lib_len, mq_cdd_orders):
         j = j_prime if j_prime < i else j_prime + 1
         order1 = i + 1
         order2 = j + 1
-        return f"cddn permutation with orders ({order1}, {order2})"
+        return f"CDD({order1}, {order2})"
     else:
         # It's an mqCDD sequence
         mq_index = index - num_cdd_permutations
@@ -724,7 +744,9 @@ def main():
         else:
             known_opt, known_inf, known_ind = opt_known_pulses_k(pLib, SMat_k_local, Mknown, wk_local)
             inf_known = infidelity_k(known_opt, SMat_k_ideal, Mknown, wk_ideal_local)
-        inf_vs_M_known.append((Mknown, inf_known))
+        best_orders_for_m = get_cdd_orders_from_index(known_ind, len(cddLib), mq_cdd_orders_log)
+        inf_vs_M_known.append((Mknown, inf_known, best_orders_for_m))
+
         if known_inf <= best_inf:
             best_seq = known_opt
             best_inf = inf_known
@@ -838,8 +860,12 @@ def plot_inf_vs_m(config, inf_vs_m_known, inf_vs_m_opt):
     plt.figure(figsize=(10, 6))
 
     if inf_vs_m_known:
-        m_values_known, infidelities_known = zip(*sorted(inf_vs_m_known))
+        sorted_known = sorted(inf_vs_m_known)
+        m_values_known, infidelities_known, labels_known = zip(*sorted_known)
         plt.plot(m_values_known, infidelities_known, 'o-', label='Best Infidelity (Known Seqs)')
+        for i, label in enumerate(labels_known):
+            plt.annotate(label, (m_values_known[i], infidelities_known[i]), textcoords="offset points",
+                         xytext=(5, 5), ha='left', fontsize=8, rotation=30)
     else:
         print("No data to plot for known sequences infidelity vs. M.")
 
