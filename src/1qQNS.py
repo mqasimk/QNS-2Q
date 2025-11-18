@@ -1,0 +1,258 @@
+"""
+This script provides a framework for running quantum noise spectroscopy (QNS)
+experiments. It is designed to be modular and easy to configure, allowing
+users to define and run a series of experiments with different pulse sequences
+and parameters.
+
+The main components are:
+- QNSExperimentConfig: A dataclass for storing all the experiment parameters.
+- ExperimentRunner: A class that takes a configuration object and runs the
+  experiments.
+- A main execution block that demonstrates how to use these components.
+"""
+
+
+import os
+import time
+from dataclasses import dataclass, field
+
+import jax.numpy as jnp
+import numpy as np
+import matplotlib.pyplot as plt
+
+from observables import (make_c_12_0_mt, make_c_12_12_mt, make_c_a_0_mt,
+                         make_c_a_b_mt)
+from spectraIn import S_11, S_22, S_1212
+from trajectories import make_noise_mat_arr, solver_prop
+
+
+@dataclass
+class QNSExperimentConfig:
+    """
+    Configuration for QNS experiments.
+
+    Attributes:
+        T: The total time for the experiment.
+        M: The number of blocks.
+        t_grain: The number of time points in each block.
+        truncate: The truncation order for the cumulant expansion.
+        w_grain: The number of frequency points.
+        spec_vec: A list of spectra to use.
+        a_sp: The SPAM error parameters.
+        c: The SPAM error parameters.
+        a1, b1, a2, b2: The measurement operators.
+        spMit: A flag for SPAM mitigation.
+        gamma: The decay rate.
+        gamma_12: The cross-decay rate.
+        n_shots: The number of shots for the experiment.
+        fname: The name of the folder to save the results in.
+        parent_dir: The parent directory to save the results in.
+    """
+    tau: jnp.float32 = 2.5e-8
+    M: jnp.int32 = 18
+    t_grain: jnp.int32 = 1500
+    truncate: jnp.int32 = 5
+    w_grain: jnp.int32 = 1000
+    spec_vec: list = field(default_factory=lambda: [S_11, S_22, S_1212])
+    a_sp: np.ndarray = field(default_factory=lambda: jnp.array([0.99, 0.98]))
+    c: np.ndarray = field(
+        default_factory=lambda: np.array(
+            [jnp.array(0. + 0.01 * 1j),
+             jnp.array(0. - 0.02 * 1j)]))
+    a1: jnp.float32 = 0.990
+    b1: jnp.float32 = 0.980
+    a2: jnp.float32 = 0.985
+    b2: jnp.float32 = 0.970
+    spMit: bool = False
+    T: jnp.float32 = 160*tau
+    gamma: jnp.float32 = T / 14
+    gamma_12: jnp.float32 = T / 28
+    n_shots: jnp.int32 = 2000
+    fname: str = "DraftRun_MScaling"
+    parent_dir: str = os.pardir
+
+    def __post_init__(self):
+        self.wmax = 2 * np.pi * self.truncate / self.T
+        self.t_b = jnp.linspace(0, self.T, self.t_grain)
+        self.t_vec = jnp.linspace(0, self.M * self.T,
+                                  self.M * jnp.size(self.t_b))
+        self.c_times = jnp.array([self.T / n for n in range(1, self.truncate + 1)])
+        # Store names of spectra functions for saving, as functions aren't picklable
+        self.spec_vec_names = [f.__name__ for f in self.spec_vec]
+        self.a_m = np.array([self.a1 + self.b1 - 1, self.a2 + self.b2 - 1])
+        self.delta = np.array([self.a1 - self.b1, self.a2 - self.b2])
+        self.CM = jnp.kron(
+            jnp.array([[
+                0.5 * (1 + self.a_m[0] + self.delta[0]),
+                0.5 * (1 - self.a_m[0] + self.delta[0])
+            ],
+                [
+                    0.5 * (1 - self.a_m[0] - self.delta[0]),
+                    0.5 * (1 + self.a_m[0] - self.delta[0])
+                ]]),
+            jnp.array([[
+                0.5 * (1 + self.a_m[1] + self.delta[1]),
+                0.5 * (1 - self.a_m[1] + self.delta[1])
+            ],
+                [
+                    0.5 * (1 - self.a_m[1] - self.delta[1]),
+                    0.5 * (1 + self.a_m[1] - self.delta[1])
+                ]]))
+
+
+class ExperimentRunner:
+    """
+    Runs a series of QNS experiments based on a given configuration.
+    """
+
+    def __init__(self, config: QNSExperimentConfig):
+        """
+        Initializes the ExperimentRunner.
+
+        Args:
+            config: The configuration for the experiments.
+        """
+        self.config = config
+        self.path = self._setup_output_directory()
+        self.noise_mats = self._make_noise_mats()
+        self.results = {}
+
+    def _setup_output_directory(self):
+        """
+        Creates the output directory if it doesn't exist.
+        """
+        path = os.path.join(self.config.parent_dir, self.config.fname)
+        if not os.path.exists(path):
+            os.mkdir(path)
+        return path
+
+    def _make_noise_mats(self):
+        """
+        Generates the noise matrices.
+        """
+        return jnp.array(
+            make_noise_mat_arr(
+                'make',
+                spec_vec=self.config.spec_vec,
+                t_vec=self.config.t_vec,
+                w_grain=self.config.w_grain,
+                wmax=self.config.wmax,
+                truncate=self.config.truncate,
+                gamma=self.config.gamma,
+                gamma_12=self.config.gamma_12))
+
+    def run_experiment(self, exp_name: str, pulse_sequence: list,
+                       exp_type: str, **kwargs):
+        """
+        Runs a single experiment.
+
+        Args:
+            exp_name: The name of the experiment.
+            pulse_sequence: The pulse sequence to use.
+            exp_type: The type of experiment to run.
+            **kwargs: Additional arguments for the experiment function.
+        """
+        print(f"Running experiment: {exp_name}")
+        start_time = time.time()
+
+        exp_map = {
+            'C_12_0': make_c_12_0_mt,
+            'C_12_12': make_c_12_12_mt,
+            'C_a_0': make_c_a_0_mt,
+            'C_a_b': make_c_a_b_mt,
+        }
+        if exp_type not in exp_map:
+            raise ValueError(f"Invalid experiment type: {exp_type}")
+
+        exp_func = exp_map[exp_type]
+        result = exp_func(
+            solver_prop,
+            pulse_sequence,
+            self.config.t_vec,
+            self.config.c_times,
+            self.config.CM,
+            self.config.spMit,
+            n_shots=self.config.n_shots,
+            m=self.config.M,
+            t_b=self.config.t_b,
+            a_m=self.config.a_m,
+            delta=self.config.delta,
+            a_sp=self.config.a_sp,
+            c=self.config.c,
+            noise_mats=self.noise_mats,
+            **kwargs)
+        self.results[exp_name] = result
+
+        print(
+            f"--- {exp_name} completed in {time.time() - start_time:.2f}s ---")
+
+    def save_results(self):
+        """
+        Saves the parameters and results to .npz files.
+        """
+        # Create a copy of the config dict to avoid modifying the original object.
+        # The 'spec_vec' attribute contains function objects, which cannot be
+        # pickled by `np.savez`. We pop it from the dictionary before saving.
+        # The names of the spectra are saved in 'spec_vec_names' for reference.
+        params_to_save = self.config.__dict__.copy()
+        params_to_save.pop('spec_vec', None)
+        params_to_save['tau'] = self.config.tau
+        np.savez(
+            os.path.join(self.path, "params.npz"),
+            **params_to_save)
+        np.savez(os.path.join(self.path, "results.npz"), **self.results)
+        print(f"Results saved to {self.path}")
+
+def main():
+    """
+    Main function to run the QNS experiments.
+    """
+    m_values = range(5, 20)
+    c_1_0_mt_1_results = []
+    l_index = 1
+
+    for m in m_values:
+        print(f"Running experiment for M = {m}")
+        config = QNSExperimentConfig(M=m)
+        runner = ExperimentRunner(config)
+
+        experiments = [
+            ('C_1_0_MT_1', ['CDD1', 'CDD1-1/2'], 'C_a_0', {'l': l_index}),
+        ]
+
+        for exp_name, pulse_sequence, exp_type, kwargs in experiments:
+            runner.run_experiment(exp_name, pulse_sequence, exp_type, **kwargs)
+            c_1_0_mt_1_results.append(runner.results[exp_name])
+        # runner.save_results() # Optional: decide if you want to save results for each M
+
+    c_1_0_mt_1_results = np.array(c_1_0_mt_1_results)
+
+    # Publication-quality plot settings
+    plt.rc('text', usetex=False)
+    plt.rc('font', family='serif', size=12)
+    plt.rc('axes', titlesize=14, labelsize=12)
+    plt.rc('xtick', labelsize=10)
+    plt.rc('ytick', labelsize=10)
+    plt.rc('legend', fontsize=10)
+
+    fig, ax = plt.subplots(figsize=(6, 4)) # Standard size for a single-column figure
+
+    ax.plot(m_values, c_1_0_mt_1_results, linestyle='-', marker='o', label=f'l = {l_index}')
+
+    ax.set_xlabel(r'$M$')
+    ax.set_ylabel(fr'$C_{{1,0}}^{{(l)}}(MT)$')
+    #ax.set_title(r'Evolution of $C_{1,0}(MT)$ with Number of repetitions $M$')
+    ax.grid(True, linestyle='--', alpha=0.6)
+    ax.legend(['l = 1', 'l = 2', 'l = 3', 'l = 4', 'l = 5'])
+
+    # Adjust layout to prevent labels from being cut off
+    plt.tight_layout()
+
+    # Save in a high-quality format
+    plt.savefig("C_1_0_MT_1_vs_M_formal.pdf", format='pdf', bbox_inches='tight')
+    print("Plot saved to C_1_0_MT_1_vs_M_formal.pdf")
+    plt.show()
+
+
+if __name__ == "__main__":
+    main()
