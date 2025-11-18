@@ -185,7 +185,7 @@ class SpectraReconstructor:
 def main():
     """Main function to run the spectra reconstruction."""
     # --- User Configuration ---
-    data_folder = "DraftRun_NoSPAM"
+    data_folder = "DraftRun_NoSPAM_Boring"
     # ------------------------
 
     try:

@@ -57,7 +57,7 @@ class QNSExperimentConfig:
     c: np.ndarray = field(
         default_factory=lambda: np.array(
             [jnp.array(0. + 0. * 1j),
-             jnp.array(0. - 0. * 1j)]))
+             jnp.array(0. + 0. * 1j)]))
     a1: jnp.float32 = 1.
     b1: jnp.float32 = 1.
     a2: jnp.float32 = 1.

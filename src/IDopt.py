@@ -21,7 +21,7 @@ import itertools
 class PulseOptimizerConfig:
     """A class to hold all the parameters for the optimization."""
 
-    def __init__(self, fname="DraftRun_NoSPAM", parent_dir=os.pardir, Tg=5 * 4 * 14 * 1e-6, reps_known=None,
+    def __init__(self, fname="DraftRun_NoSPAM_Boring", parent_dir=os.pardir, Tg=4 * 4 * 14 * 1e-6, reps_known=None,
                  reps_opt=None, tau_divisor=160, max_pulses=400):
         """
         Initializes the configuration for the pulse optimization.P109
@@ -36,9 +36,9 @@ class PulseOptimizerConfig:
             max_pulses (int): The maximum total number of pulses allowed in the entire sequence (Tg).
         """
         if reps_opt is None:
-            reps_opt = []
+            reps_opt = [i for i in range(100, 221, 20)]
         if reps_known is None:
-            reps_known = [i for i in range(10, 201, 5)]
+            reps_known = [i for i in range(100, 401, 10)]
 
         self.fname = fname
         self.parent_dir = parent_dir
@@ -83,6 +83,29 @@ class PulseOptimizerConfig:
 #
 ########################################################################################################################
 ########################################################################################################################
+
+def generate_time_grid_numpy(n: int, T: float) -> np.ndarray:
+    """
+    Generates an array starting at 0, ending at T, with n random points in between.
+
+    Args:
+        n: The number of random internal points to generate.
+        T: The upper bound value.
+
+    Returns:
+        A sorted numpy array of shape (n + 2,).
+    """
+    # 1. Generate n random points uniformly distributed over [0, T)
+    # We usually prefer (0, T) strictly, but the probability of hitting exactly 0
+    # with float precision is extremely low.
+    internal_points = np.random.uniform(low=0.0, high=T, size=n)
+
+    # 2. Concatenate with the fixed boundaries 0 and T
+    # We use np.r_ as a shorthand for concatenation along the first axis
+    combined = np.r_[0.0, internal_points, T]
+
+    # 3. Sort the array to ensure temporal order
+    return np.sort(combined)
 
 
 @jax.jit
@@ -320,7 +343,8 @@ def hyperOpt_k(SMat_k_arg, nPs_arg, M_arg, T_arg, wk_arg, tau_arg):
         opt_out_temp = []
         infidelities_temp = []
         for j_idx, j in enumerate(nPs_arg[1]):
-            vt = jnp.concatenate((jnp.linspace(0, T_arg, i + 2)[1:-1], jnp.linspace(0, T_arg, j + 2)[1:-1]))
+            vt = jnp.array([generate_time_grid_numpy(i, T_arg)[1:-1], generate_time_grid_numpy(j, T_arg)[1:-1]])
+            #jnp.concatenate((jnp.linspace(0, T_arg, i + 2)[1:-1], jnp.linspace(0, T_arg, j + 2)[1:-1]))
             lower_bnd = jnp.zeros_like(vt)
             upper_bnd = jnp.ones_like(vt) * T_arg
             bnds = (lower_bnd, upper_bnd)
@@ -553,18 +577,18 @@ def makeSMat_k(specs_arg, wk_arg, wkqns_arg, gamma_arg, gamma12_arg):
         jnp.interp(wk_arg, wkqns_arg, jnp.concatenate((jnp.array([S_22(wk_arg[0])]), specs_arg["S22"]))))
     SMat_local = SMat_local.at[2, 2].set(
         jnp.interp(wk_arg, wkqns_arg, jnp.concatenate((jnp.array([S_1212(wk_arg[0])]), specs_arg["S1212"]))))
-    SMat_local = SMat_local.at[0, 1].set(jnp.interp(wk_arg, wkqns_arg, jnp.concatenate(
-        (jnp.array([S_1_2(wk_arg[0], gamma_arg)]), specs_arg["S12"]))))
-    SMat_local = SMat_local.at[1, 0,].set(jnp.interp(wk_arg, wkqns_arg, jnp.conj(
-        jnp.concatenate((jnp.array([S_1_2(wk_arg[0], gamma_arg)]), specs_arg["S12"])))))
-    SMat_local = SMat_local.at[0, 2].set(jnp.interp(wk_arg, wkqns_arg, jnp.concatenate(
-        (jnp.array([S_1_12(wk_arg[0], gamma12_arg)]), specs_arg["S112"]))))
-    SMat_local = SMat_local.at[2, 0].set(jnp.interp(wk_arg, wkqns_arg, jnp.conj(
-        jnp.concatenate((jnp.array([S_1_12(wk_arg[0], gamma12_arg)]), specs_arg["S112"])))))
-    SMat_local = SMat_local.at[1, 2].set(jnp.interp(wk_arg, wkqns_arg, jnp.concatenate(
-        (jnp.array([S_2_12(wk_arg[0], gamma12_arg - gamma_arg)]), specs_arg["S212"]))))
-    SMat_local = SMat_local.at[2, 1].set(jnp.interp(wk_arg, wkqns_arg, jnp.conj(
-        jnp.concatenate((jnp.array([S_2_12(wk_arg[0], gamma12_arg - gamma_arg)]), specs_arg["S212"])))))
+    # SMat_local = SMat_local.at[0, 1].set(jnp.interp(wk_arg, wkqns_arg, jnp.concatenate(
+    #     (jnp.array([S_1_2(wk_arg[0], gamma_arg)]), specs_arg["S12"]))))
+    # SMat_local = SMat_local.at[1, 0,].set(jnp.interp(wk_arg, wkqns_arg, jnp.conj(
+    #     jnp.concatenate((jnp.array([S_1_2(wk_arg[0], gamma_arg)]), specs_arg["S12"])))))
+    # SMat_local = SMat_local.at[0, 2].set(jnp.interp(wk_arg, wkqns_arg, jnp.concatenate(
+    #     (jnp.array([S_1_12(wk_arg[0], gamma12_arg)]), specs_arg["S112"]))))
+    # SMat_local = SMat_local.at[2, 0].set(jnp.interp(wk_arg, wkqns_arg, jnp.conj(
+    #     jnp.concatenate((jnp.array([S_1_12(wk_arg[0], gamma12_arg)]), specs_arg["S112"])))))
+    # SMat_local = SMat_local.at[1, 2].set(jnp.interp(wk_arg, wkqns_arg, jnp.concatenate(
+    #     (jnp.array([S_2_12(wk_arg[0], gamma12_arg - gamma_arg)]), specs_arg["S212"]))))
+    # SMat_local = SMat_local.at[2, 1].set(jnp.interp(wk_arg, wkqns_arg, jnp.conj(
+    #     jnp.concatenate((jnp.array([S_2_12(wk_arg[0], gamma12_arg - gamma_arg)]), specs_arg["S212"])))))
     return SMat_local
 
 
@@ -573,12 +597,12 @@ def makeSMat_k_ideal(wk_arg, gamma_arg, gamma12_arg):
     SMat_ideal_local = SMat_ideal_local.at[0, 0].set(S_11(wk_arg))
     SMat_ideal_local = SMat_ideal_local.at[1, 1].set(S_22(wk_arg))
     SMat_ideal_local = SMat_ideal_local.at[2, 2].set(S_1212(wk_arg))
-    SMat_ideal_local = SMat_ideal_local.at[0, 1].set(S_1_2(wk_arg, gamma_arg))
-    SMat_ideal_local = SMat_ideal_local.at[1, 0].set(jnp.conj(S_1_2(wk_arg, gamma_arg)))
-    SMat_ideal_local = SMat_ideal_local.at[0, 2].set(S_1_12(wk_arg, gamma12_arg))
-    SMat_ideal_local = SMat_ideal_local.at[2, 0].set(jnp.conj(S_1_12(wk_arg, gamma12_arg)))
-    SMat_ideal_local = SMat_ideal_local.at[1, 2].set(S_2_12(wk_arg, gamma12_arg - gamma_arg))
-    SMat_ideal_local = SMat_ideal_local.at[2, 1].set(jnp.conj(S_2_12(wk_arg, gamma12_arg - gamma_arg)))
+    # SMat_ideal_local = SMat_ideal_local.at[0, 1].set(S_1_2(wk_arg, gamma_arg))
+    # SMat_ideal_local = SMat_ideal_local.at[1, 0].set(jnp.conj(S_1_2(wk_arg, gamma_arg)))
+    # SMat_ideal_local = SMat_ideal_local.at[0, 2].set(S_1_12(wk_arg, gamma12_arg))
+    # SMat_ideal_local = SMat_ideal_local.at[2, 0].set(jnp.conj(S_1_12(wk_arg, gamma12_arg)))
+    # SMat_ideal_local = SMat_ideal_local.at[1, 2].set(S_2_12(wk_arg, gamma12_arg - gamma_arg))
+    # SMat_ideal_local = SMat_ideal_local.at[2, 1].set(jnp.conj(S_2_12(wk_arg, gamma12_arg - gamma_arg)))
     return SMat_ideal_local
 
 
@@ -661,23 +685,23 @@ def main():
     SMat = SMat.at[0, 0].set(jnp.interp(config.w, config.wkqns, config.specs["S11"]))
     SMat = SMat.at[1, 1].set(jnp.interp(config.w, config.wkqns, config.specs["S22"]))
     SMat = SMat.at[2, 2].set(jnp.interp(config.w, config.wkqns, config.specs["S1212"]))
-    SMat = SMat.at[0, 1].set(jnp.interp(config.w, config.wkqns, config.specs["S12"]))
-    SMat = SMat.at[1, 0].set(jnp.interp(config.w, config.wkqns, np.conj(config.specs["S12"])))
-    SMat = SMat.at[0, 2].set(jnp.interp(config.w, config.wkqns, config.specs["S112"]))
-    SMat = SMat.at[2, 0].set(jnp.interp(config.w, config.wkqns, np.conj(config.specs["S11"])))
-    SMat = SMat.at[1, 2].set(jnp.interp(config.w, config.wkqns, config.specs["S212"]))
-    SMat = SMat.at[2, 1].set(jnp.interp(config.w, config.wkqns, np.conj(config.specs["S212"])))
+    # SMat = SMat.at[0, 1].set(jnp.interp(config.w, config.wkqns, config.specs["S12"]))
+    # SMat = SMat.at[1, 0].set(jnp.interp(config.w, config.wkqns, np.conj(config.specs["S12"])))
+    # SMat = SMat.at[0, 2].set(jnp.interp(config.w, config.wkqns, config.specs["S112"]))
+    # SMat = SMat.at[2, 0].set(jnp.interp(config.w, config.wkqns, np.conj(config.specs["S11"])))
+    # SMat = SMat.at[1, 2].set(jnp.interp(config.w, config.wkqns, config.specs["S212"]))
+    # SMat = SMat.at[2, 1].set(jnp.interp(config.w, config.wkqns, np.conj(config.specs["S212"])))
 
     SMat_ideal = jnp.zeros((3, 3, config.w_ideal.size), dtype=jnp.complex64)
     SMat_ideal = SMat_ideal.at[0, 0].set(S_11(config.w_ideal))
     SMat_ideal = SMat_ideal.at[1, 1].set(S_22(config.w_ideal))
     SMat_ideal = SMat_ideal.at[2, 2].set(S_1212(config.w_ideal))
-    SMat_ideal = SMat_ideal.at[0, 1].set(S_1_2(config.w_ideal, config.gamma))
-    SMat_ideal = SMat_ideal.at[1, 0].set(jnp.conj(S_1_2(config.w_ideal, config.gamma)))
-    SMat_ideal = SMat_ideal.at[0, 2].set(S_1_12(config.w_ideal, config.gamma12))
-    SMat_ideal = SMat_ideal.at[2, 0].set(jnp.conj(S_1_12(config.w_ideal, config.gamma12)))
-    SMat_ideal = SMat_ideal.at[1, 2].set(S_2_12(config.w_ideal, config.gamma12 - config.gamma))
-    SMat_ideal = SMat_ideal.at[2, 1].set(jnp.conj(S_2_12(config.w_ideal, config.gamma12 - config.gamma)))
+    # SMat_ideal = SMat_ideal.at[0, 1].set(S_1_2(config.w_ideal, config.gamma))
+    # SMat_ideal = SMat_ideal.at[1, 0].set(jnp.conj(S_1_2(config.w_ideal, config.gamma)))
+    # SMat_ideal = SMat_ideal.at[0, 2].set(S_1_12(config.w_ideal, config.gamma12))
+    # SMat_ideal = SMat_ideal.at[2, 0].set(jnp.conj(S_1_12(config.w_ideal, config.gamma12)))
+    # SMat_ideal = SMat_ideal.at[1, 2].set(S_2_12(config.w_ideal, config.gamma12 - config.gamma))
+    # SMat_ideal = SMat_ideal.at[2, 1].set(jnp.conj(S_2_12(config.w_ideal, config.gamma12 - config.gamma)))
 
     # Calculate T2 times
     taxis = jnp.linspace(1 * config.T, 20 * config.T, 20)
