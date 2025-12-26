@@ -5,37 +5,13 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="6258686c-39ec-4d47-99d3-26c96c78fa3a" name="Changes" comment="IDopt confirmed">
+      <change afterPath="$PROJECT_DIR$/src/ID_opt_v2.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/ID_opt_v3.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/IDGateLog.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/IDGateLog_1.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/infidelity_vs_M_feat_cross.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/infidelity_vs_M_feat_cross_largesearch.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/infidelity_vs_M_known.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/infidelity_vs_M_known_feat_nocross.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/infs_GateTime_cz.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/infs_GateTime_cz.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/infs_known_cz.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/infs_opt_cz.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/optimizeLog.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/params.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/reconstruct.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/results.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM/specs.npz" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/IDGateLog.pdf" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/IDGateLog.pdf" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/infidelity_vs_M.pdf" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/infidelity_vs_M_800_crossspec.pdf" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/optimizeLog.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/optimizeLog.npz" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/reconstruct.pdf" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/reconstruct.pdf" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/results.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/results.npz" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/specs.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/specs.npz" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_SPAM/params.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_SPAM/reconstruct.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_SPAM/results.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_SPAM/specs.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/SPAM_Mitigation_Plots/reconstruct_SPAMmit.png" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/IDopt.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/IDopt.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/plotters.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/plotters.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/qnsExps.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/qnsExps.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/reconSpectra.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/reconSpectra.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/spectraIn.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/spectraIn.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -91,7 +67,9 @@
     "Python.1212SpecSPAM.executor": "Run",
     "Python.1qQNS.executor": "Run",
     "Python.CZopt.executor": "Run",
-    "Python.IDopt.executor": "Debug",
+    "Python.ID_opt_v2.executor": "Run",
+    "Python.ID_opt_v3.executor": "Run",
+    "Python.IDopt.executor": "Run",
     "Python.QNSPlots.executor": "Run",
     "Python.Unnamed.executor": "Run",
     "Python.analyze_this.executor": "Run",
@@ -121,7 +99,7 @@
     "project.structure.last.edited": "Project",
     "project.structure.proportion": "0.15",
     "project.structure.side.proportion": "0.2",
-    "settings.editor.selected.configurable": "com.android.studio.ml.templates"
+    "settings.editor.selected.configurable": "com.android.studio.ml.bot.mainConfigurable"
   }
 }]]></component>
   <component name="PyConsoleOptionsProvider">
@@ -196,22 +174,6 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1718933215862</updated>
-    </task>
-    <task id="LOCAL-00008" summary="CZ optimization has been implemented.">
-      <option name="closed" value="true" />
-      <created>1733755475912</created>
-      <option name="number" value="00008" />
-      <option name="presentableId" value="LOCAL-00008" />
-      <option name="project" value="LOCAL" />
-      <updated>1733755475912</updated>
-    </task>
-    <task id="LOCAL-00009" summary="CZ optimization has been implemented.">
-      <option name="closed" value="true" />
-      <created>1733755878403</created>
-      <option name="number" value="00009" />
-      <option name="presentableId" value="LOCAL-00009" />
-      <option name="project" value="LOCAL" />
-      <updated>1733755878403</updated>
     </task>
     <task id="LOCAL-00010" summary="CZ optimization has been implemented.">
       <option name="closed" value="true" />
@@ -589,7 +551,23 @@
       <option name="project" value="LOCAL" />
       <updated>1763495447390</updated>
     </task>
-    <option name="localTasksCounter" value="57" />
+    <task id="LOCAL-00057" summary="IDopt confirmed">
+      <option name="closed" value="true" />
+      <created>1763503293110</created>
+      <option name="number" value="00057" />
+      <option name="presentableId" value="LOCAL-00057" />
+      <option name="project" value="LOCAL" />
+      <updated>1763503293110</updated>
+    </task>
+    <task id="LOCAL-00058" summary="IDopt confirmed">
+      <option name="closed" value="true" />
+      <created>1763503903357</created>
+      <option name="number" value="00058" />
+      <option name="presentableId" value="LOCAL-00058" />
+      <option name="project" value="LOCAL" />
+      <updated>1763503903357</updated>
+    </task>
+    <option name="localTasksCounter" value="59" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -641,8 +619,23 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/IDopt.py</url>
-          <line>107</line>
-          <option name="timeStamp" value="49" />
+          <line>299</line>
+          <option name="timeStamp" value="50" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/IDopt.py</url>
+          <line>339</line>
+          <option name="timeStamp" value="51" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/ID_opt_v2.py</url>
+          <line>331</line>
+          <option name="timeStamp" value="56" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/ID_opt_v2.py</url>
+          <line>375</line>
+          <option name="timeStamp" value="58" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
