@@ -1,4 +1,3 @@
-
 import jax.numpy as jnp
 import jax
 import matplotlib.pyplot as plt
@@ -22,7 +21,7 @@ class PulseOptimizerConfig:
     """A class to hold all the parameters for the optimization."""
 
     def __init__(self, fname="DraftRun_NoSPAM_Boring", parent_dir=os.pardir, Tg=4 * 4 * 14 * 1e-6, reps_known=None,
-                 reps_opt=None, tau_divisor=160, max_pulses=800):
+                 reps_opt=None, tau_divisor=160, max_pulses=1200):
         """
         Initializes the configuration for the pulse optimization.P109
 
@@ -84,29 +83,6 @@ class PulseOptimizerConfig:
 ########################################################################################################################
 ########################################################################################################################
 
-def generate_time_grid_numpy(n: int, T: float) -> np.ndarray:
-    """
-    Generates an array starting at 0, ending at T, with n random points in between.
-
-    Args:
-        n: The number of random internal points to generate.
-        T: The upper bound value.
-
-    Returns:
-        A sorted numpy array of shape (n + 2,).
-    """
-    # 1. Generate n random points uniformly distributed over [0, T)
-    # We usually prefer (0, T) strictly, but the probability of hitting exactly 0
-    # with float precision is extremely low.
-    internal_points = np.random.uniform(low=0.0, high=T, size=n)
-
-    # 2. Concatenate with the fixed boundaries 0 and T
-    # We use np.r_ as a shorthand for concatenation along the first axis
-    combined = np.r_[0.0, internal_points, T]
-
-    # 3. Sort the array to ensure temporal order
-    return np.sort(combined)
-
 
 @jax.jit
 def sgn(O, a, b):
@@ -124,20 +100,15 @@ def ff(tk, w_arg):
 
 
 def Gp_re(vti, vtj, w_arg, M_arg):
+    eps = 0
     return jnp.real(
-        ff(vti, w_arg) * ff(vtj, -w_arg) * jnp.sin(w_arg * M_arg * vti[-1] * 0.5) ** 2 / jnp.sin(w_arg * vti[-1] * 0.5) ** 2)
+        ff(vti, w_arg) * ff(vtj, -w_arg) * jnp.sin(w_arg * M_arg * vti[-1] * 0.5) ** 2 / (jnp.sin(w_arg * vti[-1] * 0.5) ** 2 + eps))
 
 
 def Gp_im(vti, vtj, w_arg, M_arg):
+    eps = 0
     return jnp.imag(
-        ff(vti, w_arg) * ff(vtj, -w_arg) * jnp.sin(w_arg * M_arg * vti[-1] * 0.5) ** 2 / jnp.sin(w_arg * vti[-1] * 0.5) ** 2)
-
-
-@jax.jit
-def y_t(t, tk):
-    return jnp.sum(
-        jnp.array([((-1) ** i) * jnp.heaviside(t - tk[i], 1) * jnp.heaviside(tk[i + 1] - t, 1) for i in
-                   range(jnp.size(tk) - 1)]), axis=0)
+        ff(vti, w_arg) * ff(vtj, -w_arg) * jnp.sin(w_arg * M_arg * vti[-1] * 0.5) ** 2 / (jnp.sin(w_arg * vti[-1] * 0.5) ** 2 + eps))
 
 
 def make_tk12(tk1, tk2):
@@ -196,9 +167,36 @@ def Lambda_diags_wk(SMat_k_arg, Gp, M_arg, T_arg):
     return jnp.real(jnp.array([jnp.trace(jax.scipy.linalg.expm(-CO[i])) * 0.25 for i in range(CO.shape[0])]))
 
 
-def inf_ID(params_arg, i, SMat_arg, M_arg, T_arg, w_arg, tau_arg):
-    vt1 = jnp.sort(jnp.concatenate((jnp.array([0]), params_arg[:i], jnp.array([T_arg]))))
-    vt2 = jnp.sort(jnp.concatenate((jnp.array([0]), params_arg[i:], jnp.array([T_arg]))))
+def inf_ID_delay_opt(delays_params, n_pulses1, SMat_arg, M_arg, T_arg, w_arg, tau_arg):
+    """
+    Cost function for optimization based on pulse delays.
+    The optimization parameters are n-1 delays for each n-pulse sequence.
+    The last delay is determined by the total time T_arg.
+    A penalty is added if the last delay is smaller than the minimum separation tau_arg.
+    """
+    delays1_params = delays_params[:n_pulses1]
+    delays2_params = delays_params[n_pulses1:]
+    n_pulses2 = delays2_params.shape[0]
+
+    # Reconstruct pulse times for qubit 1
+    sum_delays1 = jnp.sum(delays1_params)
+    last_delay1 = T_arg - sum_delays1
+    # The full pulse sequence has n_pulses1 pulses, so n_pulses1+1 delays
+    all_delays1 = jnp.concatenate([delays1_params, jnp.array([last_delay1])]) if n_pulses1 > 0 else jnp.array([T_arg])
+    vt1 = jnp.concatenate([jnp.array([0.]), jnp.cumsum(all_delays1), jnp.array([T_arg])])
+
+    # Reconstruct pulse times for qubit 2
+    sum_delays2 = jnp.sum(delays2_params)
+    last_delay2 = T_arg - sum_delays2
+    all_delays2 = jnp.concatenate([delays2_params, jnp.array([last_delay2])]) if n_pulses2 > 0 else jnp.array([T_arg])
+    vt2 = jnp.concatenate([jnp.array([0.]), jnp.cumsum(all_delays2), jnp.array([T_arg])])
+
+    # Penalty for violating the minimum separation for the last delay
+    penalty1 = jax.nn.relu(tau_arg - last_delay1)
+    penalty2 = jax.nn.relu(tau_arg - last_delay2)
+    penalty = (penalty1 + penalty2) * 1e9  # Large penalty factor
+
+    # Calculate infidelity
     vt12 = make_tk12(vt1, vt2)
     vt = [vt1, vt2, vt12]
     Gp_re_map = jax.vmap(Gp_re, in_axes=(None, None, 0, None))
@@ -208,16 +206,37 @@ def inf_ID(params_arg, i, SMat_arg, M_arg, T_arg, w_arg, tau_arg):
         for n in range(3):
             Gp = Gp.at[m, n].set(Gp_re_map(vt[m], vt[n], w_arg, M_arg) + 1j * Gp_im_map(vt[m], vt[n], w_arg, M_arg))
     L_diag = Lambda_diags(SMat_arg, Gp, w_arg)
-    dt = tau_arg
     fid = jnp.sum(L_diag, axis=0) / 16.
-    cl_terms = jnp.concatenate((jnp.diff(vt[0]) - dt, jnp.diff(vt[1]) - dt))
-    clustering = jnp.mean(cl_terms ** 2)
-    return -fid - clustering
+
+    return 1 - fid + penalty
 
 
-def inf_ID_wk(params_arg, ind, SMat_k_arg, M_arg, T_arg, wk_arg, tau_arg):
-    vt1 = jnp.sort(jnp.concatenate((jnp.array([0.]), params_arg[:ind], jnp.array([T_arg]))))
-    vt2 = jnp.sort(jnp.concatenate((jnp.array([0.]), params_arg[ind:], jnp.array([T_arg]))))
+def inf_ID_delay_opt_wk(delays_params, n_pulses1, SMat_k_arg, M_arg, T_arg, wk_arg, tau_arg):
+    """
+    Cost function for optimization based on pulse delays (discrete frequencies).
+    """
+    delays1_params = delays_params[:n_pulses1]
+    delays2_params = delays_params[n_pulses1:]
+    n_pulses2 = delays2_params.shape[0]
+
+    # Reconstruct pulse times for qubit 1
+    sum_delays1 = jnp.sum(delays1_params, axis=0)
+    last_delay1 = T_arg - sum_delays1
+    all_delays1 = jnp.concatenate([delays1_params, jnp.array([last_delay1])]) if n_pulses1 > 0 else jnp.array([T_arg])
+    vt1 = jnp.concatenate([jnp.array([0.]), jnp.cumsum(all_delays1), jnp.array([T_arg])])
+
+    # Reconstruct pulse times for qubit 2
+    sum_delays2 = jnp.sum(delays2_params, axis=0)
+    last_delay2 = T_arg - sum_delays2
+    all_delays2 = jnp.concatenate([delays2_params, jnp.array([last_delay2])]) if n_pulses2 > 0 else jnp.array([T_arg])
+    vt2 = jnp.concatenate([jnp.array([0.]), jnp.cumsum(all_delays2), jnp.array([T_arg])])
+
+    # Penalty for violating the minimum separation for the last delay
+    penalty1 = jax.nn.relu(tau_arg - last_delay1)
+    penalty2 = jax.nn.relu(tau_arg - last_delay2)
+    penalty = (penalty1 + penalty2) * 1e9  # Large penalty factor
+
+    # Calculate infidelity
     vt12 = make_tk12(vt1, vt2)
     vt = [vt1, vt2, vt12]
     Gp_re_map = jax.vmap(Gp_re, in_axes=(None, None, 0, None))
@@ -227,11 +246,9 @@ def inf_ID_wk(params_arg, ind, SMat_k_arg, M_arg, T_arg, wk_arg, tau_arg):
         for j in range(3):
             Gp = Gp.at[i, j].set(Gp_re_map(vt[i], vt[j], wk_arg, 1) + 1j * Gp_im_map(vt[i], vt[j], wk_arg, 1))
     L_diag = Lambda_diags_wk(SMat_k_arg, Gp, M_arg, T_arg)
-    dt = tau_arg
     fid = jnp.sum(L_diag, axis=0) / 16.
-    cl_terms = jnp.concatenate((jnp.diff(vt[0]) - dt, jnp.diff(vt[1]) - dt))
-    clustering = jnp.mean(cl_terms ** 2)
-    return -fid - clustering
+
+    return 1 - fid + penalty
 
 
 def infidelity(params_arg, SMat_arg, M_arg, w_arg):
@@ -287,8 +304,21 @@ def T2(params_arg, SMat_arg, M_arg, w_arg, qubit):
         raise ValueError("qubit must be an integer 1 or 2")
 
 
-def hyperOpt(SMat_arg, nPs_arg, M_arg, T_arg, w_arg, tau_arg):
-    optimizer = jaxopt.ScipyBoundedMinimize(fun=inf_ID, maxiter=200, jit=False, method='L-BFGS-B',
+def get_init_delays(n, T, tau, method):
+    if n <= 0:
+        return jnp.array([])
+    if method == 'random':
+        slack = T - (n + 1) * tau
+        if slack > 0:
+            r = np.random.rand(int(n) + 1)
+            r = r / np.sum(r)
+            delays = tau + slack * r
+            return jnp.array(delays[:n])
+    return jnp.ones(n) * T / (n + 1)
+
+
+def hyperOpt_delay(SMat_arg, nPs_arg, M_arg, T_arg, w_arg, tau_arg, init_guess='uniform'):
+    optimizer = jaxopt.ScipyBoundedMinimize(fun=inf_ID_delay_opt, maxiter=200, jit=False, method='L-BFGS-B',
                                             options={'disp': False, 'gtol': 1e-9, 'ftol': 1e-6,
                                                      'maxfun': 1000, 'maxls': 20})
     opt_out = []
@@ -297,38 +327,42 @@ def hyperOpt(SMat_arg, nPs_arg, M_arg, T_arg, w_arg, tau_arg):
         opt_out_temp = []
         infidelities_temp = []
         for j_idx, j in enumerate(nPs_arg[1]):
-            vt = jnp.concatenate([generate_time_grid_numpy(i, T_arg)[1:-1], generate_time_grid_numpy(j, T_arg)[1:-1]])
-            lower_bnd = jnp.zeros_like(vt)
-            upper_bnd = jnp.ones_like(vt) * T_arg
+            initial_delays1 = get_init_delays(i, T_arg, tau_arg, init_guess)
+            initial_delays2 = get_init_delays(j, T_arg, tau_arg, init_guess)
+            initial_params = jnp.concatenate([initial_delays1, initial_delays2])
+
+            # Box constraints: each delay must be >= tau_arg
+            lower_bnd = jnp.ones_like(initial_params) * tau_arg
+            upper_bnd = jnp.ones_like(initial_params) * T_arg
             bnds = (lower_bnd, upper_bnd)
-            opt = optimizer.run(vt, bnds, i, SMat_arg, M_arg, T_arg, w_arg, tau_arg)
+
+            opt = optimizer.run(initial_params, bnds, i, SMat_arg, M_arg, T_arg, w_arg, tau_arg)
             opt_out_temp.append(opt)
 
-            vt_params = opt.params
-            vt_opt_0 = params_to_tk(vt_params, T_arg, jnp.array([0, i]))
-            vt_opt_1 = params_to_tk(vt_params, T_arg, jnp.array([i, i + j]))
+            # Convert optimized delays back to pulse time sequences
+            vt_opt_0 = delays_to_tk(opt.params[:i], T_arg)
+            vt_opt_1 = delays_to_tk(opt.params[i:], T_arg)
             vt_opt_local = [vt_opt_0, vt_opt_1, make_tk12(vt_opt_0, vt_opt_1)]
             inf = infidelity(vt_opt_local, SMat_arg, M_arg, w_arg)
             infidelities_temp.append(inf)
-            print(f"    - Optimized with ({i}, {j}) pulses. Cost: {opt.state[0]:.4e}, Infidelity: {inf:.4e}")
+            print(f"    - Optimized with ({i}, {j}) pulses. Cost: {opt.state.fun_val:.4e}, Infidelity: {inf:.4e}")
         opt_out.append(opt_out_temp)
         infidelities_out.append(infidelities_temp)
 
     infidelities_out = jnp.array(infidelities_out)
     inds_min = jnp.unravel_index(jnp.argmin(infidelities_out), infidelities_out.shape)
 
-    vt_min_arr = opt_out[inds_min[0]][inds_min[1]].params
+    opt_params_min = opt_out[inds_min[0]][inds_min[1]].params
     num_pulses_1 = nPs_arg[0][inds_min[0]]
-    num_pulses_2 = nPs_arg[1][inds_min[1]]
 
-    vt_opt_0 = params_to_tk(vt_min_arr, T_arg, jnp.array([0, num_pulses_1]))
-    vt_opt_1 = params_to_tk(vt_min_arr, T_arg, jnp.array([num_pulses_1, num_pulses_1 + num_pulses_2]))
+    vt_opt_0 = delays_to_tk(opt_params_min[:num_pulses_1], T_arg)
+    vt_opt_1 = delays_to_tk(opt_params_min[num_pulses_1:], T_arg)
     vt_opt_local = [vt_opt_0, vt_opt_1, make_tk12(vt_opt_0, vt_opt_1)]
     return vt_opt_local, infidelities_out[inds_min]
 
 
-def hyperOpt_k(SMat_k_arg, nPs_arg, M_arg, T_arg, wk_arg, tau_arg):
-    optimizer = jaxopt.ScipyBoundedMinimize(fun=inf_ID_wk, maxiter=400, jit=False, method='L-BFGS-B',
+def hyperOpt_delay_k(SMat_k_arg, nPs_arg, M_arg, T_arg, wk_arg, tau_arg, init_guess='uniform'):
+    optimizer = jaxopt.ScipyBoundedMinimize(fun=inf_ID_delay_opt_wk, maxiter=400, jit=False, method='L-BFGS-B',
                                             options={'disp': False, 'gtol': 1e-7, 'ftol': 1e-7,
                                                      'maxfun': 1000, 'maxls': 40})
     opt_out = []
@@ -337,33 +371,36 @@ def hyperOpt_k(SMat_k_arg, nPs_arg, M_arg, T_arg, wk_arg, tau_arg):
         opt_out_temp = []
         infidelities_temp = []
         for j_idx, j in enumerate(nPs_arg[1]):
-            vt = jnp.concatenate([generate_time_grid_numpy(i, T_arg)[1:-1], generate_time_grid_numpy(j, T_arg)[1:-1]])
-            #jnp.concatenate((jnp.linspace(0, T_arg, i + 2)[1:-1], jnp.linspace(0, T_arg, j + 2)[1:-1]))
-            lower_bnd = jnp.zeros_like(vt)
-            upper_bnd = jnp.ones_like(vt) * T_arg
+            initial_delays1 = get_init_delays(i, T_arg, tau_arg, init_guess)
+            initial_delays2 = get_init_delays(j, T_arg, tau_arg, init_guess)
+            initial_params = jnp.concatenate([initial_delays1, initial_delays2])
+
+            # Box constraints: each delay must be >= tau_arg
+            lower_bnd = jnp.ones_like(initial_params) * tau_arg
+            upper_bnd = jnp.ones_like(initial_params) * T_arg
             bnds = (lower_bnd, upper_bnd)
-            opt = optimizer.run(vt, bnds, i, SMat_k_arg, M_arg, T_arg, wk_arg, tau_arg)
+
+            opt = optimizer.run(initial_params, bnds, i, SMat_k_arg, M_arg, T_arg, wk_arg, tau_arg)
             opt_out_temp.append(opt)
 
-            vt_params = opt.params
-            vt_opt_0 = params_to_tk(vt_params, T_arg, jnp.array([0, i]))
-            vt_opt_1 = params_to_tk(vt_params, T_arg, jnp.array([i, i + j]))
+            # Convert optimized delays back to pulse time sequences
+            vt_opt_0 = delays_to_tk(opt.params[:i], T_arg)
+            vt_opt_1 = delays_to_tk(opt.params[i:], T_arg)
             vt_opt_local = [vt_opt_0, vt_opt_1, make_tk12(vt_opt_0, vt_opt_1)]
             inf = infidelity_k(vt_opt_local, SMat_k_arg, M_arg, wk_arg)
             infidelities_temp.append(inf)
-            print(f"    - Optimized with ({i}, {j}) pulses. Cost: {opt.state[0]:.4e}, Infidelity: {inf:.4e}")
+            print(f"    - Optimized with ({i}, {j}) pulses. Cost: {opt.state.fun_val:.4e}, Infidelity: {inf:.4e}")
         opt_out.append(opt_out_temp)
         infidelities_out.append(infidelities_temp)
 
     infidelities_out = jnp.array(infidelities_out)
     inds_min = jnp.unravel_index(jnp.argmin(infidelities_out), infidelities_out.shape)
 
-    vt_min_arr = opt_out[inds_min[0]][inds_min[1]].params
+    opt_params_min = opt_out[inds_min[0]][inds_min[1]].params
     num_pulses_1 = nPs_arg[0][inds_min[0]]
-    num_pulses_2 = nPs_arg[1][inds_min[1]]
 
-    vt_opt_0 = params_to_tk(vt_min_arr, T_arg, jnp.array([0, num_pulses_1]))
-    vt_opt_1 = params_to_tk(vt_min_arr, T_arg, jnp.array([num_pulses_1, num_pulses_1 + num_pulses_2]))
+    vt_opt_0 = delays_to_tk(opt_params_min[:num_pulses_1], T_arg)
+    vt_opt_1 = delays_to_tk(opt_params_min[num_pulses_1:], T_arg)
     vt_opt_local = [vt_opt_0, vt_opt_1, make_tk12(vt_opt_0, vt_opt_1)]
     return vt_opt_local, infidelities_out[inds_min]
 
@@ -388,12 +425,17 @@ def Lambda(Oi, Oj, vt, SMat_arg, M_arg, w_arg):
     return jnp.real(jnp.trace(Oi @ jax.scipy.linalg.expm(-CO) @ Oj) * 0.25)
 
 
-def params_to_tk(params_arg, T_arg, shape: jnp.ndarray):
-    vt = jnp.zeros(shape[1] - shape[0] + 2)
-    vt = vt.at[0].set(0.)
-    vt = vt.at[-1].set(T_arg)
-    vt = vt.at[1:shape[1] - shape[0] + 1].set(jnp.sort(params_arg[shape[0]:shape[1]]))
-    return vt
+def delays_to_tk(delay_params, T_arg):
+    """Converts a vector of n-1 optimized delays into a full pulse time sequence of length n+1."""
+    n_pulses = delay_params.shape[0]
+    if n_pulses == 0:
+        return jnp.array([0., T_arg])
+    last_delay = T_arg - jnp.sum(delay_params)
+    all_delays = jnp.concatenate([delay_params, jnp.array([last_delay])])
+    # Pulse times are the cumulative sum of the delays between them.
+    # The sequence starts at 0 and ends at T_arg.
+    pulse_times = jnp.cumsum(all_delays)
+    return jnp.concatenate([jnp.array([0.]), pulse_times])
 
 
 def cpmg_vt(T_arg, n):
@@ -830,10 +872,10 @@ def main():
                                       config.gamma, config.gamma12)
             SMat_k_ideal = makeSMat_k_ideal(wk_ideal_local, config.gamma, config.gamma12)
             # Generate an Idling gate that is optimized over a given number of pulses on each qubit
-            vt_opt, inf_min = hyperOpt_k(SMat_k_local, nPs, Mopt, Topt, wk_local, config.tau)
+            vt_opt, inf_min = hyperOpt_delay_k(SMat_k_local, nPs, Mopt, Topt, wk_local, config.tau)
             inf_opt = infidelity_k(vt_opt, SMat_k_ideal, Mopt, wk_ideal_local)
         else:
-            vt_opt, inf_min = hyperOpt(SMat, nPs, Mopt, Topt, config.w, config.tau)
+            vt_opt, inf_min = hyperOpt_delay(SMat, nPs, Mopt, Topt, config.w, config.tau)
             inf_opt = infidelity(vt_opt, SMat_ideal, Mopt, config.w_ideal)
         inf_vs_M_opt.append((Mopt, inf_opt))
         if inf_opt <= opt_inf:
