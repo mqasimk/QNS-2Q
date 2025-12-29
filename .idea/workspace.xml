@@ -5,13 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="6258686c-39ec-4d47-99d3-26c96c78fa3a" name="Changes" comment="IDopt confirmed">
-      <change afterPath="$PROJECT_DIR$/src/ID_opt_v2.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ID_opt_v3.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/test_pulse_construction.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/IDGateLog.pdf" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/IDGateLog.pdf" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/infidelity_vs_M.pdf" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/infidelity_vs_M_800_crossspec.pdf" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/optimizeLog.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/optimizeLog.npz" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/IDopt.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/IDopt.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ID_opt_v3.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/ID_opt_v3.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -89,6 +85,7 @@
     "Python.spectra.executor": "Debug",
     "Python.spectraIn.executor": "Run",
     "Python.test.executor": "Run",
+    "Python.test_pulse_construction.executor": "Run",
     "Python.trajectories.executor": "Run",
     "Python.util.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
