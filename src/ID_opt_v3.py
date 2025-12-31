@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from spectraIn import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
-
+jax.config.update("jax_enable_x64", True)
 
 # ==============================================================================
 # Configuration
@@ -39,9 +39,9 @@ class Config:
     Handles loading of spectral data, system parameters, and optimization settings.
     Constructs the interpolated and ideal spectral matrices used for calculations.
     """
-    def __init__(self, fname="DraftRun_NoSPAM_Boring", include_cross_spectra=True,
+    def __init__(self, fname="DraftRun_NoSPAM_Boring", include_cross_spectra=False,
                  Tg=4 * 4 * 14 * 1e-6, reps_known=None, reps_opt=None, 
-                 tau_divisor=160, max_pulses=120):
+                 tau_divisor=160, max_pulses=80):
         """
         Initialize configuration.
 
@@ -81,8 +81,9 @@ class Config:
         self.tau = self.Tqns / tau_divisor
         
         # Frequency Grids
-        self.w = jnp.linspace(1e-5, 2 * jnp.pi * self.mc / self.Tqns, 10000)
-        self.w_ideal = jnp.linspace(1e-5, 4 * jnp.pi * self.mc / self.Tqns, 20000)
+        # Start from 0 to include DC component
+        self.w = jnp.linspace(0, 2 * jnp.pi * self.mc / self.Tqns, 10000)
+        self.w_ideal = jnp.linspace(0, 4 * jnp.pi * self.mc / self.Tqns, 20000)
         self.wkqns = jnp.array([2 * jnp.pi * (n + 1) / self.Tqns for n in range(self.mc)])
         
         # Spectral Matrices
@@ -91,41 +92,62 @@ class Config:
 
     def _build_interpolated_spectra(self):
         """Constructs the matrix of interpolated spectra from QNS data."""
-        SMat = jnp.zeros((3, 3, self.w.size), dtype=jnp.complex64)
+        # 4x4 Matrix: Indices 0, 1, 2, 3 correspond to 0, 1, 2, 12
+        SMat = jnp.zeros((4, 4, self.w.size), dtype=jnp.complex128)
+        w0 = jnp.array([0.0])
+        
+        def interp_c(fp):
+            """Interpolates complex data."""
+            return jnp.interp(self.w, self.wkqns, jnp.real(fp)) + 1j * jnp.interp(self.w, self.wkqns, jnp.imag(fp))
+
+        def combine(spec_data, dc_func, *args):
+            """Interpolates and inserts exact DC value."""
+            interp = interp_c(spec_data)
+            dc_val = dc_func(w0, *args)[0]
+            return interp.at[0].set(dc_val)
         
         # Diagonal elements
-        SMat = SMat.at[0, 0].set(jnp.interp(self.w, self.wkqns, self.specs["S11"]))
-        SMat = SMat.at[1, 1].set(jnp.interp(self.w, self.wkqns, self.specs["S22"]))
-        SMat = SMat.at[2, 2].set(jnp.interp(self.w, self.wkqns, self.specs["S1212"]))
+        SMat = SMat.at[1, 1].set(combine(self.specs["S11"], S_11))
+        SMat = SMat.at[2, 2].set(combine(self.specs["S22"], S_22))
+        SMat = SMat.at[3, 3].set(combine(self.specs["S1212"], S_1212))
         
         # Off-diagonal elements
         if self.include_cross_spectra:
-            SMat = SMat.at[0, 1].set(jnp.interp(self.w, self.wkqns, self.specs["S12"]))
-            SMat = SMat.at[1, 0].set(jnp.interp(self.w, self.wkqns, np.conj(self.specs["S12"])))
-            SMat = SMat.at[0, 2].set(jnp.interp(self.w, self.wkqns, self.specs["S112"]))
-            SMat = SMat.at[2, 0].set(jnp.interp(self.w, self.wkqns, np.conj(self.specs["S112"])))
-            SMat = SMat.at[1, 2].set(jnp.interp(self.w, self.wkqns, self.specs["S212"]))
-            SMat = SMat.at[2, 1].set(jnp.interp(self.w, self.wkqns, np.conj(self.specs["S212"])))
+            # 1-2
+            s12 = combine(self.specs["S12"], S_1_2, self.gamma)
+            SMat = SMat.at[1, 2].set(s12)
+            SMat = SMat.at[2, 1].set(jnp.conj(s12))
+            # 1-12 (Index 1-3)
+            s112 = combine(self.specs["S112"], S_1_12, self.gamma12)
+            SMat = SMat.at[1, 3].set(s112)
+            SMat = SMat.at[3, 1].set(jnp.conj(s112))
+            # 2-12 (Index 2-3)
+            s212 = combine(self.specs["S212"], S_2_12, self.gamma12 - self.gamma)
+            SMat = SMat.at[2, 3].set(s212)
+            SMat = SMat.at[3, 2].set(jnp.conj(s212))
         
         return SMat
 
     def _build_ideal_spectra(self):
         """Constructs the matrix of ideal analytical spectra."""
-        SMat_ideal = jnp.zeros((3, 3, self.w_ideal.size), dtype=jnp.complex64)
+        SMat_ideal = jnp.zeros((4, 4, self.w_ideal.size), dtype=jnp.complex128)
         
         # Diagonal elements
-        SMat_ideal = SMat_ideal.at[0, 0].set(S_11(self.w_ideal))
-        SMat_ideal = SMat_ideal.at[1, 1].set(S_22(self.w_ideal))
-        SMat_ideal = SMat_ideal.at[2, 2].set(S_1212(self.w_ideal))
+        SMat_ideal = SMat_ideal.at[1, 1].set(S_11(self.w_ideal))
+        SMat_ideal = SMat_ideal.at[2, 2].set(S_22(self.w_ideal))
+        SMat_ideal = SMat_ideal.at[3, 3].set(S_1212(self.w_ideal))
         
         # Off-diagonal elements
         if self.include_cross_spectra:
-            SMat_ideal = SMat_ideal.at[0, 1].set(S_1_2(self.w_ideal, self.gamma))
-            SMat_ideal = SMat_ideal.at[1, 0].set(jnp.conj(S_1_2(self.w_ideal, self.gamma)))
-            SMat_ideal = SMat_ideal.at[0, 2].set(S_1_12(self.w_ideal, self.gamma12))
-            SMat_ideal = SMat_ideal.at[2, 0].set(jnp.conj(S_1_12(self.w_ideal, self.gamma12)))
-            SMat_ideal = SMat_ideal.at[1, 2].set(S_2_12(self.w_ideal, self.gamma12 - self.gamma))
-            SMat_ideal = SMat_ideal.at[2, 1].set(jnp.conj(S_2_12(self.w_ideal, self.gamma12 - self.gamma)))
+            # 1-2
+            SMat_ideal = SMat_ideal.at[1, 2].set(S_1_2(self.w_ideal, self.gamma))
+            SMat_ideal = SMat_ideal.at[2, 1].set(jnp.conj(S_1_2(self.w_ideal, self.gamma)))
+            # 1-12 (Index 1-3)
+            SMat_ideal = SMat_ideal.at[1, 3].set(S_1_12(self.w_ideal, self.gamma12))
+            SMat_ideal = SMat_ideal.at[3, 1].set(jnp.conj(S_1_12(self.w_ideal, self.gamma12)))
+            # 2-12 (Index 2-3)
+            SMat_ideal = SMat_ideal.at[2, 3].set(S_2_12(self.w_ideal, self.gamma12 - self.gamma))
+            SMat_ideal = SMat_ideal.at[3, 2].set(jnp.conj(S_2_12(self.w_ideal, self.gamma12 - self.gamma)))
         
         return SMat_ideal
 
@@ -302,16 +324,21 @@ def construct_pulse_library(T_seq, tau_min, max_pulses=50):
 def _get_chi_on_grid(spectrum, omega_grid, t_grid):
     """Helper to compute chi(t) on a given time grid."""
     # Construct two-sided spectrum, assuming S(-w) = S(w)*
-    w_full = jnp.concatenate([-jnp.flip(omega_grid), omega_grid])
-    S_full = jnp.concatenate([jnp.conj(jnp.flip(spectrum)), spectrum])
+    w_p = omega_grid
+    w_m = -jnp.flip(omega_grid)
+    S_p = spectrum
+    S_m = jnp.conj(jnp.flip(spectrum))
     
-    # Add epsilon to avoid singularity at w=0
-    w_sq = w_full**2 + 1e-12
+    # w_full does not contain 0 because omega_grid passed here is AC part (w > 0)
+    w_p_sq = w_p**2
+    w_m_sq = w_m**2
     
-    integrand = (S_full / w_sq)[:, None] * jnp.exp(1j * w_full[:, None] * t_grid[None, :])
+    integrand_p = (S_p / w_p_sq)[:, None] * jnp.exp(1j * w_p[:, None] * t_grid[None, :])
+    integrand_m = (S_m / w_m_sq)[:, None] * jnp.exp(1j * w_m[:, None] * t_grid[None, :])
     
     # Integrate over two-sided frequency range
-    return jax.scipy.integrate.trapezoid(integrand, x=w_full, axis=0) / (2 * jnp.pi)
+    return (jax.scipy.integrate.trapezoid(integrand_p, x=w_p, axis=0) / (2 * jnp.pi)
+            + jax.scipy.integrate.trapezoid(integrand_m, x=w_m, axis=0) / (2 * jnp.pi))
 
 def evaluate_overlap_small_M(pulse_times_a, pulse_times_b, spectrum, omega_grid, M, T_base):
     """
@@ -332,22 +359,32 @@ def evaluate_overlap_small_M(pulse_times_a, pulse_times_b, spectrum, omega_grid,
 
     sigma_a = get_sigmas(pulse_times_a)
     sigma_b = get_sigmas(pulse_times_b)
-    
+
     t_diffs = pulse_times_a[:, None] - pulse_times_b[None, :]
     
-    t_grid_large = jnp.linspace(-M * T_base, M * T_base, 4000)
-    chi_base_vals = _get_chi_on_grid(spectrum, omega_grid, t_grid_large)
+    # Extract DC and AC parts
+    S_dc = spectrum[0]
+    spectrum_ac = spectrum[1:]
+    omega_grid_ac = omega_grid[1:]
     
-    chi_M_vals = jnp.zeros_like(t_diffs, dtype=jnp.complex64)
+    t_grid_large = jnp.linspace(-M * T_base, M * T_base, 4000)
+    chi_base_vals = _get_chi_on_grid(spectrum_ac, omega_grid_ac, t_grid_large)
+
+    chi_M_vals = jnp.zeros_like(t_diffs, dtype=jnp.complex128)
     for p in range(-(M - 1), M):
         weight = float(M - abs(p))
         shifted_times = t_diffs + p * T_base
-        
+
         val_real = jnp.interp(shifted_times, t_grid_large, jnp.real(chi_base_vals))
         val_imag = jnp.interp(shifted_times, t_grid_large, jnp.imag(chi_base_vals))
         chi_M_vals += weight * (val_real + 1j * val_imag)
         
-    return jnp.einsum('i,j,ij->', sigma_a, sigma_b, chi_M_vals)
+    # DC Contribution
+    F_a_0 = jnp.dot(sigma_a, pulse_times_a)
+    F_b_0 = jnp.dot(sigma_b, pulse_times_b)
+    dc_contribution = (M**2) * F_a_0 * F_b_0 * S_dc / (2*jnp.pi)
+
+    return jnp.einsum('i,j,ij->', sigma_a, sigma_b, chi_M_vals) + dc_contribution
 
 def evaluate_overlap_large_M(pulse_times_a, pulse_times_b, spectrum, omega_grid, M, T_base, num_harmonics):
     """
@@ -388,32 +425,60 @@ def evaluate_overlap_large_M(pulse_times_a, pulse_times_b, spectrum, omega_grid,
     chi_flat = term1 + term2
     chi_M_vals = chi_flat.reshape(t_diffs.shape)
     
-    return jnp.einsum('i,j,ij->', sigma_a, sigma_b, chi_M_vals)
+    # DC Contribution
+    S_dc = spectrum[0]
+    F_a_0 = jnp.dot(sigma_a, pulse_times_a)
+    F_b_0 = jnp.dot(sigma_b, pulse_times_b)
+    dc_contribution = (M**2) * F_a_0 * F_b_0 * S_dc / (2*jnp.pi)
+    
+    return jnp.einsum('i,j,ij->', sigma_a, sigma_b, chi_M_vals) + dc_contribution
 
 def calculate_idling_fidelity(I_matrix):
     """
     Calculates the Idling Gate Fidelity F1(T) based on the overlap integrals.
-    Sum of 16 coefficients corresponding to Pauli basis operators.
+    Matches the derivation in the notes.
+    
+    I_matrix indices: 0->0, 1->1, 2->2, 3->12.
     """
     # Commutation rules with Z: 0(I):comm, 1(X):anti, 2(Y):anti, 3(Z):comm
-    comm_rules = [0, 1, 1, 0] 
-    F_total = 0.0
+    comm_with_z = jnp.array([0, 1, 1, 0])
     
+    F_total = 0.0
+
+    # Iterate over all 16 Pauli operators P_k = P1 \otimes P2
     for p1 in range(4):
         for p2 in range(4):
-            c1 = comm_rules[p1]
-            c2 = comm_rules[p2]
+            # Determine commutation of P_k with Z_1, Z_2, Z_12
+            c1 = comm_with_z[p1]
+            c2 = comm_with_z[p2]
             c12 = (c1 + c2) % 2
             
-            # Lambda = -2 if anti-commute, 0 if commute
-            lam = jnp.array([-2.0 * c1, -2.0 * c2, -2.0 * c12])
+            # lambda_a^{(k)} = sgn(P_k, a, 0) - 1
+            lam = jnp.array([
+                0.0,          # lambda_0
+                -2.0 * c1,    # lambda_1
+                -2.0 * c2,    # lambda_2
+                -2.0 * c12    # lambda_12
+            ])
             
-            # Theta = lam @ I_matrix
-            Thetas = lam @ I_matrix
-            T1, T2, T12 = Thetas[0], Thetas[1], Thetas[2]
+            # Calculate Theta_l = sum_{j} lambda_j * I_{j, j XOR l}
+            # Vectorized calculation for l=0,1,2,3
+            Thetas = jnp.zeros(4)
+            for l in range(4):
+                # Indices for j XOR l
+                col_indices = jnp.arange(4) ^ l
+                # Sum over j: lam[j] * I[j, col_indices[j]]
+                val = jnp.sum(lam * I_matrix[jnp.arange(4), col_indices])
+                Thetas = Thetas.at[l].set(val)
             
-            term = (jnp.cosh(T1/2) * jnp.cosh(T2/2) * jnp.cosh(T12/2) - 
-                    jnp.sinh(T1/2) * jnp.sinh(T2/2) * jnp.sinh(T12/2))
+            T0, T1, T2, T12 = Thetas[0], Thetas[1], Thetas[2], Thetas[3]
+            
+            # C_1^{(k)}
+            term = jnp.exp(T0*0.5) * (
+                jnp.cosh(T1*0.5) * jnp.cosh(T2*0.5) * jnp.cosh(T12*0.5) -
+                jnp.sinh(T1*0.5) * jnp.sinh(T2*0.5) * jnp.sinh(T12*0.5)
+            )
+            
             F_total += term
             
     return jnp.real(F_total)
@@ -434,13 +499,18 @@ def cost_function(delays_params, n_pulses1, SMat, w_grid, T_seq, tau_min, overla
     pt1 = delays_to_pulse_times(delays1, T_seq)
     pt2 = delays_to_pulse_times(delays2, T_seq)
     pt12 = make_tk12(pt1, pt2)
-    pts = [pt1, pt2, pt12]
     
-    # Calculate I_matrix
+    # Dummy pulse sequence for index 0 (Identity). 
+    # Since SMat[0,:] is 0, the overlap will be 0 regardless of sequence.
+    pt0 = jnp.array([0., T_seq]) 
+    
+    pts = [pt0, pt1, pt2, pt12]
+    
+    # Calculate I_matrix (4x4)
     vals = []
-    for i in range(3):
+    for i in range(4):
         row_vals = []
-        for j in range(3):
+        for j in range(4):
             val = overlap_fn(pts[i], pts[j], SMat[i, j], w_grid)
             row_vals.append(val)
         vals.append(row_vals)
@@ -535,12 +605,14 @@ def evaluate_known_sequences(config, M, pLib):
         pt1 = delays_to_pulse_times(d1, T_seq)
         pt2 = delays_to_pulse_times(d2, T_seq)
         pt12 = make_tk12(pt1, pt2)
-        pts = [pt1, pt2, pt12]
+        pt0 = jnp.array([0., T_seq])
+        
+        pts = [pt0, pt1, pt2, pt12]
         
         vals = []
-        for r in range(3):
+        for r in range(4):
             row_vals = []
-            for c in range(3):
+            for c in range(4):
                 val = overlap_fn(pts[r], pts[c], config.SMat[r, c], config.w)
                 row_vals.append(val)
             vals.append(row_vals)
@@ -623,7 +695,7 @@ if __name__ == "__main__":
         # Test for a specific M
         M_test = 1
         T_seq_test = config.Tg / M_test
-        max_p_test = 800
+        max_p_test = 1200
         
         print(f"\n--- Testing M={M_test} ---")
         
@@ -641,7 +713,7 @@ if __name__ == "__main__":
             
         # 2. Random Optimization
         print("\nRunning Random Optimization...")
-        n_pulses_list = [(50, 50), (100, 100), (200, 200)]
+        n_pulses_list = [(100, 101),(200, 200)]
         best_opt_seq, best_opt_inf = optimize_random_sequences(config, M_test, n_pulses_list)
         print(f"Best Optimized Sequence Infidelity: {best_opt_inf:.6e}")
 
