@@ -41,7 +41,7 @@ class Config:
     """
     def __init__(self, fname="DraftRun_NoSPAM_Boring", include_cross_spectra=False,
                  Tg=4 * 4 * 14 * 1e-6, reps_known=None, reps_opt=None, 
-                 tau_divisor=160, max_pulses=80):
+                 tau_divisor=160, max_pulses=80, use_known_as_seed=False):
         """
         Initialize configuration.
 
@@ -53,6 +53,7 @@ class Config:
             reps_opt (list): List of repetition counts for optimization.
             tau_divisor (int): Divisor to determine minimum pulse separation (tau).
             max_pulses (int): Maximum allowed pulses in a sequence.
+            use_known_as_seed (bool): Whether to use the best known sequence as a seed for optimization.
         """
         # Paths
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -79,6 +80,7 @@ class Config:
         self.max_pulses = max_pulses
         self.tau_divisor = tau_divisor
         self.tau = self.Tqns / tau_divisor
+        self.use_known_as_seed = use_known_as_seed
         
         # Frequency Grids
         # Start from 0 to include DC component
@@ -196,6 +198,7 @@ def mqCDD(T, n, m):
     
     return [tk1 + [T], tk2 + [T]]
 
+@jax.jit
 def pulse_times_to_delays(tk):
     """
     Converts absolute pulse times to delay intervals.
@@ -208,6 +211,7 @@ def pulse_times_to_delays(tk):
     diffs = jnp.diff(tk_arr)
     return diffs[:-1]
 
+@jax.jit
 def delays_to_pulse_times(delays, T):
     """
     Converts delay intervals back to absolute pulse times.
@@ -235,6 +239,7 @@ def get_random_delays(n, T, tau):
     else:
         return jnp.ones(n) * T / (n + 1)
 
+@jax.jit
 def make_tk12(tk1, tk2):
     """
     Combines two pulse sequences into a single sequence for the 12 interaction.
@@ -321,6 +326,7 @@ def construct_pulse_library(T_seq, tau_min, max_pulses=50):
 # Core Calculation Functions (JAX-Compatible)
 # ==============================================================================
 
+@jax.jit
 def _get_chi_on_grid(spectrum, omega_grid, t_grid):
     """Helper to compute chi(t) on a given time grid."""
     # Construct two-sided spectrum, assuming S(-w) = S(w)*
@@ -340,6 +346,7 @@ def _get_chi_on_grid(spectrum, omega_grid, t_grid):
     return (jax.scipy.integrate.trapezoid(integrand_p, x=w_p, axis=0) / (2 * jnp.pi)
             + jax.scipy.integrate.trapezoid(integrand_m, x=w_m, axis=0) / (2 * jnp.pi))
 
+@functools.partial(jax.jit, static_argnames=['M'])
 def evaluate_overlap_small_M(pulse_times_a, pulse_times_b, spectrum, omega_grid, M, T_base):
     """
     Strategy 1: Exact Time-Folding (Small M).
@@ -367,7 +374,7 @@ def evaluate_overlap_small_M(pulse_times_a, pulse_times_b, spectrum, omega_grid,
     spectrum_ac = spectrum[1:]
     omega_grid_ac = omega_grid[1:]
     
-    t_grid_large = jnp.linspace(-M * T_base, M * T_base, 4000)
+    t_grid_large = jnp.linspace(-M * T_base, M * T_base, 10000)
     chi_base_vals = _get_chi_on_grid(spectrum_ac, omega_grid_ac, t_grid_large)
 
     chi_M_vals = jnp.zeros_like(t_diffs, dtype=jnp.complex128)
@@ -386,6 +393,7 @@ def evaluate_overlap_small_M(pulse_times_a, pulse_times_b, spectrum, omega_grid,
 
     return jnp.einsum('i,j,ij->', sigma_a, sigma_b, chi_M_vals) + dc_contribution
 
+@functools.partial(jax.jit, static_argnames=['M', 'num_harmonics'])
 def evaluate_overlap_large_M(pulse_times_a, pulse_times_b, spectrum, omega_grid, M, T_base, num_harmonics):
     """
     Strategy 2: Frequency Comb (Large M).
@@ -433,6 +441,7 @@ def evaluate_overlap_large_M(pulse_times_a, pulse_times_b, spectrum, omega_grid,
     
     return jnp.einsum('i,j,ij->', sigma_a, sigma_b, chi_M_vals) + dc_contribution
 
+@jax.jit
 def calculate_idling_fidelity(I_matrix):
     """
     Calculates the Idling Gate Fidelity F1(T) based on the overlap integrals.
@@ -528,7 +537,7 @@ def cost_function(delays_params, n_pulses1, SMat, w_grid, T_seq, tau_min, overla
     
     return infidelity + penalty * 1e6
 
-def optimize_random_sequences(config, M, n_pulses_list):
+def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
     """Optimizes random sequences for a given repetition count M."""
     T_seq = config.Tg / M
     best_inf = 1.0
@@ -543,12 +552,9 @@ def optimize_random_sequences(config, M, n_pulses_list):
         num_harmonics = int(w_max / dw) + 1
         overlap_fn = functools.partial(evaluate_overlap_large_M, M=M, T_base=T_seq, num_harmonics=num_harmonics)
     
-    for n1, n2 in n_pulses_list:
-        # Initial Guess
-        d1 = get_random_delays(n1, T_seq, config.tau)
-        d2 = get_random_delays(n2, T_seq, config.tau)
-        initial_params = jnp.concatenate([d1, d2])
-        
+    def run_single_optimization(n1, n2, initial_params, label):
+        nonlocal best_inf, best_seq
+
         # Bounds
         lower_bounds = jnp.ones_like(initial_params) * config.tau
         upper_bounds = jnp.ones_like(initial_params) * T_seq
@@ -561,7 +567,7 @@ def optimize_random_sequences(config, M, n_pulses_list):
                                        overlap_fn=overlap_fn)
         
         optimizer = jaxopt.ScipyBoundedMinimize(fun=cost_for_n, method='L-BFGS-B', 
-                                                maxiter=200, options={'disp': False})
+                                                maxiter=1000, options={'disp': False})
         
         try:
             res = optimizer.run(initial_params, bounds=bounds)
@@ -575,11 +581,28 @@ def optimize_random_sequences(config, M, n_pulses_list):
                 pt2 = delays_to_pulse_times(d2_opt, T_seq)
                 best_seq = (pt1, pt2)
                 
-            print(f"  Random Opt (n={n1},{n2}): Infidelity = {inf:.6e}")
+            print(f"  {label} (n={n1},{n2}): Infidelity = {inf:.6e}")
             
         except Exception as e:
-            print(f"  Optimization failed for n={n1},{n2}: {e}")
+            print(f"  {label} failed for n={n1},{n2}: {e}")
             # traceback.print_exc()
+
+    # 1. Seeded Optimization
+    if seed_seq is not None:
+        pt1_s, pt2_s = seed_seq
+        n1_s = len(pt1_s) - 2
+        n2_s = len(pt2_s) - 2
+        d1_s = pulse_times_to_delays(pt1_s)
+        d2_s = pulse_times_to_delays(pt2_s)
+        init_p = jnp.concatenate([d1_s, d2_s])
+        run_single_optimization(n1_s, n2_s, init_p, "Seeded Opt")
+
+    # 2. Random Optimization
+    for n1, n2 in n_pulses_list:
+        d1 = get_random_delays(n1, T_seq, config.tau)
+        d2 = get_random_delays(n2, T_seq, config.tau)
+        initial_params = jnp.concatenate([d1, d2])
+        run_single_optimization(n1, n2, initial_params, "Random Opt")
             
     return best_seq, best_inf
 
@@ -633,54 +656,75 @@ def evaluate_known_sequences(config, M, pLib):
 # Visualization
 # ==============================================================================
 
-def plot_comparison(known_seq, opt_seq, T_seq):
+def plot_comparison(config, known_seq, opt_seq, T_seq):
     """Plots the switching functions y(t) for comparison."""
-    fig, axs = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
+    has_known = known_seq is not None
+    has_opt = opt_seq is not None
+    
+    cols = 0
+    if has_known: cols += 1
+    if has_opt: cols += 1
+    
+    if cols == 0:
+        return
+
+    fig, axs = plt.subplots(3, cols, figsize=(6 * cols, 10), sharex=True, squeeze=False)
     
     def get_switching_function(pulse_times, T, num_points=1000):
+        pulse_times = np.array(pulse_times) # Ensure numpy for plotting
         t_grid = np.linspace(0, T, num_points)
         y = np.ones_like(t_grid)
-        internal_pulses = pulse_times[1:-1]
-        for t_pulse in internal_pulses:
-            y[t_grid >= t_pulse] *= -1
+        if len(pulse_times) > 2:
+            internal_pulses = pulse_times[1:-1]
+            for t_pulse in internal_pulses:
+                y[t_grid >= t_pulse] *= -1
         return t_grid, y
 
-    # Known Sequence
-    if known_seq:
-        k_pt1, k_pt2 = known_seq
-        t1, y1 = get_switching_function(k_pt1, T_seq)
-        t2, y2 = get_switching_function(k_pt2, T_seq)
+    def plot_col(col_idx, seq, title_prefix):
+        pt1, pt2 = seq
+        pt12 = make_tk12(pt1, pt2)
         
-        axs[0].step(t1*1e6, y1, 'r-', where='post', label='Qubit 1')
-        axs[0].step(t2*1e6, y2, 'b--', where='post', label='Qubit 2')
-        axs[0].set_title(f"Best Known Sequence")
-        axs[0].set_ylabel("y(t)")
-        axs[0].set_ylim(-1.2, 1.2)
-        axs[0].legend()
-        axs[0].grid(True, alpha=0.3)
-    else:
-        axs[0].set_title("No Valid Known Sequence Found")
+        t, y1 = get_switching_function(pt1, T_seq)
+        _, y2 = get_switching_function(pt2, T_seq)
+        _, y12 = get_switching_function(pt12, T_seq)
+        
+        # Row 0: y1
+        axs[0, col_idx].step(t*1e6, y1, 'k-', where='post')
+        axs[0, col_idx].set_title(f"{title_prefix}\nQubit 1 Switching Function ($y_1$)")
+        axs[0, col_idx].set_ylabel("$y_1(t)$")
+        axs[0, col_idx].set_ylim(-1.2, 1.2)
+        axs[0, col_idx].grid(True, alpha=0.3)
+        
+        # Row 1: y2
+        axs[1, col_idx].step(t*1e6, y2, 'k-', where='post')
+        axs[1, col_idx].set_title("Qubit 2 Switching Function ($y_2$)")
+        axs[1, col_idx].set_ylabel("$y_2(t)$")
+        axs[1, col_idx].set_ylim(-1.2, 1.2)
+        axs[1, col_idx].grid(True, alpha=0.3)
+        
+        # Row 2: y12
+        axs[2, col_idx].step(t*1e6, y12, 'k-', where='post')
+        axs[2, col_idx].set_title("Interaction Switching Function ($y_{12}$)")
+        axs[2, col_idx].set_ylabel("$y_{12}(t)$")
+        axs[2, col_idx].set_xlabel("Time ($\mu$s)")
+        axs[2, col_idx].set_ylim(-1.2, 1.2)
+        axs[2, col_idx].grid(True, alpha=0.3)
 
-    # Optimized Sequence
-    if opt_seq:
-        o_pt1, o_pt2 = opt_seq
-        t1_opt, y1_opt = get_switching_function(o_pt1, T_seq)
-        t2_opt, y2_opt = get_switching_function(o_pt2, T_seq)
-        
-        axs[1].step(t1_opt*1e6, y1_opt, 'r-', where='post', label='Qubit 1')
-        axs[1].step(t2_opt*1e6, y2_opt, 'b--', where='post', label='Qubit 2')
-        axs[1].set_title(f"Best Optimized Sequence")
-        axs[1].set_ylabel("y(t)")
-        axs[1].set_xlabel("Time (us)")
-        axs[1].set_ylim(-1.2, 1.2)
-        axs[1].legend()
-        axs[1].grid(True, alpha=0.3)
-    else:
-        axs[1].set_title("No Optimized Sequence Found")
+    current_col = 0
+    if has_known:
+        plot_col(current_col, known_seq, "Best Known Sequence")
+        current_col += 1
+    
+    if has_opt:
+        plot_col(current_col, opt_seq, "Best Optimized Sequence")
+        current_col += 1
 
     plt.tight_layout()
-    plt.savefig("sequence_comparison.pdf")
-    print("Saved comparison plot to sequence_comparison.pdf")
+    
+    save_path = os.path.join(config.path, "sequence_comparison.pdf")
+    plt.savefig(save_path)
+    print(f"Saved comparison plot to {save_path}")
+    plt.close(fig)
 
 
 # ==============================================================================
@@ -689,37 +733,116 @@ def plot_comparison(known_seq, opt_seq, T_seq):
 
 if __name__ == "__main__":
     try:
-        config = Config()
+        config = Config(use_known_as_seed=True)
         print("Configuration loaded successfully.")
         
         # Test for a specific M
         M_test = 1
         T_seq_test = config.Tg / M_test
-        max_p_test = 1200
+        max_p_test = 40
+        max_p_per_rep = int(max_p_test / M_test)
         
-        print(f"\n--- Testing M={M_test} ---")
+        print(f"\n{'='*60}")
+        print(f"TESTING CONFIGURATION: M={M_test}")
+        print(f"Total Pulse Limit: {max_p_test}")
+        print(f"Pulse Limit Per Repetition: {max_p_per_rep}")
+        print(f"{'='*60}")
         
         # 1. Known Sequences
-        pLib_delays, pLib_desc = construct_pulse_library(T_seq_test, config.tau, max_p_test)
+        pLib_delays, pLib_desc = construct_pulse_library(T_seq_test, config.tau, max_p_per_rep)
         
         best_known_seq = None
         if pLib_delays:
             best_known_seq, best_known_inf, idx = evaluate_known_sequences(config, M_test, pLib_delays)
-            print(f"Best Known Sequence Infidelity: {best_known_inf:.6e}")
-            if idx != -1:
-                print(f"Sequence Type: {pLib_desc[idx]}")
+            
+            print("\n" + "-" * 60)
+            print("BEST KNOWN SEQUENCE RESULTS")
+            print("-" * 60)
+            
+            if best_known_seq:
+                n_k1 = len(best_known_seq[0]) - 2
+                n_k2 = len(best_known_seq[1]) - 2
+                print(f"{'Infidelity':<25}: {best_known_inf:.6e}")
+                print(f"{'Sequence Type':<25}: {pLib_desc[idx]}")
+                print(f"{'Pulse Count (Q1, Q2)':<25}: ({n_k1}, {n_k2})")
+            else:
+                print("No known sequence found with infidelity < 1.0.")
+            print("-" * 60)
         else:
             print("No valid known sequences found.")
             
         # 2. Random Optimization
         print("\nRunning Random Optimization...")
-        n_pulses_list = [(100, 101),(200, 200)]
-        best_opt_seq, best_opt_inf = optimize_random_sequences(config, M_test, n_pulses_list)
-        print(f"Best Optimized Sequence Infidelity: {best_opt_inf:.6e}")
+        
+        n_pulses_list = []
+        # for _ in range(8):
+        #     n1 = np.random.randint(1, max_p_per_rep + 1)
+        #     n2 = np.random.randint(1, max_p_per_rep + 1)
+        #     n_pulses_list.append((n1, n2))
+                
+        seed_seq = best_known_seq if config.use_known_as_seed else None
+        best_opt_seq, best_opt_inf = optimize_random_sequences(config, M_test, n_pulses_list, seed_seq=seed_seq)
+        
+        print("\n" + "-" * 60)
+        print("BEST OPTIMIZED SEQUENCE RESULTS")
+        print("-" * 60)
+        
+        if best_opt_seq:
+            n_o1 = len(best_opt_seq[0]) - 2
+            n_o2 = len(best_opt_seq[1]) - 2
+            print(f"{'Infidelity':<25}: {best_opt_inf:.6e}")
+            print(f"{'Pulse Count (Q1, Q2)':<25}: ({n_o1}, {n_o2})")
+        else:
+            print(f"{'Infidelity':<25}: {best_opt_inf:.6e}")
+            print("No optimized sequence found.")
+        print("-" * 60)
+
+        # Final Comparison
+        print("\n" + "=" * 80)
+        print(f"{'FINAL COMPARISON':^80}")
+        print("=" * 80)
+        print(f"{'Metric':<25} | {'Best Known Sequence':<25} | {'Best Optimized Sequence':<25}")
+        print("-" * 80)
+        
+        inf_k_str = f"{best_known_inf:.6e}" if best_known_seq else "N/A"
+        inf_o_str = f"{best_opt_inf:.6e}" if best_opt_seq else "N/A"
+        print(f"{'Infidelity':<25} | {inf_k_str:<25} | {inf_o_str:<25}")
+        
+        if best_known_seq:
+            nk1, nk2 = len(best_known_seq[0]) - 2, len(best_known_seq[1]) - 2
+            pc_k_str = f"({nk1}, {nk2})"
+            desc_k = pLib_desc[idx]
+        else:
+            pc_k_str = "N/A"
+            desc_k = "N/A"
+            
+        if best_opt_seq:
+            no1, no2 = len(best_opt_seq[0]) - 2, len(best_opt_seq[1]) - 2
+            pc_o_str = f"({no1}, {no2})"
+        else:
+            pc_o_str = "N/A"
+            
+        print(f"{'Pulse Count (Q1, Q2)':<25} | {pc_k_str:<25} | {pc_o_str:<25}")
+        print(f"{'Description':<25} | {desc_k:<25} | {'Random Optimization':<25}")
+        
+        def get_min_sep(seq):
+            if seq is None: return None
+            return min(float(jnp.min(jnp.diff(seq[0]))), float(jnp.min(jnp.diff(seq[1]))))
+            
+        sep_k = get_min_sep(best_known_seq)
+        sep_o = get_min_sep(best_opt_seq)
+        sep_k_str = f"{sep_k*1e6:.4f} us" if sep_k is not None else "N/A"
+        sep_o_str = f"{sep_o*1e6:.4f} us" if sep_o is not None else "N/A"
+        print(f"{'Min Pulse Separation':<25} | {sep_k_str:<25} | {sep_o_str:<25}")
+        
+        sep_k_tau = f"{sep_k/config.tau:.2f} tau" if sep_k is not None else "N/A"
+        sep_o_tau = f"{sep_o/config.tau:.2f} tau" if sep_o is not None else "N/A"
+        print(f"{'Min Separation (tau)':<25} | {sep_k_tau:<25} | {sep_o_tau:<25}")
+        print("=" * 80)
 
         # 3. Plotting
         if best_known_seq or best_opt_seq:
-            plot_comparison(best_known_seq, best_opt_seq, T_seq_test)
+            plot_comparison(config, best_known_seq, best_opt_seq, T_seq_test)
         
     except Exception as e:
         print(f"Error: {e}")
