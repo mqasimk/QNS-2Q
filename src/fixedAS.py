@@ -2,28 +2,28 @@ import numpy as np
 from trajectories import make_y
 
 def ff(y, t, w):
-    return np.trapz(np.exp(1j*w*t)*y, t)
+    return np.trapezoid(np.exp(1j*w*t)*y, t)
 
 def f1_cpmg(ct, T, w):
     y = make_y(np.linspace(0, T, 10**5), ['CPMG', 'CPMG'], ctime=ct, m=1)
     t_vec = np.linspace(0, T, 10**5)
-    return np.trapz(y[0, 0]*np.exp(1j*w*t_vec), t_vec)
+    return np.trapezoid(y[0, 0]*np.exp(1j*w*t_vec), t_vec)
 
 def f1_fid(T, w):
     t_vec = np.linspace(0, T, 10**5)
-    return np.trapz(np.exp(1j*w*t_vec), t_vec)
+    return np.trapezoid(np.exp(1j*w*t_vec), t_vec)
 
 def f1_cdd1(ct, T, w):
     y = make_y(np.linspace(0, T, 10**5), ['CDD1', 'CDD1'], ctime=ct, m=1)
     t_vec = np.linspace(0, T, 10**5)
-    return np.trapz(y[0, 0]*np.exp(1j*w*t_vec), t_vec)
+    return np.trapezoid(y[0, 0]*np.exp(1j*w*t_vec), t_vec)
 
 def f1_cdd3(ct, T, w):
     if w == 0:
         return 0
     y = make_y(np.linspace(0, T, 10**5), ['CDD3', 'CDD3'], ctime=ct, m=1)
     t_vec = np.linspace(0, T, 10**5)
-    return np.trapz(y[0, 0]*np.exp(1j*w*t_vec), t_vec)
+    return np.trapezoid(y[0, 0]*np.exp(1j*w*t_vec), t_vec)
 
 def Gp(ffs, w, T, ct):
     return ffs[0](ct, T, w)*ffs[1](ct, T, -w)
