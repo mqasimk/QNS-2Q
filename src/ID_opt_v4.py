@@ -41,7 +41,7 @@ class Config:
     Constructs the interpolated and ideal spectral matrices used for calculations.
     """
     def __init__(self, 
-                 fname="DraftRun_NoSPAM_Boring", 
+                 fname="DraftRun_NoSPAM_Feature",
                  include_cross_spectra=True,
                  Tg=4 * 14 * 1e-6, 
                  tau_divisor=160, 
@@ -54,7 +54,8 @@ class Config:
                  
                  # Advanced/Unused Parameters (kept for compatibility)
                  reps_known=None, 
-                 reps_opt=None
+                 reps_opt=None,
+                 use_simulated=False
                  ):
         """
         Initialize configuration.
@@ -70,6 +71,7 @@ class Config:
             use_known_as_seed (bool): Whether to use the best known sequence as a seed.
             reps_known (list): List of repetition counts for known sequences (unused in current pipeline).
             reps_opt (list): List of repetition counts for optimization (unused in current pipeline).
+            use_simulated (bool): Whether to use simulated spectra instead of experimental data.
         """
         # Paths
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -79,8 +81,16 @@ class Config:
              raise FileNotFoundError(f"Data directory not found at {self.path}")
 
         # Load Data
-        self.specs = np.load(os.path.join(self.path, "specs.npz"))
-        self.params = np.load(os.path.join(self.path, "params.npz"))
+        if use_simulated:
+             sim_path = os.path.join(self.path, "simulated_spectra.npz")
+             if not os.path.exists(sim_path):
+                 raise FileNotFoundError(f"Simulated spectra not found at {sim_path}")
+             print(f"Loading simulated spectra from {sim_path}")
+             self.specs = np.load(sim_path)
+             self.params = self.specs
+        else:
+             self.specs = np.load(os.path.join(self.path, "specs.npz"))
+             self.params = np.load(os.path.join(self.path, "params.npz"))
         
         # System Parameters
         self.Tqns = float(self.params['T'])
@@ -117,7 +127,11 @@ class Config:
         
         self.w = jnp.linspace(0, self.w_max, self.N_w)
         self.w_ideal = jnp.linspace(0, 2 * self.w_max, 2 * self.N_w)
-        self.wkqns = jnp.array([2 * jnp.pi * (n + 1) / self.Tqns for n in range(self.mc)])
+        
+        if use_simulated and 'wk' in self.specs:
+            self.wkqns = jnp.array(self.specs['wk'])
+        else:
+            self.wkqns = jnp.array([2 * jnp.pi * (n + 1) / self.Tqns for n in range(self.mc)])
         
         # Spectral Matrices
         self.SMat = self._build_interpolated_spectra()
@@ -993,6 +1007,125 @@ def plot_filter_functions(config, known_seq, opt_seq, T_seq):
     print(f"Saved filter function comparison plot to {save_path}")
     plt.close(fig)
 
+def plot_filter_functions_with_spectra(config, known_seq, opt_seq, T_seq):
+    """
+    Plots filter functions overlaid with spectra.
+    When M is large, highlights the filter function values at harmonic frequencies.
+    """
+    has_known = known_seq is not None
+    has_opt = opt_seq is not None
+    
+    cols = 0
+    if has_known: cols += 1
+    if has_opt: cols += 1
+    
+    if cols == 0:
+        return
+
+    print("Plotting filter functions with spectra overlay...")
+
+    fig, axs = plt.subplots(3, cols, figsize=(8 * cols, 12), sharex=True, squeeze=False)
+    
+    # Frequency grid for continuous plotting
+    w_plot = np.linspace(1e3, config.w_max, 2000)
+    freqs_mhz = w_plot / (2 * np.pi * 1e6)
+    
+    # Harmonics if M is large
+    use_harmonics = (config.M > 10)
+    if use_harmonics:
+        w0 = 2 * np.pi / (config.Tg / config.M) # Base frequency of the sequence
+        max_k = int(config.w_max / w0)
+        k_vals = np.arange(1, max_k + 1)
+        w_harmonics = k_vals * w0
+        freqs_harmonics_mhz = w_harmonics / (2 * np.pi * 1e6)
+    
+    # Spectra (interpolated)
+    # SMat indices: 1->S11, 2->S22, 3->S1212
+    # SMat is on config.w
+    # We can interpolate SMat to w_plot for plotting
+    
+    def get_spectrum_interp(idx):
+        # idx: 1, 2, 3
+        S_vals = config.SMat[idx, idx] # Diagonal elements are real
+        return np.interp(w_plot, config.w, np.real(S_vals))
+
+    S11_plot = get_spectrum_interp(1)
+    S22_plot = get_spectrum_interp(2)
+    S1212_plot = get_spectrum_interp(3)
+    
+    spectra_data = [S11_plot, S22_plot, S1212_plot]
+    spectra_labels = ["$S_{11}$", "$S_{22}$", "$S_{1212}$"]
+    
+    def get_filter_function(pulse_times, T, w):
+        Z_w = get_spectral_amplitudes(pulse_times, T, w)
+        F_w = np.abs(Z_w)**2 / (w**2 * T)
+        return F_w
+
+    def plot_col(col_idx, seq, title_prefix):
+        pt1, pt2 = seq
+        pt12 = make_tk12(pt1, pt2)
+        
+        # Calculate Filter Functions
+        F1 = get_filter_function(pt1, T_seq, w_plot)
+        F2 = get_filter_function(pt2, T_seq, w_plot)
+        F12 = get_filter_function(pt12, T_seq, w_plot)
+        
+        Fs = [F1, F2, F12]
+        F_labels = ["$F_1$", "$F_2$", "$F_{12}$"]
+        
+        # Harmonics
+        F_harmonics = []
+        if use_harmonics:
+            F1_h = get_filter_function(pt1, T_seq, w_harmonics)
+            F2_h = get_filter_function(pt2, T_seq, w_harmonics)
+            F12_h = get_filter_function(pt12, T_seq, w_harmonics)
+            F_harmonics = [F1_h, F2_h, F12_h]
+        
+        for row in range(3):
+            ax1 = axs[row, col_idx]
+            ax2 = ax1.twinx()
+            
+            # Plot Filter Function (Left Axis)
+            color_F = 'tab:blue'
+            ax1.set_ylabel(f"Filter Function {F_labels[row]}", color=color_F)
+            ax1.tick_params(axis='y', labelcolor=color_F)
+            
+            # Continuous
+            ax1.plot(freqs_mhz, Fs[row], color=color_F, alpha=0.6, label='Filter (Cont.)')
+            ax1.set_yscale('log')
+            
+            if use_harmonics:
+                ax1.scatter(freqs_harmonics_mhz, F_harmonics[row], color=color_F, marker='o', s=20, label='Filter (Harmonics)')
+            
+            # Plot Spectrum (Right Axis)
+            color_S = 'tab:orange'
+            ax2.set_ylabel(f"Spectrum {spectra_labels[row]}", color=color_S)
+            ax2.tick_params(axis='y', labelcolor=color_S)
+            
+            ax2.plot(freqs_mhz, spectra_data[row], color=color_S, linestyle='--', alpha=0.6, label='Spectrum')
+            ax2.set_yscale('log') # Spectra are usually log-scale friendly
+            
+            ax1.set_title(f"{title_prefix}\n{F_labels[row]} vs {spectra_labels[row]}")
+            if row == 2:
+                ax1.set_xlabel("Frequency (MHz)")
+            
+            ax1.grid(True, which='both', alpha=0.3)
+
+    current_col = 0
+    if has_known:
+        plot_col(current_col, known_seq, "Best Known Sequence")
+        current_col += 1
+    
+    if has_opt:
+        plot_col(current_col, opt_seq, "Best Optimized Sequence")
+        current_col += 1
+
+    plt.tight_layout()
+    save_path = os.path.join(config.path, "filter_spectra_overlay.pdf")
+    plt.savefig(save_path)
+    print(f"Saved filter-spectra overlay plot to {save_path}")
+    plt.close(fig)
+
 def plot_generalized_filter_functions(config, seq, T_seq, label):
     """Plots the 3x3 generalized filter functions G_{a,b}(omega)."""
     if seq is None:
@@ -1310,6 +1443,7 @@ def run_optimization_pipeline(config):
     if best_known_seq or best_opt_seq:
         plot_comparison(config, best_known_seq, best_opt_seq, config.T_seq)
         plot_filter_functions(config, best_known_seq, best_opt_seq, config.T_seq)
+        plot_filter_functions_with_spectra(config, best_known_seq, best_opt_seq, config.T_seq)
         plot_noise_correlations(config)
         
         if best_known_seq:
@@ -1325,8 +1459,9 @@ if __name__ == "__main__":
         config = Config(
             use_known_as_seed=False,
             M=1,
-            max_pulses=100,
-            num_random_trials=10
+            max_pulses=400,
+            num_random_trials=10,
+            use_simulated=True # Enable simulated spectra by default for testing
         )
         print("Configuration loaded successfully.")
         

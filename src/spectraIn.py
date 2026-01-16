@@ -104,13 +104,18 @@ def S_2_12(w, gamma12):
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import numpy as np
+    import os
+
+    # Parameters
+    tau = 2.5e-8
+    T = 160 * tau
+    truncate = 20
+    gamma = T / 14
+    gamma12 = T / 28
 
     # Define frequency range
-    w = jnp.linspace(-2 * np.pi * 20 / (160*2.5e-8), 2 * np.pi * 20 / (160*2.5e-8), 5001)
-    wk = jnp.linspace(-2 * np.pi * 20 / (160*2.5e-8), 2 * np.pi * 20 / (160*2.5e-8), 41)
-    # Parameters
-    gamma = 160*2.5e-8/14
-    gamma12 = 160*2.5e-8/28
+    w = jnp.linspace(-2 * np.pi * truncate / T, 2 * np.pi * truncate / T, 5001)
+    wk = jnp.linspace(-2 * np.pi * truncate / T, 2 * np.pi * truncate / T, 2 * truncate + 1)
 
     # Compute spectra
     spectra = {
@@ -158,4 +163,34 @@ if __name__ == "__main__":
         ax.grid(True)
 
     plt.tight_layout()
+
+    # Save the simulated spectra
+    fname = "DraftRun_NoSPAM_Feature"
+    parent_dir = os.pardir
+    path = os.path.join(parent_dir, fname)
+    if not os.path.exists(path):
+        os.mkdir(path)
+
+    # Map keys to match specs.npz format
+    key_map = {
+        "S_11": "S11",
+        "S_22": "S22",
+        "S_1212": "S1212",
+        "S_1_2": "S12",
+        "S_1_12": "S112",
+        "S_2_12": "S212"
+    }
+
+    save_data = {key_map[k]: np.array(v) for k, v in spectra_k.items()}
+    save_data['wk'] = np.array(wk)
+    
+    # Save parameters as well
+    save_data['T'] = T
+    save_data['truncate'] = truncate
+    save_data['gamma'] = gamma
+    save_data['gamma_12'] = gamma12
+
+    np.savez(os.path.join(path, 'simulated_spectra.npz'), **save_data)
+    print(f"Simulated spectra saved to {os.path.join(path, 'simulated_spectra.npz')}")
+
     plt.show()

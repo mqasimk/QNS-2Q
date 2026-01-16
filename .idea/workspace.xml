@@ -4,22 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="6258686c-39ec-4d47-99d3-26c96c78fa3a" name="Changes" comment="Pulse repetition is implemented and works in v4">
+    <list default="true" id="6258686c-39ec-4d47-99d3-26c96c78fa3a" name="Changes" comment="boosting efficiency">
+      <change afterPath="$PROJECT_DIR$/src/CZopt_v2.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/IDGateLog.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/IDGateLog_v2.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/infidelity_vs_M.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/infidelity_vs_M_800_crossspec.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/infidelity_vs_M_known.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/optimizeLog.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/optimizeLog_v2.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/params.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/reconstruct.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/results.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/specs.npz" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/ID_opt_v4.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/ID_opt_v4.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/observables.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/observables.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/qnsExps.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/qnsExps.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/reconSpectra.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/reconSpectra.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/spectraIn.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/spectraIn.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/trajectories.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/trajectories.py" afterDir="false" />
@@ -75,52 +64,53 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;Python tests.Doctests in lax_numpy.executor&quot;: &quot;Debug&quot;,
-    &quot;Python.1212SpecSPAM.executor&quot;: &quot;Run&quot;,
-    &quot;Python.1qQNS.executor&quot;: &quot;Run&quot;,
-    &quot;Python.CZopt.executor&quot;: &quot;Run&quot;,
-    &quot;Python.ID_opt_v2.executor&quot;: &quot;Run&quot;,
-    &quot;Python.ID_opt_v3.executor&quot;: &quot;Run&quot;,
-    &quot;Python.ID_opt_v4.executor&quot;: &quot;Run&quot;,
-    &quot;Python.IDopt.executor&quot;: &quot;Run&quot;,
-    &quot;Python.QNSPlots.executor&quot;: &quot;Run&quot;,
-    &quot;Python.Unnamed.executor&quot;: &quot;Run&quot;,
-    &quot;Python.analyze_this.executor&quot;: &quot;Run&quot;,
-    &quot;Python.main.executor&quot;: &quot;Run&quot;,
-    &quot;Python.observables.executor&quot;: &quot;Run&quot;,
-    &quot;Python.optPlot.executor&quot;: &quot;Run&quot;,
-    &quot;Python.optWindow.executor&quot;: &quot;Run&quot;,
-    &quot;Python.optimize_CZ.executor&quot;: &quot;Run&quot;,
-    &quot;Python.optimize_ID.executor&quot;: &quot;Run&quot;,
-    &quot;Python.plotter_cz.executor&quot;: &quot;Run&quot;,
-    &quot;Python.plotters.executor&quot;: &quot;Run&quot;,
-    &quot;Python.qnsExps.executor&quot;: &quot;Run&quot;,
-    &quot;Python.qnsplots.executor&quot;: &quot;Run&quot;,
-    &quot;Python.reconSpectra.executor&quot;: &quot;Run&quot;,
-    &quot;Python.reconstruction.executor&quot;: &quot;Run&quot;,
-    &quot;Python.scratch.executor&quot;: &quot;Run&quot;,
-    &quot;Python.spectra.executor&quot;: &quot;Debug&quot;,
-    &quot;Python.spectraIn.executor&quot;: &quot;Run&quot;,
-    &quot;Python.test.executor&quot;: &quot;Run&quot;,
-    &quot;Python.test_pulse_construction.executor&quot;: &quot;Run&quot;,
-    &quot;Python.trajectories.executor&quot;: &quot;Run&quot;,
-    &quot;Python.util.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/home/mqasimk/IdeaProjects/QNS-2Q/src1&quot;,
-    &quot;project.structure.last.edited&quot;: &quot;Project&quot;,
-    &quot;project.structure.proportion&quot;: &quot;0.15&quot;,
-    &quot;project.structure.side.proportion&quot;: &quot;0.2&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "Python tests.Doctests in lax_numpy.executor": "Debug",
+    "Python.1212SpecSPAM.executor": "Run",
+    "Python.1qQNS.executor": "Run",
+    "Python.CZopt.executor": "Run",
+    "Python.CZopt_v2.executor": "Run",
+    "Python.ID_opt_v2.executor": "Run",
+    "Python.ID_opt_v3.executor": "Run",
+    "Python.ID_opt_v4.executor": "Run",
+    "Python.IDopt.executor": "Run",
+    "Python.QNSPlots.executor": "Run",
+    "Python.Unnamed.executor": "Run",
+    "Python.analyze_this.executor": "Run",
+    "Python.main.executor": "Run",
+    "Python.observables.executor": "Run",
+    "Python.optPlot.executor": "Run",
+    "Python.optWindow.executor": "Run",
+    "Python.optimize_CZ.executor": "Run",
+    "Python.optimize_ID.executor": "Run",
+    "Python.plotter_cz.executor": "Run",
+    "Python.plotters.executor": "Run",
+    "Python.qnsExps.executor": "Run",
+    "Python.qnsplots.executor": "Run",
+    "Python.reconSpectra.executor": "Run",
+    "Python.reconstruction.executor": "Run",
+    "Python.scratch.executor": "Run",
+    "Python.spectra.executor": "Debug",
+    "Python.spectraIn.executor": "Run",
+    "Python.test.executor": "Run",
+    "Python.test_pulse_construction.executor": "Run",
+    "Python.trajectories.executor": "Run",
+    "Python.util.executor": "Run",
+    "RunOnceActivity.MCP Project settings loaded": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "main",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "/home/mqasimk/IdeaProjects/QNS-2Q/src1",
+    "project.structure.last.edited": "Project",
+    "project.structure.proportion": "0.15",
+    "project.structure.side.proportion": "0.2",
+    "settings.editor.selected.configurable": "preferences.pluginManager"
   }
-}</component>
+}]]></component>
   <component name="PyConsoleOptionsProvider">
     <option name="myPythonConsoleState">
       <console-settings module-name="QNS-2Q" sdk-home="/usr/bin/python3.12">
@@ -200,14 +190,6 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1718933215862</updated>
-    </task>
-    <task id="LOCAL-00013" summary="CZ optimization has been implemented.">
-      <option name="closed" value="true" />
-      <created>1733756281569</created>
-      <option name="number" value="00013" />
-      <option name="presentableId" value="LOCAL-00013" />
-      <option name="project" value="LOCAL" />
-      <updated>1733756281569</updated>
     </task>
     <task id="LOCAL-00014" summary="Finalizing plots for the paper.">
       <option name="closed" value="true" />
@@ -593,7 +575,15 @@
       <option name="project" value="LOCAL" />
       <updated>1767927197405</updated>
     </task>
-    <option name="localTasksCounter" value="62" />
+    <task id="LOCAL-00062" summary="boosting efficiency">
+      <option name="closed" value="true" />
+      <created>1768549092037</created>
+      <option name="number" value="00062" />
+      <option name="presentableId" value="LOCAL-00062" />
+      <option name="project" value="LOCAL" />
+      <updated>1768549092038</updated>
+    </task>
+    <option name="localTasksCounter" value="63" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -608,7 +598,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="Convergence of expectation values enhanced by limited seeding." />
     <MESSAGE value="adding noise mitigation now" />
     <MESSAGE value="Completed." />
     <MESSAGE value="Resolving outstanding issues." />
@@ -633,7 +622,8 @@
     <MESSAGE value="IDopt remade" />
     <MESSAGE value="ID_opt_v3.py operates in the time domain exclusively. Need to verify pulse repetitions once more." />
     <MESSAGE value="Pulse repetition is implemented and works in v4" />
-    <option name="LAST_COMMIT_MESSAGE" value="Pulse repetition is implemented and works in v4" />
+    <MESSAGE value="boosting efficiency" />
+    <option name="LAST_COMMIT_MESSAGE" value="boosting efficiency" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

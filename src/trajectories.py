@@ -147,7 +147,7 @@ def make_Hamiltonian(y_uv, b_t):
            + jnp.tensordot(y_uv[2, 2] * b_t[2] * 0.5, jnp.kron(z_vec[3], paulis[0]), 0))
     return h_t
 
-@jax.jit
+# @jax.jit
 def f(t, tk):
     return jnp.sum(jnp.array(
         [((-1) ** i) * jnp.heaviside(t - tk[i], 1) * jnp.heaviside(tk[i + 1] - t, 1) for i in
