@@ -110,8 +110,8 @@ class SpectraReconstructor:
     def plot_reconstruction(self):
         """Plots the reconstructed spectra against the original spectra."""
         fig, axs = plt.subplots(2, 3, figsize=(16, 9))
-        w = np.linspace(0.1, self.config.wmax, self.config.w_grain)
-        w = w[40:]
+        w = np.linspace(0, self.config.wmax, self.config.w_grain)
+        #w = w[40:]
         xunits = 1e6
 
         plot_params = {
@@ -162,7 +162,10 @@ class SpectraReconstructor:
             for ax in ax_row:
                 ax.set_xlabel(r'$\omega$(MHz)', fontsize=plot_params['xlabelfont'])
                 ax.tick_params(direction='in', labelsize=plot_params['tickfont'])
+                ax.grid(True, alpha=0.3)
+                ax.set_yscale('asinh')
 
+        plt.tight_layout()
         path = os.path.join(os.pardir, self.config.data_folder, 'reconstruct.pdf')
         plt.savefig(path)
         plt.show()
@@ -185,7 +188,7 @@ class SpectraReconstructor:
 def main():
     """Main function to run the spectra reconstruction."""
     # --- User Configuration ---
-    data_folder = "DraftRun_NoSPAM_Boring"
+    data_folder = "DraftRun_NoSPAM_Feature"
     # ------------------------
 
     try:

@@ -21,13 +21,13 @@ import traceback
 import jax
 import jax.numpy as jnp
 import jax.scipy.integrate
+jax.config.update("jax_enable_x64", True)
 import jax.scipy.signal
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.optimize
 
 from spectraIn import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
-jax.config.update("jax_enable_x64", True)
 
 # ==============================================================================
 # Configuration

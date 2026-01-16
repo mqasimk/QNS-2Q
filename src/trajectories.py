@@ -147,7 +147,7 @@ def make_Hamiltonian(y_uv, b_t):
            + jnp.tensordot(y_uv[2, 2] * b_t[2] * 0.5, jnp.kron(z_vec[3], paulis[0]), 0))
     return h_t
 
-
+@jax.jit
 def f(t, tk):
     return jnp.sum(jnp.array(
         [((-1) ** i) * jnp.heaviside(t - tk[i], 1) * jnp.heaviside(tk[i + 1] - t, 1) for i in
@@ -230,8 +230,9 @@ def custom_y(vt, t_b, M):
 
 @jax.jit
 def make_propagator(H_t, t_vec):
-    U = jax.scipy.linalg.expm(-1j * jax.scipy.integrate.trapezoid(H_t, t_vec, axis=0))
-    return U
+    h_diags = jnp.diagonal(H_t, axis1=1, axis2=2)
+    phi = -1j * jax.scipy.integrate.trapezoid(h_diags, t_vec, axis=0)
+    return jnp.diag(jnp.exp(phi))
 
 
 @jax.jit
@@ -251,10 +252,11 @@ def solver_prop(y_uv, noise_mats, t_vec, rho, n_shots):
     y_uv = jnp.array(y_uv)
     output = []
     # Memory allocation safety for my laptop with a single GPU
-    slice_size = 100
+    slice_size = 2000
     n_slices = int(np.ceil(n_shots / slice_size))
     for i in range(n_slices):
-        n_arr = jnp.array(np.random.randint(0, 10000, (slice_size, 2)))
+        current_slice_size = min(slice_size, n_shots - i * slice_size)
+        n_arr = jnp.array(np.random.randint(0, 10000, (current_slice_size, 2)))
         result = jax.vmap(single_shot_prop, in_axes=[None, None, None, None, 0])(noise_mats, t_vec, y_uv, rho, n_arr)
-        output.extend([qt.Qobj(jnp.array(res), dims=[[2, 2, 2], [2, 2, 2]]) for res in result])
-    return output
+        output.append(result)
+    return jnp.concatenate(output, axis=0)

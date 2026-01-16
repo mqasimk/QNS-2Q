@@ -80,24 +80,24 @@ def povms(a_m: np.ndarray, delta: np.ndarray) -> List[qt.Qobj]:
     return [p1_0, p1_1, p2_0, p2_1]
 
 
-def gen_probs(gate: qt.Qobj, rho: qt.Qobj, povms_list: List[qt.Qobj]) -> np.ndarray:
-    """
-    Generates the probabilities of the four outcomes for a two-qubit measurement.
+@jax.jit
+def compute_probs_jax(rho_batch, gate, M_ops):
+    # rho_batch: (N, 8, 8)
+    # gate: (8, 8)
+    # M_ops: (4, 8, 8) -> [M00, M01, M10, M11]
 
-    Args:
-        gate: The quantum gate applied before measurement.
-        rho: The density matrix of the state.
-        povms_list: The list of POVM operators.
+    # Rotate: rho' = G rho G^dag
+    # G (8,8), rho (N,8,8)
+    # Using matmul broadcasting: (N, 8, 8)
+    rho_prime = jnp.matmul(jnp.matmul(gate, rho_batch), gate.conj().T)
 
-    Returns:
-        An array of four probabilities [p00, p01, p10, p11].
-    """
-    final_state = gate * rho * gate.dag()
-    p00 = np.real((povms_list[0] * povms_list[2] * final_state).tr())
-    p01 = np.real((povms_list[0] * povms_list[3] * final_state).tr())
-    p10 = np.real((povms_list[1] * povms_list[2] * final_state).tr())
-    p11 = np.real((povms_list[1] * povms_list[3] * final_state).tr())
-    return np.array([p00, p01, p10, p11])
+    # Measure: Tr(M * rho')
+    # M_ops (4, 8, 8), rho' (N, 8, 8)
+    # We want output (N, 4)
+    # result[n, m] = Tr(M_ops[m] @ rho_prime[n])
+    # einsum: m=measurement, n=batch, i,j=matrix indices
+    probs = jnp.einsum('mij,nji->nm', M_ops, rho_prime)
+    return jnp.real(probs)
 
 
 def get_expect_val_from_probs(probs: np.ndarray, cm: np.ndarray, qubit_idx: int = -1) -> float:
@@ -113,7 +113,7 @@ def get_expect_val_from_probs(probs: np.ndarray, cm: np.ndarray, qubit_idx: int 
     Returns:
         The calculated expectation value.
     """
-    pi = probs.mean(axis=0)
+    pi = jnp.mean(probs, axis=0)
     p_corr = np.linalg.inv(cm) @ pi
     if qubit_idx == 1:
         p = p_corr[0] + p_corr[1]
@@ -126,57 +126,71 @@ def get_expect_val_from_probs(probs: np.ndarray, cm: np.ndarray, qubit_idx: int 
 
 # --- Expectation Value Functions with Error Mitigation ---
 
-
-def e_x_hat(qubit: int, state: List[qt.Qobj], a_m: np.ndarray, delta: np.ndarray, cm: np.ndarray) -> float:
-    """Calculates the expectation value of sigma_x for a given qubit with measurement error mitigation."""
+def _compute_expectation(gate: qt.Qobj, state: jnp.ndarray, a_m: np.ndarray, delta: np.ndarray,
+                         cm: np.ndarray, qubit_idx: int = -1) -> float:
+    """Helper to compute expectation values using vectorized JAX operations."""
     povms_list = povms(a_m, delta)
+
+    # Convert QuTiP objects to JAX arrays
+    gate_jax = jnp.array(gate.full())
+    p_jax = [jnp.array(p.full()) for p in povms_list]
+
+    # Construct the 4 composite measurement operators
+    # M00 = p1_0 * p2_0
+    M00 = p_jax[0] @ p_jax[2]
+    # M01 = p1_0 * p2_1
+    M01 = p_jax[0] @ p_jax[3]
+    # M10 = p1_1 * p2_0
+    M10 = p_jax[1] @ p_jax[2]
+    # M11 = p1_1 * p2_1
+    M11 = p_jax[1] @ p_jax[3]
+
+    M_ops = jnp.stack([M00, M01, M10, M11])
+
+    # Compute probabilities for the entire batch
+    probs = compute_probs_jax(state, gate_jax, M_ops)
+
+    return get_expect_val_from_probs(probs, cm, qubit_idx)
+
+
+def e_x_hat(qubit: int, state: jnp.ndarray, a_m: np.ndarray, delta: np.ndarray, cm: np.ndarray) -> float:
+    """Calculates the expectation value of sigma_x for a given qubit with measurement error mitigation."""
     h = _get_hadamard_operators()
     gate = h[0] if qubit == 1 else h[1]
-    probs = np.array([gen_probs(gate, s, povms_list) for s in state])
-    return get_expect_val_from_probs(probs, cm, qubit_idx=qubit)
+    return _compute_expectation(gate, state, a_m, delta, cm, qubit_idx=qubit)
 
 
-def e_y_hat(qubit: int, state: List[qt.Qobj], a_m: np.ndarray, delta: np.ndarray, cm: np.ndarray) -> float:
+def e_y_hat(qubit: int, state: jnp.ndarray, a_m: np.ndarray, delta: np.ndarray, cm: np.ndarray) -> float:
     """Calculates the expectation value of sigma_y for a given qubit with measurement error mitigation."""
-    povms_list = povms(a_m, delta)
     rx = _get_rx_operators()
     gate = rx[0] if qubit == 1 else rx[1]
-    probs = np.array([gen_probs(gate, s, povms_list) for s in state])
-    return get_expect_val_from_probs(probs, cm, qubit_idx=qubit)
+    return _compute_expectation(gate, state, a_m, delta, cm, qubit_idx=qubit)
 
 
-def _get_two_qubit_exp_val_hat(gate: qt.Qobj, state: List[qt.Qobj], a_m: np.ndarray, delta: np.ndarray,
-                               cm: np.ndarray) -> float:
-    """Helper function to calculate a two-qubit expectation value."""
-    povms_list = povms(a_m, delta)
-    probs = np.array([gen_probs(gate, s, povms_list) for s in state])
-    return get_expect_val_from_probs(probs, cm)
-
-
-def e_xx_hat(state: List[qt.Qobj], a_m: np.ndarray, delta: np.ndarray, cm: np.ndarray) -> float:
+def e_xx_hat(state: jnp.ndarray, a_m: np.ndarray, delta: np.ndarray, cm: np.ndarray) -> float:
     """Calculates the expectation value of sigma_x \otimes sigma_x with measurement error mitigation."""
     h = _get_hadamard_operators()
-    return _get_two_qubit_exp_val_hat(h[2], state, a_m, delta, cm)
+    return _compute_expectation(h[2], state, a_m, delta, cm)
 
 
-def e_xy_hat(state: List[qt.Qobj], a_m: np.ndarray, delta: np.ndarray, cm: np.ndarray) -> float:
+def e_xy_hat(state: jnp.ndarray, a_m: np.ndarray, delta: np.ndarray, cm: np.ndarray) -> float:
     """Calculates the expectation value of sigma_x \otimes sigma_y with measurement error mitigation."""
     h = _get_hadamard_operators()
     rx = _get_rx_operators()
-    return _get_two_qubit_exp_val_hat(h[0] * rx[1], state, a_m, delta, cm)
+    return _compute_expectation(h[0] * rx[1], state, a_m, delta, cm)
 
 
-def e_yx_hat(state: List[qt.Qobj], a_m: np.ndarray, delta: np.ndarray, cm: np.ndarray) -> float:
+def e_yx_hat(state: jnp.ndarray, a_m: np.ndarray, delta: np.ndarray, cm: np.ndarray) -> float:
     """Calculates the expectation value of sigma_y \otimes sigma_x with measurement error mitigation."""
     h = _get_hadamard_operators()
     rx = _get_rx_operators()
-    return _get_two_qubit_exp_val_hat(rx[0] * h[1], state, a_m, delta, cm)
+    return _compute_expectation(rx[0] * h[1], state, a_m, delta, cm)
 
 
-def e_yy_hat(state: List[qt.Qobj], a_m: np.ndarray, delta: np.ndarray, cm: np.ndarray) -> float:
+def e_yy_hat(state: jnp.ndarray, a_m: np.ndarray, delta: np.ndarray, cm: np.ndarray) -> float:
     """Calculates the expectation value of sigma_y \otimes sigma_y with measurement error mitigation."""
     rx = _get_rx_operators()
-    return _get_two_qubit_exp_val_hat(rx[2], state, a_m, delta, cm)
+    return _compute_expectation(rx[2], state, a_m, delta, cm)
 
 
 # --- Concurrence and Entanglement Metrics ---
