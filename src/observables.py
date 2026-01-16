@@ -5,7 +5,7 @@ It is designed to work with QuTiP for quantum object representations and JAX for
 """
 
 from typing import List, Tuple, Callable
-
+import jax
 import jax.numpy as jnp
 import numpy as np
 import qutip as qt

@@ -163,7 +163,7 @@ class SpectraReconstructor:
                 ax.set_xlabel(r'$\omega$(MHz)', fontsize=plot_params['xlabelfont'])
                 ax.tick_params(direction='in', labelsize=plot_params['tickfont'])
                 ax.grid(True, alpha=0.3)
-                ax.set_yscale('asinh')
+                # ax.set_yscale('asinh')
 
         plt.tight_layout()
         path = os.path.join(os.pardir, self.config.data_folder, 'reconstruct.pdf')
