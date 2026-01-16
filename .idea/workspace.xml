@@ -4,25 +4,25 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="6258686c-39ec-4d47-99d3-26c96c78fa3a" name="Changes" comment="ID_opt_v3.py operates in the time domain exclusively. Need to verify pulse repetitions once more.">
-      <change afterPath="$PROJECT_DIR$/src/ID_opt_v4.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/test_jax_correlate.py" afterDir="false" />
+    <list default="true" id="6258686c-39ec-4d47-99d3-26c96c78fa3a" name="Changes" comment="Pulse repetition is implemented and works in v4">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/reconstruct.pdf" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/reconstruct.pdf" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/results.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/results.npz" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/specs.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/specs.npz" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/C_1_0_MT_1_vs_M_formal.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/ID_opt_v3.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/ID_opt_v3.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/IDopt.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/fixedAS.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/fixedAS.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/IDGateLog.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/IDGateLog_v2.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/infidelity_vs_M.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/infidelity_vs_M_800_crossspec.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/infidelity_vs_M_known.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/optimizeLog.npz" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/optimizeLog_v2.npz" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/params.npz" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/reconstruct.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/results.npz" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Boring/specs.npz" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ID_opt_v4.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/ID_opt_v4.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/observables.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/observables.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/qnsExps.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/qnsExps.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/recon_S1212.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/sequence_comparison.pdf" beforeDir="false" afterPath="$PROJECT_DIR$/src/sequence_comparison.pdf" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/reconSpectra.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/reconSpectra.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/spectraIn.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/spectraIn.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/test_asymmetric_cdd_construction.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/test_cdd_construction.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/test_mqcdd_construction.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/test_pulse_construction.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/trajectories.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/trajectories.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -188,7 +188,7 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-jdk-30f59d01ecdd-26cb7f24e5b0-intellij.indexing.shared.core-IU-253.29346.138" />
+        <option value="bundled-jdk-30f59d01ecdd-26cb7f24e5b0-intellij.indexing.shared.core-IU-253.29346.240" />
       </set>
     </attachedChunks>
   </component>
@@ -200,14 +200,6 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1718933215862</updated>
-    </task>
-    <task id="LOCAL-00012" summary="CZ optimization has been implemented.">
-      <option name="closed" value="true" />
-      <created>1733756236638</created>
-      <option name="number" value="00012" />
-      <option name="presentableId" value="LOCAL-00012" />
-      <option name="project" value="LOCAL" />
-      <updated>1733756236638</updated>
     </task>
     <task id="LOCAL-00013" summary="CZ optimization has been implemented.">
       <option name="closed" value="true" />
@@ -593,7 +585,15 @@
       <option name="project" value="LOCAL" />
       <updated>1767198291737</updated>
     </task>
-    <option name="localTasksCounter" value="61" />
+    <task id="LOCAL-00061" summary="Pulse repetition is implemented and works in v4">
+      <option name="closed" value="true" />
+      <created>1767927197404</created>
+      <option name="number" value="00061" />
+      <option name="presentableId" value="LOCAL-00061" />
+      <option name="project" value="LOCAL" />
+      <updated>1767927197405</updated>
+    </task>
+    <option name="localTasksCounter" value="62" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -608,7 +608,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="Changing the realistic measurement sims" />
     <MESSAGE value="Convergence of expectation values enhanced by limited seeding." />
     <MESSAGE value="adding noise mitigation now" />
     <MESSAGE value="Completed." />
@@ -633,7 +632,8 @@
     <MESSAGE value="IDopt confirmed" />
     <MESSAGE value="IDopt remade" />
     <MESSAGE value="ID_opt_v3.py operates in the time domain exclusively. Need to verify pulse repetitions once more." />
-    <option name="LAST_COMMIT_MESSAGE" value="ID_opt_v3.py operates in the time domain exclusively. Need to verify pulse repetitions once more." />
+    <MESSAGE value="Pulse repetition is implemented and works in v4" />
+    <option name="LAST_COMMIT_MESSAGE" value="Pulse repetition is implemented and works in v4" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -660,5 +660,9 @@
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
+  </component>
+  <component name="XSLT-Support.FileAssociations.UIState">
+    <expand />
+    <select />
   </component>
 </project>

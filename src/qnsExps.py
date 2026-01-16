@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 
 import jax.numpy as jnp
 import numpy as np
+import jax
+jax.config.update("jax_enable_x64", True)
 
 from observables import (make_c_12_0_mt, make_c_12_12_mt, make_c_a_0_mt,
                          make_c_a_b_mt)
@@ -47,27 +49,27 @@ class QNSExperimentConfig:
         fname: The name of the folder to save the results in.
         parent_dir: The parent directory to save the results in.
     """
-    tau: jnp.float32 = 2.5e-8
-    M: jnp.int32 = 18
-    t_grain: jnp.int32 = 3500
-    truncate: jnp.int32 = 40
-    w_grain: jnp.int32 = 1000
+    tau: jnp.float64 = 2.5e-8
+    M: jnp.int64 = 10
+    t_grain: jnp.int64 = 1600
+    truncate: jnp.int64 = 20
+    w_grain: jnp.int64 = 1000
     spec_vec: list = field(default_factory=lambda: [S_11, S_22, S_1212])
     a_sp: np.ndarray = field(default_factory=lambda: jnp.array([1., 1.]))
     c: np.ndarray = field(
         default_factory=lambda: np.array(
             [jnp.array(0. + 0. * 1j),
              jnp.array(0. + 0. * 1j)]))
-    a1: jnp.float32 = 1.
-    b1: jnp.float32 = 1.
-    a2: jnp.float32 = 1.
-    b2: jnp.float32 = 1.
+    a1: jnp.float64 = 1.
+    b1: jnp.float64 = 1.
+    a2: jnp.float64 = 1.
+    b2: jnp.float64 = 1.
     spMit: bool = False
-    T: jnp.float32 = 160*tau
-    gamma: jnp.float32 = T / 14
-    gamma_12: jnp.float32 = T / 28
-    n_shots: jnp.int32 = 4000
-    fname: str = "DraftRun_NoSPAM_Boring"
+    T: jnp.float64 = 160*tau
+    gamma: jnp.float64 = T / 14
+    gamma_12: jnp.float64 = T / 28
+    n_shots: jnp.int64 = 4000
+    fname: str = "DraftRun_NoSPAM_Feature"
     parent_dir: str = os.pardir
 
     def __post_init__(self):
