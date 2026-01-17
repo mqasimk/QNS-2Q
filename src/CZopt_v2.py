@@ -604,7 +604,7 @@ def optimize_sequence(config, M, T_seq, n1, n2, seed_seq=None):
     try:
         res = scipy.optimize.minimize(fun_wrapper, np.array(initial_params), method='SLSQP',
                                       bounds=bounds, constraints=linear_cons, jac=True,
-                                      tol=1e-14, options={'maxiter': 1000, 'disp': False})
+                                      tol=1e-14, options={'maxiter': 2000, 'disp': False})
         
         d1_opt = jnp.array(res.x[:n1])
         d2_opt = jnp.array(res.x[n1:])
