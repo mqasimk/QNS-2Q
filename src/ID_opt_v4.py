@@ -24,10 +24,12 @@ import jax.scipy.integrate
 jax.config.update("jax_enable_x64", True)
 import jax.scipy.signal
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import numpy as np
 import scipy.optimize
 
 from spectraIn import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
+import plot_utils
 
 # ==============================================================================
 # Configuration
@@ -43,7 +45,7 @@ class Config:
     def __init__(self, 
                  fname="DraftRun_NoSPAM_Feature",
                  include_cross_spectra=True,
-                 Tg=4 * 14 * 1e-6, 
+                 Tg=4 * 14 * 1e-6, # Default, will be overridden by loop
                  tau_divisor=160, 
                  
                  # Optimization/Testing Parameters
@@ -52,26 +54,19 @@ class Config:
                  num_random_trials=10,     # Number of random sequences to optimize
                  use_known_as_seed=False,  # Use best known sequence as seed
                  
+                 # Output settings
+                 output_path_known="infs_known_id_v4.npz",
+                 output_path_opt="infs_opt_id_v4.npz",
+                 plot_filename="infs_GateTime_id_v4.pdf",
+                 
                  # Advanced/Unused Parameters (kept for compatibility)
                  reps_known=None, 
                  reps_opt=None,
-                 use_simulated=False
+                 use_simulated=False,
+                 gate_time_factors=None
                  ):
         """
         Initialize configuration.
-
-        Args:
-            fname (str): Name of the data directory.
-            include_cross_spectra (bool): Whether to include cross-correlation spectra.
-            Tg (float): Total gate time.
-            tau_divisor (int): Divisor to determine minimum pulse separation (tau).
-            M (int): Number of repetitions of the base sequence.
-            max_pulses (int): Maximum allowed pulses in the total sequence.
-            num_random_trials (int): Number of random initializations for optimization.
-            use_known_as_seed (bool): Whether to use the best known sequence as a seed.
-            reps_known (list): List of repetition counts for known sequences (unused in current pipeline).
-            reps_opt (list): List of repetition counts for optimization (unused in current pipeline).
-            use_simulated (bool): Whether to use simulated spectra instead of experimental data.
         """
         # Paths
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -108,6 +103,12 @@ class Config:
         self.max_pulses = max_pulses
         self.num_random_trials = num_random_trials
         self.use_known_as_seed = use_known_as_seed
+        
+        self.output_path_known = output_path_known
+        self.output_path_opt = output_path_opt
+        self.plot_filename = plot_filename
+        
+        self.gate_time_factors = gate_time_factors if gate_time_factors is not None else [-1, 0, 1, 2, 3, 4, 5, 6]
         
         # Derived Parameters
         self.T_seq = self.Tg / self.M
@@ -837,497 +838,69 @@ def evaluate_known_sequences(config, M, pLib):
             
     return best_seq, best_inf, best_idx
 
-
-# ==============================================================================
-# Visualization
-# ==============================================================================
-
-def plot_comparison(config, known_seq, opt_seq, T_seq):
-    """Plots the switching functions y(t) for comparison."""
-    has_known = known_seq is not None
-    has_opt = opt_seq is not None
+def calculate_infidelity(seq, config, M, T_seq, use_ideal=False):
+    if seq is None: return 1.0
     
-    cols = 0
-    if has_known: cols += 1
-    if has_opt: cols += 1
+    SMat = config.SMat_ideal if use_ideal else config.SMat
+    w_grid = config.w_ideal if use_ideal else config.w
     
-    if cols == 0:
-        return
-
-    fig, axs = plt.subplots(3, cols, figsize=(6 * cols, 10), sharex=True, squeeze=False)
+    use_comb = (M > 10)
     
-    def get_switching_function(pulse_times, T, num_points=1000):
-        pulse_times = np.array(pulse_times) # Ensure numpy for plotting
-        t_grid = np.linspace(0, T, num_points)
-        y = np.ones_like(t_grid)
-        if len(pulse_times) > 2:
-            internal_pulses = pulse_times[1:-1]
-            for t_pulse in internal_pulses:
-                y[t_grid >= t_pulse] *= -1
-        return t_grid, y
-
-    def plot_col(col_idx, seq, title_prefix):
-        pt1, pt2 = seq
-        pt12 = make_tk12(pt1, pt2)
+    if use_comb:
+        w0 = 2 * jnp.pi / T_seq
+        limit_w = w_grid[-1]
+        max_k = int(limit_w / w0)
         
-        t, y1 = get_switching_function(pt1, T_seq)
-        _, y2 = get_switching_function(pt2, T_seq)
-        _, y12 = get_switching_function(pt12, T_seq)
+        k_vals = jnp.arange(1, max_k + 1)
+        omega_k = k_vals * w0
         
-        # Row 0: y1
-        axs[0, col_idx].step(t*1e6, y1, 'k-', where='post')
-        axs[0, col_idx].set_title(f"{title_prefix}\nQubit 1 Switching Function ($y_1$)")
-        axs[0, col_idx].set_ylabel("$y_1(t)$")
-        axs[0, col_idx].set_ylim(-1.2, 1.2)
-        axs[0, col_idx].grid(True, alpha=0.3)
+        S_flat = SMat.reshape(-1, SMat.shape[-1])
+        def interp_row(fp):
+            return (jnp.interp(omega_k, w_grid, jnp.real(fp), right=0.) +
+                   1j * jnp.interp(omega_k, w_grid, jnp.imag(fp), right=0.))
+        S_harmonics_flat = jax.vmap(interp_row)(S_flat)
+        S_DC_flat = S_flat[:, 0]
+        S_packed_flat = jnp.concatenate([S_DC_flat[:, None], S_harmonics_flat], axis=1)
+        RMat_data = S_packed_flat.reshape(4, 4, -1)
         
-        # Row 1: y2
-        axs[1, col_idx].step(t*1e6, y2, 'k-', where='post')
-        axs[1, col_idx].set_title("Qubit 2 Switching Function ($y_2$)")
-        axs[1, col_idx].set_ylabel("$y_2(t)$")
-        axs[1, col_idx].set_ylim(-1.2, 1.2)
-        axs[1, col_idx].grid(True, alpha=0.3)
+        overlap_fn = lambda pt_a, pt_b, data: evaluate_overlap_comb(pt_a, pt_b, data, omega_k, T_seq, M)
         
-        # Row 2: y12
-        axs[2, col_idx].step(t*1e6, y12, 'k-', where='post')
-        axs[2, col_idx].set_title("Interaction Switching Function ($y_{12}$)")
-        axs[2, col_idx].set_ylabel("$y_{12}(t)$")
-        axs[2, col_idx].set_xlabel(r"Time ($\mu$s)")
-        axs[2, col_idx].set_ylim(-1.2, 1.2)
-        axs[2, col_idx].grid(True, alpha=0.3)
-
-    current_col = 0
-    if has_known:
-        plot_col(current_col, known_seq, "Best Known Sequence")
-        current_col += 1
-    
-    if has_opt:
-        plot_col(current_col, opt_seq, "Best Optimized Sequence")
-        current_col += 1
-
-    plt.tight_layout()
-    
-    save_path = os.path.join(config.path, "sequence_comparison.pdf")
-    plt.savefig(save_path)
-    print(f"Saved comparison plot to {save_path}")
-    plt.close(fig)
-
-def get_spectral_amplitudes(pulse_times, T, w):
-    """Computes the spectral amplitude Z(w) for a pulse sequence."""
-    pulse_times = np.array(pulse_times)
-    n_intervals = len(pulse_times) - 1
-    signs = (-1.0)**np.arange(n_intervals)
-    
-    # exp_t: shape (len(pulse_times), len(w))
-    exp_t = np.exp(1j * np.outer(pulse_times, w))
-    
-    # diffs: shape (n_intervals, len(w))
-    diffs = exp_t[1:] - exp_t[:-1]
-    
-    # Z_w: shape (len(w),)
-    Z_w = np.sum(signs[:, None] * diffs, axis=0)
-    return Z_w
-
-def plot_filter_functions(config, known_seq, opt_seq, T_seq):
-    """Plots the filter functions F(omega) for comparison using asinh scaling."""
-    has_known = known_seq is not None
-    has_opt = opt_seq is not None
-    
-    cols = 0
-    if has_known: cols += 1
-    if has_opt: cols += 1
-    
-    if cols == 0:
-        return
-
-    fig, axs = plt.subplots(3, cols, figsize=(6 * cols, 10), sharex=True, squeeze=False)
-    
-    # Frequency grid for plotting (avoid 0 to prevent division by zero)
-    w_plot = np.linspace(1e3, 2 * np.pi * 5e6, 1000) 
-    
-    def get_filter_function(pulse_times, T, w):
-        Z_w = get_spectral_amplitudes(pulse_times, T, w)
-        F_w = np.abs(Z_w)**2 / (w**2 * T)
-        return w, F_w
-
-    def plot_col(col_idx, seq, title_prefix):
-        pt1, pt2 = seq
-        pt12 = make_tk12(pt1, pt2)
+    else:
+        N = w_grid.shape[0]
+        dw = w_grid[1] - w_grid[0]
+        dt = (2 * np.pi / (N * dw))
+        lags_R = (jnp.arange(N) - N//2) * dt
         
-        w, F1 = get_filter_function(pt1, T_seq, w_plot)
-        _, F2 = get_filter_function(pt2, T_seq, w_plot)
-        _, F12 = get_filter_function(pt12, T_seq, w_plot)
+        RMat_vals = jnp.fft.ifft(SMat, axis=-1)
+        RMat_scaled = RMat_vals / dt
+        RMat_shifted = jnp.fft.fftshift(RMat_scaled, axes=-1)
         
-        freqs_mhz = w / (2 * np.pi * 1e6)
+        n_base_steps = int(np.ceil(T_seq / dt))
         
-        # Helper for asinh plotting
-        def plot_asinh(ax, x, y, color, label):
-            scale_factor = np.median(np.abs(y))
-            if scale_factor == 0: scale_factor = 1e-6
-            try:
-                ax.set_yscale('asinh', linear_width=scale_factor)
-                ax.plot(x, y, color=color)
-            except ValueError:
-                y_trans = np.arcsinh(y / scale_factor)
-                ax.plot(x, y_trans, color=color)
-                ax.set_ylabel(f"asinh(F/{scale_factor:.1e})")
-
-        # Row 0: F1
-        plot_asinh(axs[0, col_idx], freqs_mhz, F1, 'b', "$F_1$")
-        axs[0, col_idx].set_title(f"{title_prefix}\nQubit 1 Filter Function ($F_1$)")
-        if not axs[0, col_idx].get_ylabel(): axs[0, col_idx].set_ylabel(r"$F_1(\omega)$")
-        axs[0, col_idx].grid(True, alpha=0.3)
+        def get_folded_matrix(RMat_in):
+            R_flat = RMat_in.reshape(-1, RMat_in.shape[-1])
+            folded_flat = jax.vmap(lambda r: precompute_R_folded(r, lags_R, M, T_seq, dt, n_base_steps))(R_flat)
+            return folded_flat.reshape(4, 4, -1)
+        RMat_data = get_folded_matrix(RMat_shifted)
         
-        # Row 1: F2
-        plot_asinh(axs[1, col_idx], freqs_mhz, F2, 'r', "$F_2$")
-        axs[1, col_idx].set_title("Qubit 2 Filter Function ($F_2$)")
-        if not axs[1, col_idx].get_ylabel(): axs[1, col_idx].set_ylabel(r"$F_2(\omega)$")
-        axs[1, col_idx].grid(True, alpha=0.3)
-        
-        # Row 2: F12
-        plot_asinh(axs[2, col_idx], freqs_mhz, F12, 'g', "$F_{12}$")
-        axs[2, col_idx].set_title("Interaction Filter Function ($F_{12}$)")
-        if not axs[2, col_idx].get_ylabel(): axs[2, col_idx].set_ylabel(r"$F_{12}(\omega)$")
-        axs[2, col_idx].set_xlabel("Frequency (MHz)")
-        axs[2, col_idx].grid(True, alpha=0.3)
-
-    current_col = 0
-    if has_known:
-        plot_col(current_col, known_seq, "Best Known Sequence")
-        current_col += 1
-    
-    if has_opt:
-        plot_col(current_col, opt_seq, "Best Optimized Sequence")
-        current_col += 1
-
-    plt.tight_layout()
-    
-    save_path = os.path.join(config.path, "filter_function_comparison.pdf")
-    plt.savefig(save_path)
-    print(f"Saved filter function comparison plot to {save_path}")
-    plt.close(fig)
-
-def plot_filter_functions_with_spectra(config, known_seq, opt_seq, T_seq):
-    """
-    Plots filter functions overlaid with spectra.
-    When M is large, highlights the filter function values at harmonic frequencies.
-    """
-    has_known = known_seq is not None
-    has_opt = opt_seq is not None
-    
-    cols = 0
-    if has_known: cols += 1
-    if has_opt: cols += 1
-    
-    if cols == 0:
-        return
-
-    print("Plotting filter functions with spectra overlay...")
-
-    fig, axs = plt.subplots(3, cols, figsize=(8 * cols, 12), sharex=True, squeeze=False)
-    
-    # Frequency grid for continuous plotting
-    w_plot = np.linspace(1e3, config.w_max, 2000)
-    freqs_mhz = w_plot / (2 * np.pi * 1e6)
-    
-    # Harmonics if M is large
-    use_harmonics = (config.M > 10)
-    if use_harmonics:
-        w0 = 2 * np.pi / (config.Tg / config.M) # Base frequency of the sequence
-        max_k = int(config.w_max / w0)
-        k_vals = np.arange(1, max_k + 1)
-        w_harmonics = k_vals * w0
-        freqs_harmonics_mhz = w_harmonics / (2 * np.pi * 1e6)
-    
-    # Spectra (interpolated)
-    # SMat indices: 1->S11, 2->S22, 3->S1212
-    # SMat is on config.w
-    # We can interpolate SMat to w_plot for plotting
-    
-    def get_spectrum_interp(idx):
-        # idx: 1, 2, 3
-        S_vals = config.SMat[idx, idx] # Diagonal elements are real
-        return np.interp(w_plot, config.w, np.real(S_vals))
-
-    S11_plot = get_spectrum_interp(1)
-    S22_plot = get_spectrum_interp(2)
-    S1212_plot = get_spectrum_interp(3)
-    
-    spectra_data = [S11_plot, S22_plot, S1212_plot]
-    spectra_labels = ["$S_{11}$", "$S_{22}$", "$S_{1212}$"]
-    
-    def get_filter_function(pulse_times, T, w):
-        Z_w = get_spectral_amplitudes(pulse_times, T, w)
-        F_w = np.abs(Z_w)**2 / (w**2 * T)
-        return F_w
-
-    def plot_col(col_idx, seq, title_prefix):
-        pt1, pt2 = seq
-        pt12 = make_tk12(pt1, pt2)
-        
-        # Calculate Filter Functions
-        F1 = get_filter_function(pt1, T_seq, w_plot)
-        F2 = get_filter_function(pt2, T_seq, w_plot)
-        F12 = get_filter_function(pt12, T_seq, w_plot)
-        
-        Fs = [F1, F2, F12]
-        F_labels = ["$F_1$", "$F_2$", "$F_{12}$"]
-        
-        # Harmonics
-        F_harmonics = []
-        if use_harmonics:
-            F1_h = get_filter_function(pt1, T_seq, w_harmonics)
-            F2_h = get_filter_function(pt2, T_seq, w_harmonics)
-            F12_h = get_filter_function(pt12, T_seq, w_harmonics)
-            F_harmonics = [F1_h, F2_h, F12_h]
-        
-        for row in range(3):
-            ax1 = axs[row, col_idx]
-            ax2 = ax1.twinx()
-            
-            # Plot Filter Function (Left Axis)
-            color_F = 'tab:blue'
-            ax1.set_ylabel(f"Filter Function {F_labels[row]}", color=color_F)
-            ax1.tick_params(axis='y', labelcolor=color_F)
-            
-            # Continuous
-            ax1.plot(freqs_mhz, Fs[row], color=color_F, alpha=0.6, label='Filter (Cont.)')
-            ax1.set_yscale('log')
-            
-            if use_harmonics:
-                ax1.scatter(freqs_harmonics_mhz, F_harmonics[row], color=color_F, marker='o', s=20, label='Filter (Harmonics)')
-            
-            # Plot Spectrum (Right Axis)
-            color_S = 'tab:orange'
-            ax2.set_ylabel(f"Spectrum {spectra_labels[row]}", color=color_S)
-            ax2.tick_params(axis='y', labelcolor=color_S)
-            
-            ax2.plot(freqs_mhz, spectra_data[row], color=color_S, linestyle='--', alpha=0.6, label='Spectrum')
-            ax2.set_yscale('log') # Spectra are usually log-scale friendly
-            
-            ax1.set_title(f"{title_prefix}\n{F_labels[row]} vs {spectra_labels[row]}")
-            if row == 2:
-                ax1.set_xlabel("Frequency (MHz)")
-            
-            ax1.grid(True, which='both', alpha=0.3)
-
-    current_col = 0
-    if has_known:
-        plot_col(current_col, known_seq, "Best Known Sequence")
-        current_col += 1
-    
-    if has_opt:
-        plot_col(current_col, opt_seq, "Best Optimized Sequence")
-        current_col += 1
-
-    plt.tight_layout()
-    save_path = os.path.join(config.path, "filter_spectra_overlay.pdf")
-    plt.savefig(save_path)
-    print(f"Saved filter-spectra overlay plot to {save_path}")
-    plt.close(fig)
-
-def plot_generalized_filter_functions(config, seq, T_seq, label):
-    """Plots the 3x3 generalized filter functions G_{a,b}(omega)."""
-    if seq is None:
-        return
-
-    print(f"Plotting generalized filter functions for {label}...")
-    
-    w_plot = np.linspace(1e3, 2 * np.pi * 5e6, 1000)
-    freqs_mhz = w_plot / (2 * np.pi * 1e6)
-    
-    pt1, pt2 = seq
-    pt12 = make_tk12(pt1, pt2)
-    
-    Z1 = get_spectral_amplitudes(pt1, T_seq, w_plot)
-    Z2 = get_spectral_amplitudes(pt2, T_seq, w_plot)
-    Z12 = get_spectral_amplitudes(pt12, T_seq, w_plot)
-    
-    Zs = [Z1, Z2, Z12]
-    labels = ['1', '2', '12']
-    
-    fig, axs = plt.subplots(3, 3, figsize=(15, 12), sharex=True, sharey=False)
-    
-    for i in range(3):
-        for j in range(3):
-            # G_{ab} = Z_a Z_b^* / (w^2 T)
-            G_ab = (Zs[i] * np.conj(Zs[j])) / (w_plot**2 * T_seq)
-            
-            ax = axs[i, j]
-            
-            # Scale factor
-            scale_factor = np.median(np.abs(G_ab))
-            if scale_factor == 0: scale_factor = 1e-6
-            
-            try:
-                ax.set_yscale('asinh', linear_width=scale_factor)
-                ax.plot(freqs_mhz, np.real(G_ab), label='Real')
-                ax.plot(freqs_mhz, np.imag(G_ab), label='Imag', alpha=0.7)
-            except ValueError:
-                y_real = np.arcsinh(np.real(G_ab) / scale_factor)
-                y_imag = np.arcsinh(np.imag(G_ab) / scale_factor)
-                ax.plot(freqs_mhz, y_real, label='asinh(Real)')
-                ax.plot(freqs_mhz, y_imag, label='asinh(Imag)', alpha=0.7)
-                ax.set_ylabel(f"asinh(G/{scale_factor:.1e})")
-            
-            ax.set_title(f"$G_{{{labels[i]},{labels[j]}}}(\\omega)$")
-            if i == 2:
-                ax.set_xlabel("Frequency (MHz)")
-            if j == 0 and not ax.get_ylabel():
-                ax.set_ylabel("Amplitude")
-            ax.grid(True, alpha=0.3)
-            ax.legend(fontsize='small')
-            
-    plt.suptitle(f"Generalized Filter Functions - {label}")
-    plt.tight_layout()
-    filename = f"generalized_filter_functions_{label.replace(' ', '_')}.pdf"
-    save_path = os.path.join(config.path, filename)
-    plt.savefig(save_path)
-    print(f"Saved generalized filter functions plot to {save_path}")
-    plt.close(fig)
-
-def plot_noise_correlations(config):
-    """Plots the 9 noise correlation functions R(tau)."""
-    print("Plotting noise correlation functions...")
-    
-    # Parameters
-    N = config.w.shape[0]
-    dw = config.w[1] - config.w[0]
-    dt = 2 * np.pi / (N * dw)
-    lags = (np.arange(N) - N//2) * dt
-    
-    # Indices map: 0->1(Q1), 1->2(Q2), 2->3(Q12)
-    indices = [1, 2, 3]
-    labels = ['1', '2', '12']
-    
-    fig, axs = plt.subplots(3, 3, figsize=(15, 12), sharex=True, sharey=False)
-    
-    for i in range(3):
-        for j in range(3):
-            idx_i = indices[i]
-            idx_j = indices[j]
-            
-            # Get Spectrum
-            S = config.SMat[idx_i, idx_j]
-            
-            # Compute R(tau)
-            # Use numpy fft for plotting to avoid JAX overhead/device transfer if not needed, 
-            # but S is jax array.
-            R_vals = jnp.fft.ifft(S)
-            R_scaled = R_vals / dt
-            R_shifted = jnp.fft.fftshift(R_scaled)
-            
-            R_np = np.array(R_shifted)
-            
-            ax = axs[i, j]
-            
-            # Use asinh scaling
-            # Scale factor for asinh: linear region width
-            # Heuristic: use median absolute value or similar
-            scale_factor = np.median(np.abs(R_np))
-            if scale_factor == 0: scale_factor = 1e-6
-            
-            # Plot scaled values
-            # We plot the raw values but set the scale to asinh
-            # Matplotlib doesn't have built-in asinh scale until recent versions (3.6+)
-            # If available, use it. Otherwise, manually transform.
-            
-            try:
-                ax.set_yscale('asinh', linear_width=scale_factor)
-                ax.plot(lags * 1e6, np.real(R_np), label='Real')
-                ax.plot(lags * 1e6, np.imag(R_np), label='Imag', alpha=0.7)
-            except ValueError:
-                # Fallback if asinh not available or parameters wrong
-                # Manual transformation for visualization
-                y_real = np.arcsinh(np.real(R_np) / scale_factor)
-                y_imag = np.arcsinh(np.imag(R_np) / scale_factor)
-                ax.plot(lags * 1e6, y_real, label='asinh(Real)')
-                ax.plot(lags * 1e6, y_imag, label='asinh(Imag)', alpha=0.7)
-                ax.set_ylabel(f"asinh(Amp/{scale_factor:.1e})")
-            
-            ax.set_title(f"$R_{{{labels[i]},{labels[j]}}}(\\tau)$")
-            if i == 2:
-                ax.set_xlabel(r"Lag $\tau$ ($\mu$s)")
-            if j == 0 and not ax.get_ylabel():
-                ax.set_ylabel("Amplitude")
-            ax.grid(True, alpha=0.3)
-            ax.legend(fontsize='small')
-            
-    plt.tight_layout()
-    save_path = os.path.join(config.path, "noise_correlations.pdf")
-    plt.savefig(save_path)
-    print(f"Saved noise correlations plot to {save_path}")
-    plt.close(fig)
-
-def plot_control_correlations(config, seq, T_seq, M, label):
-    """Plots the 9 control correlation functions C(tau)."""
-    if seq is None:
-        return
-
-    print(f"Plotting control correlation functions for {label}...")
-    
-    # Parameters (matching optimization)
-    N = config.w.shape[0]
-    dw = config.w[1] - config.w[0]
-    dt = 2 * np.pi / (N * dw)
-    
-    T_total = M * T_seq
-    num_steps = int(np.ceil(T_total / dt)) + 1
-    t_grid = np.arange(num_steps) * dt
-    
-    def get_y_samples(pt):
-        # pt is [0, t1, ..., T_seq]
-        # y is periodic with T_seq
-        pt = np.array(pt) # Ensure numpy
-        t_mod = np.mod(t_grid, T_seq)
-        indices = np.searchsorted(pt, t_mod, side='right')
-        return (-1.0) ** (indices - 1)
+        overlap_fn = lambda pt_a, pt_b, data: evaluate_overlap_folded(pt_a, pt_b, data, dt, n_base_steps)
 
     pt1, pt2 = seq
     pt12 = make_tk12(pt1, pt2)
+    pt0 = jnp.array([0., T_seq])
+    pts = [pt0, pt1, pt2, pt12]
     
-    y1 = get_y_samples(pt1)
-    y2 = get_y_samples(pt2)
-    y12 = get_y_samples(pt12)
+    vals = []
+    for i in range(4):
+        row_vals = []
+        for j in range(4):
+            val = overlap_fn(pts[i], pts[j], RMat_data[i, j])
+            row_vals.append(val)
+        vals.append(row_vals)
+    I_mat = jnp.array(vals)
     
-    ys = [y1, y2, y12]
-    labels_y = ['1', '2', '12']
-    
-    fig, axs = plt.subplots(3, 3, figsize=(15, 12), sharex=True, sharey=False)
-    
-    for i in range(3):
-        for j in range(3):
-            # Pad to match optimization
-            y_i_pad = np.pad(ys[i], (0, num_steps), mode='constant')
-            y_j_pad = np.pad(ys[j], (0, num_steps), mode='constant')
-            
-            # C_{a,b}
-            # correlate(y_i, y_j)
-            # mode='full'
-            # Use JAX correlate to be consistent with optimization
-            corr_jax = jax.scipy.signal.correlate(jnp.array(y_i_pad), jnp.array(y_j_pad), mode='full') * dt
-            corr = np.array(corr_jax)
-            
-            lags = (np.arange(corr.shape[0]) - (2 * num_steps - 1)) * dt
-            
-            ax = axs[i, j]
-            ax.plot(lags * 1e6, corr)
-            
-            ax.set_title(f"$C_{{{labels_y[i]},{labels_y[j]}}}(\\tau)$")
-            if i == 2:
-                ax.set_xlabel(r"Lag $\tau$ ($\mu$s)")
-            if j == 0:
-                ax.set_ylabel("Amplitude")
-            ax.grid(True, alpha=0.3)
-            
-    plt.suptitle(f"Control Correlation Functions - {label}")
-    plt.tight_layout()
-    filename = f"control_correlations_{label.replace(' ', '_')}.pdf"
-    save_path = os.path.join(config.path, filename)
-    plt.savefig(save_path)
-    print(f"Saved control correlations plot to {save_path}")
-    plt.close(fig)
-
+    fid = calculate_idling_fidelity(I_mat)
+    return 1.0 - fid / 16.0
 
 # ==============================================================================
 # Main Execution
@@ -1344,114 +917,152 @@ def run_optimization_pipeline(config):
     print(f"Pulse Limit Per Repetition: {config.max_pulses_per_rep}")
     print(f"{'='*60}")
     
-    # 1. Known Sequences
-    pLib_delays, pLib_desc = construct_pulse_library(config.T_seq, config.tau, config.max_pulses_per_rep)
+    yaxis_opt, xaxis_opt = [], []
+    yaxis_known, xaxis_known = [], []
+    yaxis_nopulse = []
     
-    best_known_seq = None
-    best_known_inf = 1.0
-    idx = -1
+    best_known_seq_overall = None
+    best_opt_seq_overall = None
+    T_seq_best_known = None
+    T_seq_best_opt = None
+    best_known_inf_overall = 1.0
+    best_opt_inf_overall = 1.0
     
-    if pLib_delays:
-        best_known_seq, best_known_inf, idx = evaluate_known_sequences(config, config.M, pLib_delays)
-        
-        print("\n" + "-" * 60)
-        print("BEST KNOWN SEQUENCE RESULTS")
-        print("-" * 60)
-        
-        if best_known_seq:
-            n_k1 = len(best_known_seq[0]) - 2
-            n_k2 = len(best_known_seq[1]) - 2
-            print(f"{'Infidelity':<25}: {best_known_inf:.6e}")
-            print(f"{'Sequence Type':<25}: {pLib_desc[idx]}")
-            print(f"{'Pulse Count (Q1, Q2)':<25}: ({n_k1}, {n_k2})")
-        else:
-            print("No known sequence found with infidelity < 1.0.")
-        print("-" * 60)
-    else:
-        print("No valid known sequences found.")
-        
-    # 2. Random Optimization
-    print("\nRunning Random Optimization...")
-    
-    n_pulses_list = []
-    for _ in range(config.num_random_trials):
-        n1 = np.random.randint(1, config.max_pulses_per_rep + 1)
-        n2 = np.random.randint(1, config.max_pulses_per_rep + 1)
-        n_pulses_list.append((n1, n2))
+    for i in config.gate_time_factors:
+        Tg = config.Tqns / 2**(i-1)
+        if Tg < config.tau:
+            continue
             
-    seed_seq = best_known_seq if config.use_known_as_seed else None
-    best_opt_seq, best_opt_inf = optimize_random_sequences(config, config.M, n_pulses_list, seed_seq=seed_seq)
-    
-    print("\n" + "-" * 60)
-    print("BEST OPTIMIZED SEQUENCE RESULTS")
-    print("-" * 60)
-    
-    if best_opt_seq:
-        n_o1 = len(best_opt_seq[0]) - 2
-        n_o2 = len(best_opt_seq[1]) - 2
-        print(f"{'Infidelity':<25}: {best_opt_inf:.6e}")
-        print(f"{'Pulse Count (Q1, Q2)':<25}: ({n_o1}, {n_o2})")
-    else:
-        print(f"{'Infidelity':<25}: {best_opt_inf:.6e}")
-        print("No optimized sequence found.")
-    print("-" * 60)
+        # Update config for this iteration
+        config.Tg = Tg
+        config.T_seq = Tg / config.M
+        
+        print(f"\nGate Time: {Tg*1e6:.2f} us")
+        
+        # No Pulse Calculation
+        pt_nopulse = jnp.array([0., config.T_seq])
+        seq_nopulse = (pt_nopulse, pt_nopulse)
+        inf_nopulse = calculate_infidelity(seq_nopulse, config, config.M, config.T_seq, use_ideal=True)
+        yaxis_nopulse.append(inf_nopulse)
+        print(f"  No Pulse (Ideal): {inf_nopulse:.6e}")
+        
+        # 1. Known Sequences
+        pLib_delays, pLib_desc = construct_pulse_library(config.T_seq, config.tau, config.max_pulses_per_rep)
+        
+        best_known_seq = None
+        best_known_inf = 1.0
+        idx = -1
+        
+        if pLib_delays:
+            best_known_seq, best_known_inf, idx = evaluate_known_sequences(config, config.M, pLib_delays)
+            print(f"  Best Known (Char): {best_known_inf:.6e} ({pLib_desc[idx]})")
+            
+            # Recalculate with ideal
+            best_known_inf_ideal = calculate_infidelity(best_known_seq, config, config.M, config.T_seq, use_ideal=True)
+            print(f"  Best Known (Ideal): {best_known_inf_ideal:.6e}")
+            
+            if best_known_inf_ideal < best_known_inf_overall:
+                best_known_inf_overall = best_known_inf_ideal
+                best_known_seq_overall = best_known_seq
+                T_seq_best_known = config.T_seq
+        else:
+            best_known_inf_ideal = 1.0
+            print("  No valid known sequences found.")
+            
+        yaxis_known.append(best_known_inf_ideal)
+        xaxis_known.append(Tg)
+            
+        # 2. Random Optimization
+        print("  Running Random Optimization...")
+        
+        n_pulses_list = []
+        for _ in range(config.num_random_trials):
+            n1 = np.random.randint(1, config.max_pulses_per_rep + 1)
+            n2 = np.random.randint(1, config.max_pulses_per_rep + 1)
+            n_pulses_list.append((n1, n2))
+                
+        seed_seq = best_known_seq if config.use_known_as_seed else None
+        best_opt_seq, best_opt_inf = optimize_random_sequences(config, config.M, n_pulses_list, seed_seq=seed_seq)
+        
+        # Recalculate with ideal
+        if best_opt_seq:
+            best_opt_inf_ideal = calculate_infidelity(best_opt_seq, config, config.M, config.T_seq, use_ideal=True)
+            print(f"  Best Optimized (Ideal): {best_opt_inf_ideal:.6e}")
+            
+            if best_opt_inf_ideal < best_opt_inf_overall:
+                best_opt_inf_overall = best_opt_inf_ideal
+                best_opt_seq_overall = best_opt_seq
+                T_seq_best_opt = config.T_seq
+        else:
+            best_opt_inf_ideal = 1.0
+            print("  No optimized sequence found.")
+        
+        yaxis_opt.append(best_opt_inf_ideal)
+        xaxis_opt.append(Tg)
 
-    # Final Comparison
+    # Save Results
+    np.savez(os.path.join(config.path, config.output_path_opt), infs_opt=np.array(yaxis_opt),
+             taxis=np.array(xaxis_opt))
+    np.savez(os.path.join(config.path, config.output_path_known), infs_known=np.array(yaxis_known),
+             taxis=np.array(xaxis_known))
+
+    # Plot Infidelity vs Gate Time
+    plot_utils.plot_infidelity_vs_gatetime(xaxis_known, yaxis_known, xaxis_opt, yaxis_opt, yaxis_nopulse, config.Tqns, os.path.join(config.path, config.plot_filename))
+
+    # Final Comparison and Detailed Plots (for best overall sequences)
     print("\n" + "=" * 80)
-    print(f"{'FINAL COMPARISON':^80}")
+    print(f"{'FINAL COMPARISON (Best Overall)':^80}")
     print("=" * 80)
-    print(f"{'Metric':<25} | {'Best Known Sequence':<25} | {'Best Optimized Sequence':<25}")
-    print("-" * 80)
     
-    inf_k_str = f"{best_known_inf:.6e}" if best_known_seq else "N/A"
-    inf_o_str = f"{best_opt_inf:.6e}" if best_opt_seq else "N/A"
+    inf_k_str = f"{best_known_inf_overall:.6e}" if best_known_seq_overall else "N/A"
+    inf_o_str = f"{best_opt_inf_overall:.6e}" if best_opt_seq_overall else "N/A"
     print(f"{'Infidelity':<25} | {inf_k_str:<25} | {inf_o_str:<25}")
     
-    if best_known_seq:
-        nk1, nk2 = len(best_known_seq[0]) - 2, len(best_known_seq[1]) - 2
+    if best_known_seq_overall:
+        nk1, nk2 = len(best_known_seq_overall[0]) - 2, len(best_known_seq_overall[1]) - 2
         pc_k_str = f"({nk1}, {nk2})"
-        desc_k = pLib_desc[idx]
     else:
         pc_k_str = "N/A"
-        desc_k = "N/A"
         
-    if best_opt_seq:
-        no1, no2 = len(best_opt_seq[0]) - 2, len(best_opt_seq[1]) - 2
+    if best_opt_seq_overall:
+        no1, no2 = len(best_opt_seq_overall[0]) - 2, len(best_opt_seq_overall[1]) - 2
         pc_o_str = f"({no1}, {no2})"
     else:
         pc_o_str = "N/A"
         
     print(f"{'Pulse Count (Q1, Q2)':<25} | {pc_k_str:<25} | {pc_o_str:<25}")
-    print(f"{'Description':<25} | {desc_k:<25} | {'Random Optimization':<25}")
-    
-    def get_min_sep(seq):
-        if seq is None: return None
-        return min(float(jnp.min(jnp.diff(seq[0]))), float(jnp.min(jnp.diff(seq[1]))))
-        
-    sep_k = get_min_sep(best_known_seq)
-    sep_o = get_min_sep(best_opt_seq)
-    sep_k_str = f"{sep_k*1e6:.4f} us" if sep_k is not None else "N/A"
-    sep_o_str = f"{sep_o*1e6:.4f} us" if sep_o is not None else "N/A"
-    print(f"{'Min Pulse Separation':<25} | {sep_k_str:<25} | {sep_o_str:<25}")
-    
-    sep_k_tau = f"{sep_k/config.tau:.2f} tau" if sep_k is not None else "N/A"
-    sep_o_tau = f"{sep_o/config.tau:.2f} tau" if sep_o is not None else "N/A"
-    print(f"{'Min Separation (tau)':<25} | {sep_k_tau:<25} | {sep_o_tau:<25}")
     print("=" * 80)
 
-    # 3. Plotting
-    if best_known_seq or best_opt_seq:
-        plot_comparison(config, best_known_seq, best_opt_seq, config.T_seq)
-        plot_filter_functions(config, best_known_seq, best_opt_seq, config.T_seq)
-        plot_filter_functions_with_spectra(config, best_known_seq, best_opt_seq, config.T_seq)
-        plot_noise_correlations(config)
+    # 3. Plotting Detailed Characteristics
+    # We plot for the best sequences found across all gate times.
+    # If T_seq differs, we might need separate plots or just plot them separately.
+    
+    if best_known_seq_overall or best_opt_seq_overall:
+        # If both exist and have same T_seq, plot together
+        if best_known_seq_overall and best_opt_seq_overall and T_seq_best_known == T_seq_best_opt:
+             T_seq = T_seq_best_known
+             plot_utils.plot_comparison(config, best_known_seq_overall, best_opt_seq_overall, T_seq)
+             plot_utils.plot_filter_functions(config, best_known_seq_overall, best_opt_seq_overall, T_seq)
+             plot_utils.plot_filter_functions_with_spectra(config, best_known_seq_overall, best_opt_seq_overall, T_seq)
+        else:
+             # Plot separately if T_seq differs or one is missing
+             if best_known_seq_overall:
+                 plot_utils.plot_comparison(config, best_known_seq_overall, None, T_seq_best_known)
+                 plot_utils.plot_filter_functions(config, best_known_seq_overall, None, T_seq_best_known)
+                 plot_utils.plot_filter_functions_with_spectra(config, best_known_seq_overall, None, T_seq_best_known)
+             if best_opt_seq_overall:
+                 plot_utils.plot_comparison(config, None, best_opt_seq_overall, T_seq_best_opt)
+                 plot_utils.plot_filter_functions(config, None, best_opt_seq_overall, T_seq_best_opt)
+                 plot_utils.plot_filter_functions_with_spectra(config, None, best_opt_seq_overall, T_seq_best_opt)
         
-        if best_known_seq:
-            plot_control_correlations(config, best_known_seq, config.T_seq, config.M, "Best Known Sequence")
-            plot_generalized_filter_functions(config, best_known_seq, config.T_seq, "Best Known Sequence")
-        if best_opt_seq:
-            plot_control_correlations(config, best_opt_seq, config.T_seq, config.M, "Best Optimized Sequence")
-            plot_generalized_filter_functions(config, best_opt_seq, config.T_seq, "Best Optimized Sequence")
+        plot_utils.plot_noise_correlations(config)
+        
+        if best_known_seq_overall:
+            plot_utils.plot_control_correlations(config, best_known_seq_overall, T_seq_best_known, config.M, "Best Known Sequence")
+            plot_utils.plot_generalized_filter_functions(config, best_known_seq_overall, T_seq_best_known, "Best Known Sequence")
+        if best_opt_seq_overall:
+            plot_utils.plot_control_correlations(config, best_opt_seq_overall, T_seq_best_opt, config.M, "Best Optimized Sequence")
+            plot_utils.plot_generalized_filter_functions(config, best_opt_seq_overall, T_seq_best_opt, "Best Optimized Sequence")
 
 if __name__ == "__main__":
     try:
