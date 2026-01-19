@@ -40,6 +40,8 @@ def plot_infidelity_vs_gatetime(xaxis_known, yaxis_known, xaxis_opt, yaxis_opt, 
     fig, ax = plt.subplots(figsize=(10, 6))
     
     # Convert x-axis to units of tau
+    # xaxis_known and xaxis_opt are in seconds. tau is in seconds.
+    # The ratio should be > 1.
     xaxis_known_tau = np.array(xaxis_known) / tau
     xaxis_opt_tau = np.array(xaxis_opt) / tau
     
@@ -62,14 +64,14 @@ def plot_infidelity_vs_gatetime(xaxis_known, yaxis_known, xaxis_opt, yaxis_opt, 
     ax.legend()
     
     # Set ticks at data points
-    ax.set_xticks(xaxis_known_tau)
-    ax.get_xaxis().set_major_formatter(ticker.ScalarFormatter())
+    # ax.set_xticks(xaxis_known_tau)
+    # ax.get_xaxis().set_major_formatter(ticker.ScalarFormatter())
     
     plt.savefig(save_path)
     print(f"Saved plot to {save_path}")
     plt.close(fig)
 
-def plot_comparison(config, known_seq, opt_seq, T_seq):
+def plot_comparison(config, known_seq, opt_seq, T_seq, filename_suffix=""):
     """Plots the switching functions y(t) for comparison."""
     has_known = known_seq is not None
     has_opt = opt_seq is not None
@@ -134,7 +136,7 @@ def plot_comparison(config, known_seq, opt_seq, T_seq):
 
     plt.tight_layout()
     
-    save_path = os.path.join(config.path, "sequence_comparison.pdf")
+    save_path = os.path.join(config.path, f"sequence_comparison{filename_suffix}.pdf")
     plt.savefig(save_path)
     print(f"Saved comparison plot to {save_path}")
     plt.close(fig)

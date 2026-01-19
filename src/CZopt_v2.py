@@ -10,6 +10,10 @@ to minimize infidelity in a two-qubit system. It supports:
 5. Optimizing the coupling strength J dynamically.
 
 Based on ID_opt_v4.py and CZopt.py.
+
+Author: [Qasim]
+Date: [01/18/2026]
+
 """
 
 import functools
@@ -41,7 +45,7 @@ class CZOptConfig:
     """Configuration for the CZ gate optimization."""
     fname: str = "DraftRun_NoSPAM_Feature"
     parent_dir: str = os.pardir
-    Jmax: float = 10e6
+    Jmax: float = 5e6
     # Extended gate time factors to include larger gate times (-1, 0)
     gate_time_factors: list = field(default_factory=lambda: [-1, 0, 1, 2, 3, 4, 5])
     output_path_known: str = "infs_known_cz_v2.npz"
@@ -184,9 +188,14 @@ class CZOptConfig:
         return SMat_ideal
 
     def _calculate_T2(self):
-        # Approximate T2 calculation using ideal spectra for reference
-        # This is just for logging/info
-        pass # Skip for now to avoid re-implementing T2 logic with new SMat structure
+        """Calculates T2 times for each qubit based on ideal spectra."""
+        S11_0 = jnp.real(self.SMat_ideal[1, 1, 0])
+        S22_0 = jnp.real(self.SMat_ideal[2, 2, 0])
+        
+        self.T2q1 = 2.0 / S11_0 if S11_0 > 0 else jnp.inf
+        self.T2q2 = 2.0 / S22_0 if S22_0 > 0 else jnp.inf
+        
+        print(f"Calculated T2 times (Ideal): Q1={self.T2q1:.2e} s, Q2={self.T2q2:.2e} s")
 
 # ==============================================================================
 # Sequence Generation Utilities
@@ -366,7 +375,7 @@ def evaluate_overlap_folded(pulse_times_a, pulse_times_b, R_folded, dt, n_base_s
     y_b = get_y_samples(pulse_times_b)
     C_vals = jax.scipy.signal.correlate(y_a, y_b, mode='full') * dt
     integral = jnp.sum(C_vals * R_folded) * dt
-    return jnp.real(integral)
+    return integral
 
 @jax.jit
 def get_spectral_amplitudes_jax(pulse_times, omega):
@@ -385,7 +394,7 @@ def evaluate_overlap_comb(pulse_times_a, pulse_times_b, S_packed, omega_k, T_seq
         return jnp.sum(diffs * signs)
     dc_a = get_dc(pulse_times_a)
     dc_b = get_dc(pulse_times_b)
-    S_0 = jnp.real(S_packed[0])
+    S_0 = S_packed[0]
     term_dc = dc_a * dc_b * S_0
     
     if omega_k.size == 0:
@@ -894,8 +903,8 @@ def run_optimization(config):
         if Tg < config.tau:
             continue
             
-        print(f"\nGate Time: {Tg*1e6:.2f} us")
-        
+        print(f"\nGate Time: {Tg*1e6:.2f} us (Tg/T2q1={Tg/config.T2q1:.4f}, Tg/T2q2={Tg/config.T2q2:.4f})")
+
         # For now, M=1
         M = 1
         T_seq = Tg / M
@@ -948,13 +957,24 @@ def run_optimization(config):
         if effective_max > max_n_physical:
             effective_max = max_n_physical
             
-        n_candidates = []
+        n_candidates_set = set()
         if effective_max > 0:
-            n_candidates.append(effective_max)
+            n_candidates_set.add(effective_max)
             if effective_max > 1:
-                n_candidates.append(effective_max - 1)
+                n_candidates_set.add(effective_max - 1)
             if effective_max > 2:
-                n_candidates.append(effective_max - 2)
+                n_candidates_set.add(effective_max - 2)
+
+        # Also search around half the number of allowed pulses
+        half_max = effective_max // 2
+        if half_max > 0:
+            n_candidates_set.add(half_max)
+            if half_max > 1:
+                n_candidates_set.add(half_max - 1)
+            if half_max + 1 < effective_max:
+                n_candidates_set.add(half_max + 1)
+
+        n_candidates = sorted(list(n_candidates_set), reverse=True)
         
         if not n_candidates:
              print(f"    Skipping: T_seq too small for pulses")
@@ -976,7 +996,8 @@ def run_optimization(config):
                     best_opt_inf = inf
                     best_opt_seq = seq
                     print(f"    New Best Opt: {inf:.6e}")
-        
+
+
         # Recalculate best opt with ideal
         if best_opt_seq is not None:
              best_opt_inf_ideal = calculate_infidelity(best_opt_seq, config, M, T_seq, use_ideal=True)
@@ -1016,12 +1037,12 @@ def run_optimization(config):
         # We will plot them separately if T_seq differs, or just plot the best overall.
         
         if best_known_seq_overall and best_opt_seq_overall and T_seq_best_known == T_seq_best_opt:
-             plot_utils.plot_comparison(config, best_known_seq_overall, best_opt_seq_overall, T_seq_best_known)
+             plot_utils.plot_comparison(config, best_known_seq_overall, best_opt_seq_overall, T_seq_best_known, filename_suffix="_cz")
         else:
              if best_known_seq_overall:
-                 plot_utils.plot_comparison(config, best_known_seq_overall, None, T_seq_best_known)
+                 plot_utils.plot_comparison(config, best_known_seq_overall, None, T_seq_best_known, filename_suffix="_cz_known")
              if best_opt_seq_overall:
-                 plot_utils.plot_comparison(config, None, best_opt_seq_overall, T_seq_best_opt)
+                 plot_utils.plot_comparison(config, None, best_opt_seq_overall, T_seq_best_opt, filename_suffix="_cz_opt")
 
 if __name__ == '__main__':
     config = CZOptConfig(use_simulated=True)

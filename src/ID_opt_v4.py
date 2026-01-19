@@ -9,8 +9,8 @@ to minimize infidelity in a two-qubit system. It supports:
 4. Optimizing random pulse sequences using JAX-based gradient descent.
 5. Efficiently handling repeated sequences via time-folding strategies or frequency comb approximations.
 
-Author: [Your Name/Organization]
-Date: [Current Date]
+Author: [Qasim]
+Date: [01/18/2026]
 """
 
 import functools
@@ -108,7 +108,14 @@ class Config:
         self.output_path_opt = output_path_opt
         self.plot_filename = plot_filename
         
-        self.gate_time_factors = gate_time_factors if gate_time_factors is not None else [-1, 0, 1, 2, 3, 4, 5, 6]
+        # Extended gate time factors to include larger gate times
+        # Factors are powers of 2 divisor of Tqns.
+        # Tqns is typically ~50us.
+        # Factor -1 -> Tg = Tqns * 2
+        # Factor -2 -> Tg = Tqns * 4
+        # Factor -3 -> Tg = Tqns * 8
+        # Factor -4 -> Tg = Tqns * 16
+        self.gate_time_factors = gate_time_factors if gate_time_factors is not None else [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5]
         
         # Derived Parameters
         self.T_seq = self.Tg / self.M
@@ -123,7 +130,7 @@ class Config:
         # Extend frequency range to ensure fine time resolution for correlation
         w_max_sys = 2 * jnp.pi * self.mc / self.Tqns
         # Multiplier to ensure dt is small enough (e.g. ~10-100ns)
-        self.w_max = 4 * w_max_sys
+        self.w_max = 2 * w_max_sys
         self.N_w = 20000
         
         self.w = jnp.linspace(0, self.w_max, self.N_w)
@@ -137,6 +144,7 @@ class Config:
         # Spectral Matrices
         self.SMat = self._build_interpolated_spectra()
         self.SMat_ideal = self._build_ideal_spectra()
+        self._calculate_T2()
 
     def _build_interpolated_spectra(self):
         """Constructs the matrix of interpolated spectra from QNS data."""
@@ -201,6 +209,20 @@ class Config:
         
         return SMat_ideal
 
+    def _calculate_T2(self):
+        """Calculates T2 times for each qubit based on ideal spectra."""
+        # T2 = 2 / S(0)
+        # S11(0) is at index [1,1,0]
+        # S22(0) is at index [2,2,0]
+        
+        S11_0 = jnp.real(self.SMat_ideal[1, 1, 0])
+        S22_0 = jnp.real(self.SMat_ideal[2, 2, 0])
+        
+        self.T2q1 = 2.0 / S11_0 if S11_0 > 0 else jnp.inf
+        self.T2q2 = 2.0 / S22_0 if S22_0 > 0 else jnp.inf
+        
+        print(f"Calculated T2 times (Ideal): Q1={self.T2q1:.2e} s, Q2={self.T2q2:.2e} s")
+
 
 # ==============================================================================
 # Sequence Generation Utilities
@@ -235,12 +257,16 @@ def cddn(t0, T, n):
 
 def mqCDD(T, n, m):
     """Generates multi-qubit CDD sequence."""
-    tk1 = remove_consecutive_duplicates(cdd(0., T, n))
+    # Do not remove duplicates yet to preserve interval structure for nesting
+    tk1 = cdd(0., T, n)
     tk2 = []
     for i in range(len(tk1)-1):
-        tk2 += remove_consecutive_duplicates(cdd(tk1[i], tk1[i+1]-tk1[i], m))
-    tk2 += remove_consecutive_duplicates(cdd(tk1[-1], T-tk1[-1], m))
+        tk2 += cdd(tk1[i], tk1[i+1]-tk1[i], m)
+    tk2 += cdd(tk1[-1], T-tk1[-1], m)
     
+    tk1 = remove_consecutive_duplicates(tk1)
+    tk2 = remove_consecutive_duplicates(tk2)
+
     if tk1[0] != 0.: tk1 = [0.] + tk1
     if tk2[0] != 0.: tk2 = [0.] + tk2
     
@@ -435,7 +461,7 @@ def evaluate_overlap_folded(pulse_times_a, pulse_times_b, R_folded, dt, n_base_s
     # R_folded is already aligned with C_vals
     integral = jnp.sum(C_vals * R_folded) * dt
     
-    return jnp.real(integral)
+    return integral
 
 @jax.jit
 def get_spectral_amplitudes_jax(pulse_times, omega):
@@ -484,8 +510,7 @@ def evaluate_overlap_comb(pulse_times_a, pulse_times_b, S_packed, omega_k, T_seq
         
     dc_a = get_dc(pulse_times_a)
     dc_b = get_dc(pulse_times_b)
-    # Take real part of DC component explicitly
-    S_0 = jnp.real(S_packed[0])
+    S_0 = S_packed[0]
     
     term_dc = dc_a * dc_b * S_0
     
@@ -662,10 +687,18 @@ def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
         print(f"Using Folded Noise Matrix (M={M})...")
         N = config.w.shape[0]
         dw = config.w[1] - config.w[0]
-        dt = (2 * np.pi / (N * dw))
-        lags_R = (jnp.arange(N) - N//2) * dt
         
-        RMat_vals = jnp.fft.ifft(config.SMat, axis=-1)
+        # Pad SMat with zeros to double the range (improving time resolution dt)
+        SMat_padded = jnp.pad(config.SMat, ((0,0), (0,0), (0, N)))
+        
+        # Mirror SMat to ensure Hermitian symmetry
+        SMat_sym = jnp.concatenate([SMat_padded, jnp.conj(jnp.flip(SMat_padded[..., 1:-1], axis=-1))], axis=-1)
+        N_sym = SMat_sym.shape[-1]
+        
+        dt = (2 * np.pi / (N_sym * dw))
+        lags_R = (jnp.arange(N_sym) - N_sym//2) * dt
+        
+        RMat_vals = jnp.fft.ifft(SMat_sym, axis=-1)
         RMat_scaled = RMat_vals / dt
         RMat_shifted = jnp.fft.fftshift(RMat_scaled, axes=-1)
         
@@ -790,10 +823,18 @@ def evaluate_known_sequences(config, M, pLib):
         print(f"Using Folded Noise Matrix (M={M})...")
         N = config.w.shape[0]
         dw = config.w[1] - config.w[0]
-        dt = (2 * np.pi / (N * dw))
-        lags_R = (jnp.arange(N) - N//2) * dt
         
-        RMat_vals = jnp.fft.ifft(config.SMat, axis=-1)
+        # Pad SMat with zeros to double the range (improving time resolution dt)
+        SMat_padded = jnp.pad(config.SMat, ((0,0), (0,0), (0, N)))
+        
+        # Mirror SMat to ensure Hermitian symmetry
+        SMat_sym = jnp.concatenate([SMat_padded, jnp.conj(jnp.flip(SMat_padded[..., 1:-1], axis=-1))], axis=-1)
+        N_sym = SMat_sym.shape[-1]
+        
+        dt = (2 * np.pi / (N_sym * dw))
+        lags_R = (jnp.arange(N_sym) - N_sym//2) * dt
+        
+        RMat_vals = jnp.fft.ifft(SMat_sym, axis=-1)
         RMat_scaled = RMat_vals / dt
         RMat_shifted = jnp.fft.fftshift(RMat_scaled, axes=-1)
         
@@ -868,10 +909,20 @@ def calculate_infidelity(seq, config, M, T_seq, use_ideal=False):
     else:
         N = w_grid.shape[0]
         dw = w_grid[1] - w_grid[0]
-        dt = (2 * np.pi / (N * dw))
-        lags_R = (jnp.arange(N) - N//2) * dt
         
-        RMat_vals = jnp.fft.ifft(SMat, axis=-1)
+        SMat_curr = SMat
+        if not use_ideal:
+             # Pad to reduce discretization error (match Ideal resolution approx)
+             SMat_curr = jnp.pad(SMat, ((0,0), (0,0), (0, N)))
+        
+        # Mirror SMat to ensure Hermitian symmetry
+        SMat_sym = jnp.concatenate([SMat_curr, jnp.conj(jnp.flip(SMat_curr[..., 1:-1], axis=-1))], axis=-1)
+        N_sym = SMat_sym.shape[-1]
+        
+        dt = (2 * np.pi / (N_sym * dw))
+        lags_R = (jnp.arange(N_sym) - N_sym//2) * dt
+        
+        RMat_vals = jnp.fft.ifft(SMat_sym, axis=-1)
         RMat_scaled = RMat_vals / dt
         RMat_shifted = jnp.fft.fftshift(RMat_scaled, axes=-1)
         
@@ -929,6 +980,7 @@ def run_optimization_pipeline(config):
     best_opt_inf_overall = 1.0
     
     for i in config.gate_time_factors:
+        # Use Tqns as base for gate time scaling, similar to CZopt_v2
         Tg = config.Tqns / 2**(i-1)
         if Tg < config.tau:
             continue
@@ -937,7 +989,7 @@ def run_optimization_pipeline(config):
         config.Tg = Tg
         config.T_seq = Tg / config.M
         
-        print(f"\nGate Time: {Tg*1e6:.2f} us")
+        print(f"\nGate Time: {Tg*1e6:.2f} us (Tg/T2q1={Tg/config.T2q1:.4f}, Tg/T2q2={Tg/config.T2q2:.4f})")
         
         # No Pulse Calculation
         pt_nopulse = jnp.array([0., config.T_seq])
@@ -975,27 +1027,55 @@ def run_optimization_pipeline(config):
         # 2. Random Optimization
         print("  Running Random Optimization...")
         
-        n_pulses_list = []
-        for _ in range(config.num_random_trials):
-            n1 = np.random.randint(1, config.max_pulses_per_rep + 1)
-            n2 = np.random.randint(1, config.max_pulses_per_rep + 1)
-            n_pulses_list.append((n1, n2))
-                
-        seed_seq = best_known_seq if config.use_known_as_seed else None
-        best_opt_seq, best_opt_inf = optimize_random_sequences(config, config.M, n_pulses_list, seed_seq=seed_seq)
+        # Smart candidate selection similar to CZopt_v2
+        max_n_physical = int(config.T_seq / config.tau) - 1
+        upper_bound_physical = max(1, max_n_physical - 1)
+        effective_max = min(config.max_pulses_per_rep, upper_bound_physical)
         
-        # Recalculate with ideal
-        if best_opt_seq:
-            best_opt_inf_ideal = calculate_infidelity(best_opt_seq, config, config.M, config.T_seq, use_ideal=True)
-            print(f"  Best Optimized (Ideal): {best_opt_inf_ideal:.6e}")
-            
-            if best_opt_inf_ideal < best_opt_inf_overall:
-                best_opt_inf_overall = best_opt_inf_ideal
-                best_opt_seq_overall = best_opt_seq
-                T_seq_best_opt = config.T_seq
+        n_candidates_set = set()
+        if effective_max > 0:
+            n_candidates_set.add(effective_max)
+            if effective_max > 1:
+                n_candidates_set.add(effective_max - 1)
+            if effective_max > 2:
+                n_candidates_set.add(effective_max - 2)
+                
+        # Also search around half
+        half_max = effective_max // 2
+        if half_max > 0:
+            n_candidates_set.add(half_max)
+            if half_max > 1:
+                n_candidates_set.add(half_max - 1)
+            if half_max + 1 < effective_max:
+                n_candidates_set.add(half_max + 1)
+                
+        n_candidates = sorted(list(n_candidates_set), reverse=True)
+        
+        n_pulses_list = []
+        for n1 in n_candidates:
+            for n2 in n_candidates:
+                n_pulses_list.append((n1, n2))
+        
+        if not n_pulses_list:
+             print("    Skipping: T_seq too small for pulses")
+             best_opt_inf_ideal = 1.0
         else:
-            best_opt_inf_ideal = 1.0
-            print("  No optimized sequence found.")
+             print(f"  Auto-selected pulse counts: {n_candidates}")
+             seed_seq = best_known_seq if config.use_known_as_seed else None
+             best_opt_seq, best_opt_inf = optimize_random_sequences(config, config.M, n_pulses_list, seed_seq=seed_seq)
+             
+             # Recalculate with ideal
+             if best_opt_seq:
+                 best_opt_inf_ideal = calculate_infidelity(best_opt_seq, config, config.M, config.T_seq, use_ideal=True)
+                 print(f"  Best Optimized (Ideal): {best_opt_inf_ideal:.6e}")
+                 
+                 if best_opt_inf_ideal < best_opt_inf_overall:
+                     best_opt_inf_overall = best_opt_inf_ideal
+                     best_opt_seq_overall = best_opt_seq
+                     T_seq_best_opt = config.T_seq
+             else:
+                 best_opt_inf_ideal = 1.0
+                 print("  No optimized sequence found.")
         
         yaxis_opt.append(best_opt_inf_ideal)
         xaxis_opt.append(Tg)
@@ -1007,7 +1087,7 @@ def run_optimization_pipeline(config):
              taxis=np.array(xaxis_known))
 
     # Plot Infidelity vs Gate Time
-    plot_utils.plot_infidelity_vs_gatetime(xaxis_known, yaxis_known, xaxis_opt, yaxis_opt, yaxis_nopulse, config.Tqns, os.path.join(config.path, config.plot_filename))
+    plot_utils.plot_infidelity_vs_gatetime(xaxis_known, yaxis_known, xaxis_opt, yaxis_opt, yaxis_nopulse, config.tau, os.path.join(config.path, config.plot_filename))
 
     # Final Comparison and Detailed Plots (for best overall sequences)
     print("\n" + "=" * 80)
@@ -1041,17 +1121,17 @@ def run_optimization_pipeline(config):
         # If both exist and have same T_seq, plot together
         if best_known_seq_overall and best_opt_seq_overall and T_seq_best_known == T_seq_best_opt:
              T_seq = T_seq_best_known
-             plot_utils.plot_comparison(config, best_known_seq_overall, best_opt_seq_overall, T_seq)
+             plot_utils.plot_comparison(config, best_known_seq_overall, best_opt_seq_overall, T_seq, filename_suffix="_id")
              plot_utils.plot_filter_functions(config, best_known_seq_overall, best_opt_seq_overall, T_seq)
              plot_utils.plot_filter_functions_with_spectra(config, best_known_seq_overall, best_opt_seq_overall, T_seq)
         else:
              # Plot separately if T_seq differs or one is missing
              if best_known_seq_overall:
-                 plot_utils.plot_comparison(config, best_known_seq_overall, None, T_seq_best_known)
+                 plot_utils.plot_comparison(config, best_known_seq_overall, None, T_seq_best_known, filename_suffix="_id_known")
                  plot_utils.plot_filter_functions(config, best_known_seq_overall, None, T_seq_best_known)
                  plot_utils.plot_filter_functions_with_spectra(config, best_known_seq_overall, None, T_seq_best_known)
              if best_opt_seq_overall:
-                 plot_utils.plot_comparison(config, None, best_opt_seq_overall, T_seq_best_opt)
+                 plot_utils.plot_comparison(config, None, best_opt_seq_overall, T_seq_best_opt, filename_suffix="_id_opt")
                  plot_utils.plot_filter_functions(config, None, best_opt_seq_overall, T_seq_best_opt)
                  plot_utils.plot_filter_functions_with_spectra(config, None, best_opt_seq_overall, T_seq_best_opt)
         
@@ -1069,9 +1149,9 @@ if __name__ == "__main__":
         # Initialize configuration with testing parameters
         config = Config(
             use_known_as_seed=False,
-            M=1,
+            M=20,
             max_pulses=400,
-            num_random_trials=10,
+            num_random_trials=36,
             use_simulated=True # Enable simulated spectra by default for testing
         )
         print("Configuration loaded successfully.")

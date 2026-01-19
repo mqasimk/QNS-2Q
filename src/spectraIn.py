@@ -36,7 +36,7 @@ def S_11(w):
     """
     tc = 1e-5
     S0 = 6e4
-    St2 = 1e5
+    St2 = 2.5e5
     w0 = 1.25e7
     return (S0*(Gauss(w, 1.75*w0, 10/tc))
             +St2*L(w, 0, 1.5*tc))
