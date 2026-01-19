@@ -11,9 +11,8 @@ to minimize infidelity in a two-qubit system. It supports:
 
 Based on ID_opt_v4.py and CZopt.py.
 
-Author: [Qasim]
+Author: [Q]
 Date: [01/18/2026]
-
 """
 
 import functools

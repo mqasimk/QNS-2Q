@@ -9,6 +9,9 @@ The main components are:
 - ExperimentRunner: A class that takes a configuration object and runs the
   experiments.
 - A main execution block that demonstrates how to use these components.
+
+Author: [Q]
+Date: [01/18/2026]
 """
 
 

@@ -4,25 +4,15 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="6258686c-39ec-4d47-99d3-26c96c78fa3a" name="Changes" comment="Refactor plotting logic and update optimization pipelines&#10;&#10;- Add `src/plot_utils.py` to centralize visualization for pulse sequences, filter functions, and correlations.&#10;- Update `src/ID_opt_v4.py` to utilize `plot_utils` and implement gate time sweeping with ideal fidelity calculations.&#10;- Update `src/CZopt_v2.py` to use `plot_utils`, refine `mqCDD` construction, and adjust optimization constraints and spectral padding.&#10;- Remove obsolete scripts `src/1212SpecSPAM.py`, `src/plotter_cz.py`, `src/plotters.py`, and `src/test_jax_correlate.py`.">
+    <list default="true" id="6258686c-39ec-4d47-99d3-26c96c78fa3a" name="Changes" comment="Refine optimization logic, spectral processing, and plotting utilities&#10;&#10;- Update `src/ID_opt_v4.py` and `src/CZopt_v2.py` to use padded and mirrored spectral matrices for improved FFT accuracy in overlap calculations.&#10;- Refine `mqCDD` generation in `ID_opt_v4.py` to correctly handle duplicates during nesting.&#10;- Implement dynamic pulse count selection and T2 calculation logging in optimization pipelines.&#10;- Update `src/plot_utils.py` to support filename suffixes for comparison plots.&#10;- Adjust `St2` parameter in `src/spectraIn.py`.&#10;- Reduce `Jmax` in `src/CZopt_v2.py` and update gate time factors in `src/ID_opt_v4.py`.">
+      <change afterPath="$PROJECT_DIR$/src/CZopt_plots.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/control_correlations_Best_Known_Sequence.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/control_correlations_Best_Optimized_Sequence.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/filter_function_comparison.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/filter_spectra_overlay.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/generalized_filter_functions_Best_Known_Sequence.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/generalized_filter_functions_Best_Optimized_Sequence.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_GateTime_cz_v2.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_known_cz_v2.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_opt_cz_v2.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/noise_correlations.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/sequence_comparison.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/sequence_comparison_cz.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/simulated_spectra.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/simulated_spectra.npz" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_GateTime_cz_v2.pdf" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_GateTime_cz_v2.pdf" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_known_cz_v2.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_known_cz_v2.npz" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_opt_cz_v2.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_opt_cz_v2.npz" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/CZopt_v2.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/CZopt_v2.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/ID_opt_v4.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/ID_opt_v4.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/plot_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/plot_utils.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/spectraIn.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/spectraIn.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/qnsExps.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/qnsExps.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -201,14 +191,6 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1718933215862</updated>
-    </task>
-    <task id="LOCAL-00016" summary="Changing the realistic measurement sims">
-      <option name="closed" value="true" />
-      <created>1738875138696</created>
-      <option name="number" value="00016" />
-      <option name="presentableId" value="LOCAL-00016" />
-      <option name="project" value="LOCAL" />
-      <updated>1738875138697</updated>
     </task>
     <task id="LOCAL-00017" summary="Changing the realistic measurement sims">
       <option name="closed" value="true" />
@@ -594,7 +576,15 @@
       <option name="project" value="LOCAL" />
       <updated>1768685492677</updated>
     </task>
-    <option name="localTasksCounter" value="65" />
+    <task id="LOCAL-00065" summary="Refine optimization logic, spectral processing, and plotting utilities&#10;&#10;- Update `src/ID_opt_v4.py` and `src/CZopt_v2.py` to use padded and mirrored spectral matrices for improved FFT accuracy in overlap calculations.&#10;- Refine `mqCDD` generation in `ID_opt_v4.py` to correctly handle duplicates during nesting.&#10;- Implement dynamic pulse count selection and T2 calculation logging in optimization pipelines.&#10;- Update `src/plot_utils.py` to support filename suffixes for comparison plots.&#10;- Adjust `St2` parameter in `src/spectraIn.py`.&#10;- Reduce `Jmax` in `src/CZopt_v2.py` and update gate time factors in `src/ID_opt_v4.py`.">
+      <option name="closed" value="true" />
+      <created>1768841089207</created>
+      <option name="number" value="00065" />
+      <option name="presentableId" value="LOCAL-00065" />
+      <option name="project" value="LOCAL" />
+      <updated>1768841089207</updated>
+    </task>
+    <option name="localTasksCounter" value="66" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -609,8 +599,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="Resolving outstanding issues." />
-    <MESSAGE value="Making plots for the paper." />
     <MESSAGE value="Agentic cleaning up of optimize_ID.py" />
     <MESSAGE value="QNS experiments cleaned up." />
     <MESSAGE value="Observables.py cleaned up" />
@@ -633,8 +621,10 @@
     <MESSAGE value="Pulse repetition is implemented and works in v4" />
     <MESSAGE value="boosting efficiency" />
     <MESSAGE value="Add CZopt_v2 and support for simulated spectra&#10;&#10;- Add `src/CZopt_v2.py` implementing CZ gate optimization pipeline.&#10;- Update `src/ID_opt_v4.py` to support loading simulated spectra and add filter function plotting with spectra overlay.&#10;- Update `src/spectraIn.py` to save simulated spectra to `.npz`.&#10;- Update `src/ID_opt_v3.py` configuration and main execution block.&#10;- Disable asinh scaling in `src/reconSpectra.py`.&#10;- Remove JIT compilation from `f` in `src/trajectories.py`." />
+    <MESSAGE value="Increase max iterations for CZ optimization&#10;&#10;- Increase `maxiter` from 1000 to 2000 in `src/CZopt_v2.py` to improve convergence.&#10;- Update optimization results and plots in `DraftRun_NoSPAM_Feature/`." />
     <MESSAGE value="Refactor plotting logic and update optimization pipelines&#10;&#10;- Add `src/plot_utils.py` to centralize visualization for pulse sequences, filter functions, and correlations.&#10;- Update `src/ID_opt_v4.py` to utilize `plot_utils` and implement gate time sweeping with ideal fidelity calculations.&#10;- Update `src/CZopt_v2.py` to use `plot_utils`, refine `mqCDD` construction, and adjust optimization constraints and spectral padding.&#10;- Remove obsolete scripts `src/1212SpecSPAM.py`, `src/plotter_cz.py`, `src/plotters.py`, and `src/test_jax_correlate.py`." />
-    <option name="LAST_COMMIT_MESSAGE" value="Refactor plotting logic and update optimization pipelines&#10;&#10;- Add `src/plot_utils.py` to centralize visualization for pulse sequences, filter functions, and correlations.&#10;- Update `src/ID_opt_v4.py` to utilize `plot_utils` and implement gate time sweeping with ideal fidelity calculations.&#10;- Update `src/CZopt_v2.py` to use `plot_utils`, refine `mqCDD` construction, and adjust optimization constraints and spectral padding.&#10;- Remove obsolete scripts `src/1212SpecSPAM.py`, `src/plotter_cz.py`, `src/plotters.py`, and `src/test_jax_correlate.py`." />
+    <MESSAGE value="Refine optimization logic, spectral processing, and plotting utilities&#10;&#10;- Update `src/ID_opt_v4.py` and `src/CZopt_v2.py` to use padded and mirrored spectral matrices for improved FFT accuracy in overlap calculations.&#10;- Refine `mqCDD` generation in `ID_opt_v4.py` to correctly handle duplicates during nesting.&#10;- Implement dynamic pulse count selection and T2 calculation logging in optimization pipelines.&#10;- Update `src/plot_utils.py` to support filename suffixes for comparison plots.&#10;- Adjust `St2` parameter in `src/spectraIn.py`.&#10;- Reduce `Jmax` in `src/CZopt_v2.py` and update gate time factors in `src/ID_opt_v4.py`." />
+    <option name="LAST_COMMIT_MESSAGE" value="Refine optimization logic, spectral processing, and plotting utilities&#10;&#10;- Update `src/ID_opt_v4.py` and `src/CZopt_v2.py` to use padded and mirrored spectral matrices for improved FFT accuracy in overlap calculations.&#10;- Refine `mqCDD` generation in `ID_opt_v4.py` to correctly handle duplicates during nesting.&#10;- Implement dynamic pulse count selection and T2 calculation logging in optimization pipelines.&#10;- Update `src/plot_utils.py` to support filename suffixes for comparison plots.&#10;- Adjust `St2` parameter in `src/spectraIn.py`.&#10;- Reduce `Jmax` in `src/CZopt_v2.py` and update gate time factors in `src/ID_opt_v4.py`." />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
