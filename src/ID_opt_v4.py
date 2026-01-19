@@ -9,7 +9,7 @@ to minimize infidelity in a two-qubit system. It supports:
 4. Optimizing random pulse sequences using JAX-based gradient descent.
 5. Efficiently handling repeated sequences via time-folding strategies or frequency comb approximations.
 
-Author: [Qasim]
+Author: [Q]
 Date: [01/18/2026]
 """
 
