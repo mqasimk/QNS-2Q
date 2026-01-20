@@ -5,14 +5,34 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="6258686c-39ec-4d47-99d3-26c96c78fa3a" name="Changes" comment="Refine optimization logic, spectral processing, and plotting utilities&#10;&#10;- Update `src/ID_opt_v4.py` and `src/CZopt_v2.py` to use padded and mirrored spectral matrices for improved FFT accuracy in overlap calculations.&#10;- Refine `mqCDD` generation in `ID_opt_v4.py` to correctly handle duplicates during nesting.&#10;- Implement dynamic pulse count selection and T2 calculation logging in optimization pipelines.&#10;- Update `src/plot_utils.py` to support filename suffixes for comparison plots.&#10;- Adjust `St2` parameter in `src/spectraIn.py`.&#10;- Reduce `Jmax` in `src/CZopt_v2.py` and update gate time factors in `src/ID_opt_v4.py`.">
-      <change afterPath="$PROJECT_DIR$/src/CZopt_plots.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_GateTime_cz_v2.pdf" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_GateTime_cz_v2.pdf" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_known_cz_v2.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_known_cz_v2.npz" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_opt_cz_v2.npz" beforeDir="false" afterPath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_opt_cz_v2.npz" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/control_correlations_Best_Known_Sequence.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/control_correlations_Best_Optimized_Sequence.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/filter_function_comparison.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/filter_spectra_overlay.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/generalized_filter_functions_Best_Known_Sequence.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/generalized_filter_functions_Best_Optimized_Sequence.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_GateTime_cz_v2.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_GateTime_id_v4.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_known_cz_v2.npz" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_known_id_v4.npz" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_opt_cz_v2.npz" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_opt_id_v4.npz" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/noise_correlations.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/params.npz" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/reconstruct.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/results.npz" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/sequence_comparison.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/sequence_comparison_cz_known.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/sequence_comparison_cz_opt.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/sequence_comparison_id_known.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/sequence_comparison_id_opt.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/simulated_spectra.npz" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/specs.npz" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/CZopt_v2.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/CZopt_v2.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/ID_opt_v4.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/ID_opt_v4.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/qnsExps.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/qnsExps.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/plot_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/plot_utils.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/spectraIn.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/spectraIn.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

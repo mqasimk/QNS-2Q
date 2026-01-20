@@ -46,12 +46,12 @@ class Config:
                  fname="DraftRun_NoSPAM_Feature",
                  include_cross_spectra=True,
                  Tg=4 * 14 * 1e-6, # Default, will be overridden by loop
-                 tau_divisor=160, 
+                 tau_divisor=160/2,
                  
                  # Optimization/Testing Parameters
                  M=1,                      # Repetition count
                  max_pulses=100,           # Total max pulses allowed
-                 num_random_trials=10,     # Number of random sequences to optimize
+                 num_random_trials=10,     # Number of random trials
                  use_known_as_seed=False,  # Use best known sequence as seed
                  
                  # Output settings
@@ -88,10 +88,10 @@ class Config:
              self.params = np.load(os.path.join(self.path, "params.npz"))
         
         # System Parameters
-        self.Tqns = float(self.params['T'])
+        self.Tqns = jnp.float64(self.params['T'])
         self.mc = int(self.params['truncate'])
-        self.gamma = float(self.params['gamma'])
-        self.gamma12 = float(self.params['gamma_12'])
+        self.gamma = jnp.float64(self.params['gamma'])
+        self.gamma12 = jnp.float64(self.params['gamma_12'])
         self.include_cross_spectra = include_cross_spectra
         
         # Optimization Parameters
@@ -313,6 +313,12 @@ def get_random_delays(n, T, tau):
     else:
         return jnp.ones(n) * T / (n + 1)
 
+def get_equidistant_delays(n, T):
+    """Generates equidistant delay intervals."""
+    if n <= 0:
+        return jnp.array([])
+    return jnp.ones(int(n)) * T / (n + 1)
+
 @jax.jit
 def make_tk12(tk1, tk2):
     """
@@ -411,7 +417,7 @@ def precompute_R_folded(R_shifted, lags_R, M, T_base, dt, n_base_steps):
     lags_C = (jnp.arange(2 * n_base_steps - 1) - (n_base_steps - 1)) * dt
     
     p_vals = jnp.arange(-(M - 1), M)
-    weights = float(M) - jnp.abs(p_vals)
+    weights = jnp.float64(M) - jnp.abs(p_vals)
     
     # R is complex
     R_real = jnp.real(R_shifted)
@@ -732,7 +738,7 @@ def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
 
         def fun_wrapper(x):
             v, g = val_and_grad(x)
-            return float(v), np.array(g)
+            return jnp.float64(v), jnp.array(g)
 
         # Linear constraints
         A = np.zeros((2, n1 + n2))
@@ -741,7 +747,7 @@ def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
         linear_cons = scipy.optimize.LinearConstraint(A, -np.inf, T_seq - config.tau)
         
         try:
-            res = scipy.optimize.minimize(fun_wrapper, np.array(initial_params), method='SLSQP',
+            res = scipy.optimize.minimize(fun_wrapper, jnp.array(initial_params), method='SLSQP',
                                           bounds=bounds, constraints=linear_cons, jac=True,
                                           tol=1e-14, options={'maxiter': 1000, 'disp': False})
             
@@ -778,8 +784,8 @@ def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
             print(f"Skipping Random Opt (n={n1},{n2}): Over-constrained (Too many pulses for T_seq)")
             continue
 
-        d1 = get_random_delays(n1, T_seq, config.tau)
-        d2 = get_random_delays(n2, T_seq, config.tau)
+        d1 = get_equidistant_delays(n1, T_seq)
+        d2 = get_equidistant_delays(n2, T_seq)
         initial_params = jnp.concatenate([d1, d2])
         run_single_optimization(n1, n2, initial_params, "Random Opt")
             
@@ -1027,40 +1033,22 @@ def run_optimization_pipeline(config):
         # 2. Random Optimization
         print("  Running Random Optimization...")
         
-        # Smart candidate selection similar to CZopt_v2
+        # Random candidate selection
         max_n_physical = int(config.T_seq / config.tau) - 1
         upper_bound_physical = max(1, max_n_physical - 1)
         effective_max = min(config.max_pulses_per_rep, upper_bound_physical)
         
-        n_candidates_set = set()
-        if effective_max > 0:
-            n_candidates_set.add(effective_max)
-            if effective_max > 1:
-                n_candidates_set.add(effective_max - 1)
-            if effective_max > 2:
-                n_candidates_set.add(effective_max - 2)
-                
-        # Also search around half
-        half_max = effective_max // 2
-        if half_max > 0:
-            n_candidates_set.add(half_max)
-            if half_max > 1:
-                n_candidates_set.add(half_max - 1)
-            if half_max + 1 < effective_max:
-                n_candidates_set.add(half_max + 1)
-                
-        n_candidates = sorted(list(n_candidates_set), reverse=True)
-        
         n_pulses_list = []
-        for n1 in n_candidates:
-            for n2 in n_candidates:
-                n_pulses_list.append((n1, n2))
+        for _ in range(config.num_random_trials):
+            n1 = np.random.randint(0, effective_max + 1)
+            n2 = np.random.randint(0, effective_max + 1)
+            n_pulses_list.append((n1, n2))
         
         if not n_pulses_list:
              print("    Skipping: T_seq too small for pulses")
              best_opt_inf_ideal = 1.0
         else:
-             print(f"  Auto-selected pulse counts: {n_candidates}")
+             print(f"  Randomly selected pulse counts: {n_pulses_list}")
              seed_seq = best_known_seq if config.use_known_as_seed else None
              best_opt_seq, best_opt_inf = optimize_random_sequences(config, config.M, n_pulses_list, seed_seq=seed_seq)
              
@@ -1144,20 +1132,58 @@ def run_optimization_pipeline(config):
             plot_utils.plot_control_correlations(config, best_opt_seq_overall, T_seq_best_opt, config.M, "Best Optimized Sequence")
             plot_utils.plot_generalized_filter_functions(config, best_opt_seq_overall, T_seq_best_opt, "Best Optimized Sequence")
 
+    return best_known_inf_overall, best_opt_inf_overall, inf_nopulse
+
 if __name__ == "__main__":
     try:
-        # Initialize configuration with testing parameters
-        config = Config(
-            use_known_as_seed=False,
-            M=20,
-            max_pulses=400,
-            num_random_trials=36,
-            use_simulated=True # Enable simulated spectra by default for testing
-        )
-        print("Configuration loaded successfully.")
+        # Iterate through M values: 1, 2, 4, ..., 512
+        M_values = [2**i for i in range(8)]
+        results = []
+
+        print(f"{'M':<10} | {'Known Inf':<20} | {'Opt Inf':<20}")
+        print("-" * 56)
         
-        # Run the pipeline
-        run_optimization_pipeline(config)
+        for m in M_values:
+            print(f"\n{'='*40}")
+            print(f"Running Optimization for M = {m}")
+            print(f"{'='*40}")
+            
+            # Initialize configuration with testing parameters
+            config = Config(
+                use_known_as_seed=False,
+                M=m,
+                max_pulses=400,
+                num_random_trials=40,
+                use_simulated=True, # Enable simulated spectra by default for testing
+                gate_time_factors=[-4], # Gate time currently considered
+                output_path_known=f"infs_known_id_v4_M{m}.npz",
+                output_path_opt=f"infs_opt_id_v4_M{m}.npz",
+                plot_filename=f"infs_GateTime_id_v4_M{m}.pdf"
+            )
+            print(f"Configuration loaded for M={m}.")
+            
+            # Run the pipeline
+            inf_known, inf_opt, inf_nopulse = run_optimization_pipeline(config)
+            results.append((m, inf_known, inf_opt, inf_nopulse))
+
+        print("\n" + "="*60)
+        print("SUMMARY OF RESULTS (Longest Gate Time)")
+        print(f"{'M':<10} | {'Known Inf':<20} | {'Opt Inf':<20} | {'No Pulse Inf':<20}")
+        print("-" * 78)
+        
+        known_infs = []
+        opt_infs = []
+        nopulse_infs = []
+        
+        for m, k, o, np_inf in results:
+            print(f"{m:<10} | {k:<20.6e} | {o:<20.6e} | {np_inf:<20.6e}")
+            known_infs.append(k)
+            opt_infs.append(o)
+            nopulse_infs.append(np_inf)
+        print("="*60)
+        
+        # Plot Infidelity vs M
+        plot_utils.plot_infidelity_vs_M(M_values, known_infs, opt_infs, nopulse_infs, os.path.join(config.path, "infs_vs_M_id_v4.pdf"))
         
     except Exception as e:
         print(f"Error: {e}")

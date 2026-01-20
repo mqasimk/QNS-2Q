@@ -35,10 +35,10 @@ def S_11(w):
     :return: ndarray of the value of the function.
     """
     tc = 1e-5
-    S0 = 6e4
+    S0 = 3e4
     St2 = 2.5e5
-    w0 = 1.25e7
-    return (S0*(Gauss(w, 1.75*w0, 10/tc))
+    w0 = 1.4e7
+    return (S0*(0*Gauss(w, 1.75*w0, 10/tc)+L(w, w0, 1*tc))
             +St2*L(w, 0, 1.5*tc))
 
 
@@ -50,10 +50,10 @@ def S_22(w):
     :return: ndarray of the value of the function.
     """
     tc=1e-5
-    S0 = 5e4
+    S0 = 2.5e4
     St2 = 1e5
-    w0=0.75e7
-    return (S0*(Gauss(w, 1.5*w0, 10/tc)+Gauss(w, 2.5*w0, 10/tc))
+    w0=0.8e7
+    return (S0*(Gauss(w, 1.8*w0, 10/tc)+Gauss(w, 2.5*w0, 20/tc))
             +St2*L(w, 0, 2*tc))
 
 
@@ -64,11 +64,12 @@ def S_1212(w):
     :param w: ndarray of the frequencies at which to evaluate the spectrum.
     :return: ndarray of the value of the function.
     """
-    tc = 1e-4
-    S0 = 0*1e3
+    tc = 1e-3
+    S0 = 1e3
     St2 = 1e6
     w0 = 1.5*10**7
-    return S0*L(w, w0, 0.2*tc)+ St2*L(w, 0, 0.2*tc)#St2/(1+(2*tc*jnp.abs(w)))
+    #return S0*L(w, w0, 0.2*tc)+ St2*L(w, 0, 0.2*tc)
+    return St2/(1+(2*tc*jnp.abs(w)))
 
 
 @jax.jit
@@ -138,29 +139,63 @@ if __name__ == "__main__":
     }
 
     # Plotting
-    fig, axes = plt.subplots(3, 2, figsize=(15, 12))
-    fig.suptitle('Spectra with arsinh scaled y-axis')
-    axes = axes.flatten()
+    xunits = 1e6
+    plot_params = {
+        'lw': 1,
+        'legendfont': 12,
+        'xlabelfont': 16,
+        'ylabelfont': 16,
+        'tickfont': 12,
+    }
 
-    for i, (name, s) in enumerate(spectra.items()):
-        ax = axes[i]
-        # Convert to numpy array to ensure compatibility with matplotlib
-        s_np = np.array(s)
+    fig, axs = plt.subplots(2, 3, figsize=(16, 9))
 
-        line_real, = ax.plot(w, np.real(s_np), label='Real')
-        line_imag, = ax.plot(w, np.imag(s_np), label='Imag', linestyle='--')
+    # Convert jax arrays to numpy for plotting
+    w_np = np.array(w)
+    wk_np = np.array(wk)
 
-        # Plot harmonic frequencies
-        s_k = np.array(spectra_k[name])
-        ax.plot(wk, np.real(s_k), 'o', color=line_real.get_color(), label='Real (Harmonics)')
-        ax.plot(wk, np.imag(s_k), 'x', color=line_imag.get_color(), label='Imag (Harmonics)')
+    # S_11
+    axs[0, 0].plot(wk_np / xunits, np.real(spectra_k['S_11']), 'r^')
+    axs[0, 0].plot(w_np / xunits, np.real(spectra['S_11']), 'r--', lw=1.5 * plot_params['lw'])
+    axs[0, 0].legend([r'$\hat{S}_{1,1}^+(\omega_k)$', r'$S_{1,1}^+(\omega)$'], fontsize=plot_params['legendfont'])
 
-        ax.set_title(name)
-        ax.set_xlabel('Frequency (w)')
-        ax.set_ylabel('arsinh(S)')
-        ax.set_yscale('asinh')
-        ax.legend()
-        ax.grid(True)
+    # S_22
+    axs[0, 1].plot(wk_np / xunits, np.real(spectra_k['S_22']), 'r^')
+    axs[0, 1].plot(w_np / xunits, np.real(spectra['S_22']), 'r--', lw=1.5 * plot_params['lw'])
+    axs[0, 1].legend([r'$\hat{S}_{2,2}^+(\omega_k)$', r'$S_{2,2}^+(\omega)$'], fontsize=plot_params['legendfont'])
+
+    # S_1212
+    axs[0, 2].plot(wk_np / xunits, np.real(spectra_k['S_1212']), 'r^')
+    axs[0, 2].plot(w_np / xunits, np.real(spectra['S_1212']), 'r--', lw=1.5 * plot_params['lw'])
+    axs[0, 2].legend([r'$\hat{S}_{12,12}^+(\omega_k)$', r'$S_{12,12}^+(\omega)$'], fontsize=plot_params['legendfont'])
+
+    # S_1_2
+    axs[1, 0].plot(wk_np / xunits, np.real(spectra_k['S_1_2']), 'r^')
+    axs[1, 0].plot(w_np / xunits, np.real(spectra['S_1_2']), 'r--', lw=1.5 * plot_params['lw'])
+    axs[1, 0].plot(wk_np / xunits, np.imag(spectra_k['S_1_2']), 'b^')
+    axs[1, 0].plot(w_np / xunits, np.imag(spectra['S_1_2']), 'b--', lw=1.5 * plot_params['lw'])
+    axs[1, 0].legend([r'Re[$\hat{S}_{1,2}^+(\omega_k)$]', r'Re[$S_{1,2}^+(\omega)$]', r'Im[$\hat{S}_{1,2}^+(\omega_k)$]', r'Im[$S_{1,2}^+(\omega)$]'], fontsize=plot_params['legendfont'])
+
+    # S_1_12
+    axs[1, 1].plot(wk_np / xunits, np.real(spectra_k['S_1_12']), 'r^')
+    axs[1, 1].plot(w_np / xunits, np.real(spectra['S_1_12']), 'r--', lw=1.5 * plot_params['lw'])
+    axs[1, 1].plot(wk_np / xunits, np.imag(spectra_k['S_1_12']), 'b^')
+    axs[1, 1].plot(w_np / xunits, np.imag(spectra['S_1_12']), 'b--', lw=1.5 * plot_params['lw'])
+    axs[1, 1].legend([r'Re[$\hat{S}_{1,12}^+(\omega_k)$]', r'Re[$S_{1,12}^+(\omega)$]', r'Im[$\hat{S}_{1,12}^+(\omega_k)$]', r'Im[$S_{1,12}^+(\omega)$]'], fontsize=plot_params['legendfont'])
+
+    # S_2_12
+    axs[1, 2].plot(wk_np / xunits, np.real(spectra_k['S_2_12']), 'r^')
+    axs[1, 2].plot(w_np / xunits, np.real(spectra['S_2_12']), 'r--', lw=1.5 * plot_params['lw'])
+    axs[1, 2].plot(wk_np / xunits, np.imag(spectra_k['S_2_12']), 'b^')
+    axs[1, 2].plot(w_np / xunits, np.imag(spectra['S_2_12']), 'b--', lw=1.5 * plot_params['lw'])
+    axs[1, 2].legend([r'Re[$\hat{S}_{2,12}^+(\omega_k)$]', r'Re[$S_{2,12}^+(\omega)$]', r'Im[$\hat{S}_{2,12}^+(\omega_k)$]', r'Im[$S_{2,12}^+(\omega)$]'], fontsize=plot_params['legendfont'])
+
+    for ax_row in axs:
+        for ax in ax_row:
+            ax.set_xlabel(r'$\omega$(MHz)', fontsize=plot_params['xlabelfont'])
+            ax.tick_params(direction='in', labelsize=plot_params['tickfont'])
+            ax.grid(True, alpha=0.3)
+            ax.set_yscale('asinh')
 
     plt.tight_layout()
 

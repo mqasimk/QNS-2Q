@@ -71,6 +71,30 @@ def plot_infidelity_vs_gatetime(xaxis_known, yaxis_known, xaxis_opt, yaxis_opt, 
     print(f"Saved plot to {save_path}")
     plt.close(fig)
 
+def plot_infidelity_vs_M(M_values, yaxis_known, yaxis_opt, yaxis_nopulse, save_path):
+    """Plots Infidelity vs M (Repetitions) with consistent formatting."""
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    ax.plot(M_values, yaxis_known, 'bs-', label='Known')
+    ax.plot(M_values, yaxis_opt, 'ko-', label='Optimized')
+    if yaxis_nopulse is not None:
+        ax.plot(M_values, yaxis_nopulse, 'r^-', label='No Pulse')
+    
+    ax.set_xscale('log', base=2)
+    ax.set_yscale('log')
+    ax.set_xlabel('Repetitions (M)')
+    ax.set_ylabel('Infidelity')
+    ax.grid(True, which='both', linestyle='--')
+    ax.legend()
+    
+    # Set ticks at data points
+    ax.set_xticks(M_values)
+    ax.get_xaxis().set_major_formatter(ticker.ScalarFormatter())
+    
+    plt.savefig(save_path)
+    print(f"Saved plot to {save_path}")
+    plt.close(fig)
+
 def plot_comparison(config, known_seq, opt_seq, T_seq, filename_suffix=""):
     """Plots the switching functions y(t) for comparison."""
     has_known = known_seq is not None
