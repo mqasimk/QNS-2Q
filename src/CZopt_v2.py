@@ -44,15 +44,15 @@ class CZOptConfig:
     """Configuration for the CZ gate optimization."""
     fname: str = "DraftRun_NoSPAM_Feature"
     parent_dir: str = os.pardir
-    Jmax: float = 5e6
+    Jmax: float = 2e6
     # Extended gate time factors to include larger gate times (-1, 0)
-    gate_time_factors: list = field(default_factory=lambda: [-1, 0, 1, 2, 3, 4, 5])
+    gate_time_factors: list = field(default_factory=lambda: [-3, -2, -1, 0, 1, 2, 3])
     output_path_known: str = "infs_known_cz_v2.npz"
     output_path_opt: str = "infs_opt_cz_v2.npz"
     plot_filename: str = "infs_GateTime_cz_v2.pdf"
     
     include_cross_spectra: bool = True
-    tau_divisor: int = 160
+    tau_divisor: int = 160 / 2
     use_simulated: bool = False
     max_pulses: int = 400
     
