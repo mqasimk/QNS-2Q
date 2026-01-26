@@ -131,7 +131,7 @@ class Config:
         w_max_sys = 2 * jnp.pi * self.mc / self.Tqns
         # Multiplier to ensure dt is small enough (e.g. ~10-100ns)
         self.w_max = 2 * w_max_sys
-        self.N_w = 20000
+        self.N_w = 120000
         
         self.w = jnp.linspace(0, self.w_max, self.N_w)
         self.w_ideal = jnp.linspace(0, 2 * self.w_max, 2 * self.N_w)
@@ -626,17 +626,17 @@ def cost_function(delays_params, n_pulses1, RMat_data, T_seq, tau_min, overlap_f
     """
     delays1 = delays_params[:n_pulses1]
     delays2 = delays_params[n_pulses1:]
-    
+
     pt1 = delays_to_pulse_times(delays1, T_seq)
     pt2 = delays_to_pulse_times(delays2, T_seq)
     pt12 = make_tk12(pt1, pt2)
-    
-    # Dummy pulse sequence for index 0 (Identity). 
+
+    # Dummy pulse sequence for index 0 (Identity).
     # Since SMat[0,:] is 0, the overlap will be 0 regardless of sequence.
-    pt0 = jnp.array([0., T_seq]) 
-    
+    pt0 = jnp.array([0., T_seq])
+
     pts = [pt0, pt1, pt2, pt12]
-    
+
     # Calculate I_matrix (4x4)
     vals = []
     for i in range(4):
@@ -645,7 +645,7 @@ def cost_function(delays_params, n_pulses1, RMat_data, T_seq, tau_min, overlap_f
             val = overlap_fn(pts[i], pts[j], RMat_data[i, j])
             row_vals.append(val)
         vals.append(row_vals)
-    
+
     I_mat = jnp.array(vals)
     
     fid = calculate_idling_fidelity(I_mat)
@@ -670,21 +670,21 @@ def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
         max_k = int(config.w_max / w0)
         k_vals = jnp.arange(1, max_k + 1)
         omega_k = k_vals * w0
-        
+
         # 2. Interpolate Spectra
         S_flat = config.SMat.reshape(-1, config.SMat.shape[-1])
-        
+
         def interp_row(fp):
             return (jnp.interp(omega_k, config.w, jnp.real(fp), right=0.) +
                    1j * jnp.interp(omega_k, config.w, jnp.imag(fp), right=0.))
-                   
+
         S_harmonics_flat = jax.vmap(interp_row)(S_flat) # (16, K)
         S_DC_flat = S_flat[:, 0]
-        
+
         # Pack: (16, K+1) -> (4, 4, K+1)
         S_packed_flat = jnp.concatenate([S_DC_flat[:, None], S_harmonics_flat], axis=1)
         RMat_data = S_packed_flat.reshape(4, 4, -1)
-        
+
         @jax.jit
         def overlap_fn(pt_a, pt_b, data):
             return evaluate_overlap_comb(pt_a, pt_b, data, omega_k, T_seq, M)
@@ -693,23 +693,23 @@ def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
         print(f"Using Folded Noise Matrix (M={M})...")
         N = config.w.shape[0]
         dw = config.w[1] - config.w[0]
-        
+
         # Pad SMat with zeros to double the range (improving time resolution dt)
         SMat_padded = jnp.pad(config.SMat, ((0,0), (0,0), (0, N)))
-        
+
         # Mirror SMat to ensure Hermitian symmetry
         SMat_sym = jnp.concatenate([SMat_padded, jnp.conj(jnp.flip(SMat_padded[..., 1:-1], axis=-1))], axis=-1)
         N_sym = SMat_sym.shape[-1]
-        
+
         dt = (2 * np.pi / (N_sym * dw))
         lags_R = (jnp.arange(N_sym) - N_sym//2) * dt
-        
+
         RMat_vals = jnp.fft.ifft(SMat_sym, axis=-1)
         RMat_scaled = RMat_vals / dt
         RMat_shifted = jnp.fft.fftshift(RMat_scaled, axes=-1)
-        
+
         n_base_steps = int(np.ceil(T_seq / dt))
-        
+
         @jax.jit
         def get_folded_matrix(RMat_in):
             R_flat = RMat_in.reshape(-1, RMat_in.shape[-1])
@@ -717,7 +717,7 @@ def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
             return folded_flat.reshape(4, 4, -1)
 
         RMat_data = get_folded_matrix(RMat_shifted)
-        
+
         @jax.jit
         def overlap_fn(pt_a, pt_b, data):
             return evaluate_overlap_folded(pt_a, pt_b, data, dt, n_base_steps)
@@ -729,9 +729,9 @@ def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
         bounds = [(config.tau, T_seq) for _ in range(len(initial_params))]
         
         # Partial cost function for JIT
-        cost_for_n = functools.partial(cost_function, n_pulses1=n1, 
-                                       RMat_data=RMat_data, 
-                                       T_seq=T_seq, tau_min=config.tau, 
+        cost_for_n = functools.partial(cost_function, n_pulses1=n1,
+                                       RMat_data=RMat_data,
+                                       T_seq=T_seq, tau_min=config.tau,
                                        overlap_fn=overlap_fn)
         
         val_and_grad = jax.jit(jax.value_and_grad(cost_for_n))
@@ -809,18 +809,18 @@ def evaluate_known_sequences(config, M, pLib):
         max_k = int(config.w_max / w0)
         k_vals = jnp.arange(1, max_k + 1)
         omega_k = k_vals * w0
-        
+
         S_flat = config.SMat.reshape(-1, config.SMat.shape[-1])
-        
+
         def interp_row(fp):
             return (jnp.interp(omega_k, config.w, jnp.real(fp), right=0.) +
                    1j * jnp.interp(omega_k, config.w, jnp.imag(fp), right=0.))
-                   
+
         S_harmonics_flat = jax.vmap(interp_row)(S_flat)
         S_DC_flat = S_flat[:, 0]
         S_packed_flat = jnp.concatenate([S_DC_flat[:, None], S_harmonics_flat], axis=1)
         RMat_data = S_packed_flat.reshape(4, 4, -1)
-        
+
         @jax.jit
         def overlap_fn(pt_a, pt_b, data):
             return evaluate_overlap_comb(pt_a, pt_b, data, omega_k, T_seq, M)
@@ -829,23 +829,23 @@ def evaluate_known_sequences(config, M, pLib):
         print(f"Using Folded Noise Matrix (M={M})...")
         N = config.w.shape[0]
         dw = config.w[1] - config.w[0]
-        
+
         # Pad SMat with zeros to double the range (improving time resolution dt)
         SMat_padded = jnp.pad(config.SMat, ((0,0), (0,0), (0, N)))
-        
+
         # Mirror SMat to ensure Hermitian symmetry
         SMat_sym = jnp.concatenate([SMat_padded, jnp.conj(jnp.flip(SMat_padded[..., 1:-1], axis=-1))], axis=-1)
         N_sym = SMat_sym.shape[-1]
-        
+
         dt = (2 * np.pi / (N_sym * dw))
         lags_R = (jnp.arange(N_sym) - N_sym//2) * dt
-        
+
         RMat_vals = jnp.fft.ifft(SMat_sym, axis=-1)
         RMat_scaled = RMat_vals / dt
         RMat_shifted = jnp.fft.fftshift(RMat_scaled, axes=-1)
-        
+
         n_base_steps = int(np.ceil(T_seq / dt))
-        
+
         @jax.jit
         def get_folded_matrix(RMat_in):
             R_flat = RMat_in.reshape(-1, RMat_in.shape[-1])
@@ -853,19 +853,19 @@ def evaluate_known_sequences(config, M, pLib):
             return folded_flat.reshape(4, 4, -1)
 
         RMat_data = get_folded_matrix(RMat_shifted)
-        
+
         @jax.jit
         def overlap_fn(pt_a, pt_b, data):
             return evaluate_overlap_folded(pt_a, pt_b, data, dt, n_base_steps)
-        
+
     for i, (d1, d2) in enumerate(pLib):
         pt1 = delays_to_pulse_times(d1, T_seq)
         pt2 = delays_to_pulse_times(d2, T_seq)
         pt12 = make_tk12(pt1, pt2)
         pt0 = jnp.array([0., T_seq])
-        
+
         pts = [pt0, pt1, pt2, pt12]
-        
+
         vals = []
         for r in range(4):
             row_vals = []
@@ -874,10 +874,10 @@ def evaluate_known_sequences(config, M, pLib):
                 row_vals.append(val)
             vals.append(row_vals)
         I_mat = jnp.array(vals)
-        
+
         fid = calculate_idling_fidelity(I_mat)
         inf = 1.0 - fid / 16.0
-        
+
         if inf < best_inf:
             best_inf = inf
             best_seq = (pt1, pt2)
@@ -897,10 +897,10 @@ def calculate_infidelity(seq, config, M, T_seq, use_ideal=False):
         w0 = 2 * jnp.pi / T_seq
         limit_w = w_grid[-1]
         max_k = int(limit_w / w0)
-        
+
         k_vals = jnp.arange(1, max_k + 1)
         omega_k = k_vals * w0
-        
+
         S_flat = SMat.reshape(-1, SMat.shape[-1])
         def interp_row(fp):
             return (jnp.interp(omega_k, w_grid, jnp.real(fp), right=0.) +
@@ -909,44 +909,44 @@ def calculate_infidelity(seq, config, M, T_seq, use_ideal=False):
         S_DC_flat = S_flat[:, 0]
         S_packed_flat = jnp.concatenate([S_DC_flat[:, None], S_harmonics_flat], axis=1)
         RMat_data = S_packed_flat.reshape(4, 4, -1)
-        
+
         overlap_fn = lambda pt_a, pt_b, data: evaluate_overlap_comb(pt_a, pt_b, data, omega_k, T_seq, M)
-        
+
     else:
         N = w_grid.shape[0]
         dw = w_grid[1] - w_grid[0]
-        
+
         SMat_curr = SMat
         if not use_ideal:
              # Pad to reduce discretization error (match Ideal resolution approx)
              SMat_curr = jnp.pad(SMat, ((0,0), (0,0), (0, N)))
-        
+
         # Mirror SMat to ensure Hermitian symmetry
         SMat_sym = jnp.concatenate([SMat_curr, jnp.conj(jnp.flip(SMat_curr[..., 1:-1], axis=-1))], axis=-1)
         N_sym = SMat_sym.shape[-1]
-        
+
         dt = (2 * np.pi / (N_sym * dw))
         lags_R = (jnp.arange(N_sym) - N_sym//2) * dt
-        
+
         RMat_vals = jnp.fft.ifft(SMat_sym, axis=-1)
         RMat_scaled = RMat_vals / dt
         RMat_shifted = jnp.fft.fftshift(RMat_scaled, axes=-1)
-        
+
         n_base_steps = int(np.ceil(T_seq / dt))
-        
+
         def get_folded_matrix(RMat_in):
             R_flat = RMat_in.reshape(-1, RMat_in.shape[-1])
             folded_flat = jax.vmap(lambda r: precompute_R_folded(r, lags_R, M, T_seq, dt, n_base_steps))(R_flat)
             return folded_flat.reshape(4, 4, -1)
         RMat_data = get_folded_matrix(RMat_shifted)
-        
+
         overlap_fn = lambda pt_a, pt_b, data: evaluate_overlap_folded(pt_a, pt_b, data, dt, n_base_steps)
 
     pt1, pt2 = seq
     pt12 = make_tk12(pt1, pt2)
     pt0 = jnp.array([0., T_seq])
     pts = [pt0, pt1, pt2, pt12]
-    
+
     vals = []
     for i in range(4):
         row_vals = []
@@ -978,6 +978,10 @@ def run_optimization_pipeline(config):
     yaxis_known, xaxis_known = [], []
     yaxis_nopulse = []
     
+    # Store labels for plotting
+    labels_known = []
+    labels_opt = []
+    
     best_known_seq_overall = None
     best_opt_seq_overall = None
     T_seq_best_known = None
@@ -985,6 +989,10 @@ def run_optimization_pipeline(config):
     best_known_inf_overall = 1.0
     best_opt_inf_overall = 1.0
     
+    # Store best label for overall best
+    best_known_label_overall = ""
+    best_opt_label_overall = ""
+
     for i in config.gate_time_factors:
         # Use Tqns as base for gate time scaling, similar to CZopt_v2
         Tg = config.Tqns / 2**(i-1)
@@ -1019,12 +1027,17 @@ def run_optimization_pipeline(config):
             best_known_inf_ideal = calculate_infidelity(best_known_seq, config, config.M, config.T_seq, use_ideal=True)
             print(f"  Best Known (Ideal): {best_known_inf_ideal:.6e}")
             
+            label_k = f"{pLib_desc[idx]}^{config.M}"
+            labels_known.append(label_k)
+            
             if best_known_inf_ideal < best_known_inf_overall:
                 best_known_inf_overall = best_known_inf_ideal
                 best_known_seq_overall = best_known_seq
                 T_seq_best_known = config.T_seq
+                best_known_label_overall = label_k
         else:
             best_known_inf_ideal = 1.0
+            labels_known.append("N/A")
             print("  No valid known sequences found.")
             
         yaxis_known.append(best_known_inf_ideal)
@@ -1047,6 +1060,7 @@ def run_optimization_pipeline(config):
         if not n_pulses_list:
              print("    Skipping: T_seq too small for pulses")
              best_opt_inf_ideal = 1.0
+             labels_opt.append("N/A")
         else:
              print(f"  Randomly selected pulse counts: {n_pulses_list}")
              seed_seq = best_known_seq if config.use_known_as_seed else None
@@ -1057,12 +1071,19 @@ def run_optimization_pipeline(config):
                  best_opt_inf_ideal = calculate_infidelity(best_opt_seq, config, config.M, config.T_seq, use_ideal=True)
                  print(f"  Best Optimized (Ideal): {best_opt_inf_ideal:.6e}")
                  
+                 n1_opt = len(best_opt_seq[0]) - 2
+                 n2_opt = len(best_opt_seq[1]) - 2
+                 label_o = f"NT({n1_opt},{n2_opt})^{config.M}"
+                 labels_opt.append(label_o)
+                 
                  if best_opt_inf_ideal < best_opt_inf_overall:
                      best_opt_inf_overall = best_opt_inf_ideal
                      best_opt_seq_overall = best_opt_seq
                      T_seq_best_opt = config.T_seq
+                     best_opt_label_overall = label_o
              else:
                  best_opt_inf_ideal = 1.0
+                 labels_opt.append("N/A")
                  print("  No optimized sequence found.")
         
         yaxis_opt.append(best_opt_inf_ideal)
@@ -1074,116 +1095,150 @@ def run_optimization_pipeline(config):
     np.savez(os.path.join(config.path, config.output_path_known), infs_known=np.array(yaxis_known),
              taxis=np.array(xaxis_known))
 
-    # Plot Infidelity vs Gate Time
-    plot_utils.plot_infidelity_vs_gatetime(xaxis_known, yaxis_known, xaxis_opt, yaxis_opt, yaxis_nopulse, config.tau, os.path.join(config.path, config.plot_filename))
+    # Plot Infidelity vs Gate Time (Single M) - Not needed if we do aggregate plot later, but kept for per-M record
+    # plot_utils.plot_infidelity_vs_gatetime(xaxis_known, yaxis_known, xaxis_opt, yaxis_opt, yaxis_nopulse, config.tau, os.path.join(config.path, config.plot_filename))
 
     # Final Comparison and Detailed Plots (for best overall sequences)
     print("\n" + "=" * 80)
     print(f"{'FINAL COMPARISON (Best Overall)':^80}")
     print("=" * 80)
-    
+
     inf_k_str = f"{best_known_inf_overall:.6e}" if best_known_seq_overall else "N/A"
     inf_o_str = f"{best_opt_inf_overall:.6e}" if best_opt_seq_overall else "N/A"
     print(f"{'Infidelity':<25} | {inf_k_str:<25} | {inf_o_str:<25}")
-    
-    if best_known_seq_overall:
-        nk1, nk2 = len(best_known_seq_overall[0]) - 2, len(best_known_seq_overall[1]) - 2
-        pc_k_str = f"({nk1}, {nk2})"
-    else:
-        pc_k_str = "N/A"
-        
-    if best_opt_seq_overall:
-        no1, no2 = len(best_opt_seq_overall[0]) - 2, len(best_opt_seq_overall[1]) - 2
-        pc_o_str = f"({no1}, {no2})"
-    else:
-        pc_o_str = "N/A"
-        
-    print(f"{'Pulse Count (Q1, Q2)':<25} | {pc_k_str:<25} | {pc_o_str:<25}")
+
+    print(f"{'Sequence':<25} | {best_known_label_overall:<25} | {best_opt_label_overall:<25}")
     print("=" * 80)
 
     # 3. Plotting Detailed Characteristics
     # We plot for the best sequences found across all gate times.
     # If T_seq differs, we might need separate plots or just plot them separately.
-    
+
     if best_known_seq_overall or best_opt_seq_overall:
+        suffix = f"_M{config.M}"
+        label_k = f"Best Known Sequence (M={config.M})"
+        label_o = f"Best Optimized Sequence (M={config.M})"
+
         # If both exist and have same T_seq, plot together
         if best_known_seq_overall and best_opt_seq_overall and T_seq_best_known == T_seq_best_opt:
              T_seq = T_seq_best_known
-             plot_utils.plot_comparison(config, best_known_seq_overall, best_opt_seq_overall, T_seq, filename_suffix="_id")
-             plot_utils.plot_filter_functions(config, best_known_seq_overall, best_opt_seq_overall, T_seq)
-             plot_utils.plot_filter_functions_with_spectra(config, best_known_seq_overall, best_opt_seq_overall, T_seq)
+             plot_utils.plot_comparison(config, best_known_seq_overall, best_opt_seq_overall, T_seq, filename_suffix=suffix+"_id")
+             plot_utils.plot_filter_functions(config, best_known_seq_overall, best_opt_seq_overall, T_seq, filename_suffix=suffix)
+             plot_utils.plot_filter_functions_with_spectra(config, best_known_seq_overall, best_opt_seq_overall, T_seq, filename_suffix=suffix)
+
+             # New 6-panel plot for both
+             plot_utils.plot_spectra_filter_overlay_6(config, best_known_seq_overall, T_seq, label_k)
+             plot_utils.plot_spectra_filter_overlay_6(config, best_opt_seq_overall, T_seq, label_o)
+
         else:
              # Plot separately if T_seq differs or one is missing
              if best_known_seq_overall:
-                 plot_utils.plot_comparison(config, best_known_seq_overall, None, T_seq_best_known, filename_suffix="_id_known")
-                 plot_utils.plot_filter_functions(config, best_known_seq_overall, None, T_seq_best_known)
-                 plot_utils.plot_filter_functions_with_spectra(config, best_known_seq_overall, None, T_seq_best_known)
-             if best_opt_seq_overall:
-                 plot_utils.plot_comparison(config, None, best_opt_seq_overall, T_seq_best_opt, filename_suffix="_id_opt")
-                 plot_utils.plot_filter_functions(config, None, best_opt_seq_overall, T_seq_best_opt)
-                 plot_utils.plot_filter_functions_with_spectra(config, None, best_opt_seq_overall, T_seq_best_opt)
-        
-        plot_utils.plot_noise_correlations(config)
-        
-        if best_known_seq_overall:
-            plot_utils.plot_control_correlations(config, best_known_seq_overall, T_seq_best_known, config.M, "Best Known Sequence")
-            plot_utils.plot_generalized_filter_functions(config, best_known_seq_overall, T_seq_best_known, "Best Known Sequence")
-        if best_opt_seq_overall:
-            plot_utils.plot_control_correlations(config, best_opt_seq_overall, T_seq_best_opt, config.M, "Best Optimized Sequence")
-            plot_utils.plot_generalized_filter_functions(config, best_opt_seq_overall, T_seq_best_opt, "Best Optimized Sequence")
+                 plot_utils.plot_comparison(config, best_known_seq_overall, None, T_seq_best_known, filename_suffix=suffix+"_id_known")
+                 plot_utils.plot_filter_functions(config, best_known_seq_overall, None, T_seq_best_known, filename_suffix=suffix+"_known")
+                 plot_utils.plot_filter_functions_with_spectra(config, best_known_seq_overall, None, T_seq_best_known, filename_suffix=suffix+"_known")
+                 plot_utils.plot_spectra_filter_overlay_6(config, best_known_seq_overall, T_seq_best_known, label_k)
 
-    return best_known_inf_overall, best_opt_inf_overall, inf_nopulse
+             if best_opt_seq_overall:
+                 plot_utils.plot_comparison(config, None, best_opt_seq_overall, T_seq_best_opt, filename_suffix=suffix+"_id_opt")
+                 plot_utils.plot_filter_functions(config, None, best_opt_seq_overall, T_seq_best_opt, filename_suffix=suffix+"_opt")
+                 plot_utils.plot_filter_functions_with_spectra(config, None, best_opt_seq_overall, T_seq_best_opt, filename_suffix=suffix+"_opt")
+                 plot_utils.plot_spectra_filter_overlay_6(config, best_opt_seq_overall, T_seq_best_opt, label_o)
+
+        plot_utils.plot_noise_correlations(config)
+
+        if best_known_seq_overall:
+            plot_utils.plot_control_correlations(config, best_known_seq_overall, T_seq_best_known, config.M, label_k)
+            plot_utils.plot_generalized_filter_functions(config, best_known_seq_overall, T_seq_best_known, label_k)
+        if best_opt_seq_overall:
+            plot_utils.plot_control_correlations(config, best_opt_seq_overall, T_seq_best_opt, config.M, label_o)
+            plot_utils.plot_generalized_filter_functions(config, best_opt_seq_overall, T_seq_best_opt, label_o)
+
+    # Return data for aggregate plotting
+    return {
+        'gate_times': xaxis_known,
+        'known': list(zip(yaxis_known, labels_known)),
+        'opt': list(zip(yaxis_opt, labels_opt)),
+        'nopulse': yaxis_nopulse
+    }
 
 if __name__ == "__main__":
     try:
         # Iterate through M values: 1, 2, 4, ..., 512
-        M_values = [2**i for i in range(8)]
-        results = []
+        M_values = [2**i for i in range(4)] # Adjust range as needed
+        results_by_M = {}
+        
+        # For Infidelity vs M plot (at longest gate time)
+        longest_gate_time_results = []
 
         print(f"{'M':<10} | {'Known Inf':<20} | {'Opt Inf':<20}")
         print("-" * 56)
+        
+        # We need a config object to access path and tau later
+        last_config = None
         
         for m in M_values:
             print(f"\n{'='*40}")
             print(f"Running Optimization for M = {m}")
             print(f"{'='*40}")
-            
+
             # Initialize configuration with testing parameters
             config = Config(
                 use_known_as_seed=False,
                 M=m,
-                max_pulses=400,
+                max_pulses=200,
                 num_random_trials=40,
                 use_simulated=True, # Enable simulated spectra by default for testing
-                gate_time_factors=[-4], # Gate time currently considered
+                gate_time_factors=[-4, -3, -2, -1, 0, 1, 2, 3, 4, 5], # Range of gate times
                 output_path_known=f"infs_known_id_v4_M{m}.npz",
                 output_path_opt=f"infs_opt_id_v4_M{m}.npz",
                 plot_filename=f"infs_GateTime_id_v4_M{m}.pdf"
             )
+            last_config = config
             print(f"Configuration loaded for M={m}.")
-            
+
             # Run the pipeline
-            inf_known, inf_opt, inf_nopulse = run_optimization_pipeline(config)
-            results.append((m, inf_known, inf_opt, inf_nopulse))
+            res = run_optimization_pipeline(config)
+            results_by_M[m] = res
+            
+            # Extract data for longest gate time (last element)
+            inf_k_long, label_k_long = res['known'][-1]
+            inf_o_long, label_o_long = res['opt'][-1]
+            inf_np_long = res['nopulse'][-1]
+            
+            longest_gate_time_results.append((m, inf_k_long, label_k_long, inf_o_long, label_o_long, inf_np_long))
 
         print("\n" + "="*60)
         print("SUMMARY OF RESULTS (Longest Gate Time)")
         print(f"{'M':<10} | {'Known Inf':<20} | {'Opt Inf':<20} | {'No Pulse Inf':<20}")
         print("-" * 78)
-        
+
         known_infs = []
+        known_labels = []
         opt_infs = []
+        opt_labels = []
         nopulse_infs = []
-        
-        for m, k, o, np_inf in results:
+
+        for m, k, lk, o, lo, np_inf in longest_gate_time_results:
             print(f"{m:<10} | {k:<20.6e} | {o:<20.6e} | {np_inf:<20.6e}")
             known_infs.append(k)
+            known_labels.append(lk)
             opt_infs.append(o)
+            opt_labels.append(lo)
             nopulse_infs.append(np_inf)
         print("="*60)
         
-        # Plot Infidelity vs M
-        plot_utils.plot_infidelity_vs_M(M_values, known_infs, opt_infs, nopulse_infs, os.path.join(config.path, "infs_vs_M_id_v4.pdf"))
+        if last_config:
+            # Plot Infidelity vs M for longest gate time
+            plot_utils.plot_infidelity_vs_M_labeled(
+                M_values, known_infs, known_labels, opt_infs, opt_labels, nopulse_infs,
+                os.path.join(last_config.path, "infs_vs_M_id_v4.pdf")
+            )
+            
+            # Plot Infidelity vs Gate Time for all M
+            plot_utils.plot_infidelity_vs_gatetime_all_M(
+                results_by_M, last_config.tau,
+                os.path.join(last_config.path, "infs_GateTime_id_v4_all_M.pdf")
+            )
         
     except Exception as e:
         print(f"Error: {e}")
