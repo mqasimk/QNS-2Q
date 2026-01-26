@@ -4,35 +4,12 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="6258686c-39ec-4d47-99d3-26c96c78fa3a" name="Changes" comment="Refine optimization logic, spectral processing, and plotting utilities&#10;&#10;- Update `src/ID_opt_v4.py` and `src/CZopt_v2.py` to use padded and mirrored spectral matrices for improved FFT accuracy in overlap calculations.&#10;- Refine `mqCDD` generation in `ID_opt_v4.py` to correctly handle duplicates during nesting.&#10;- Implement dynamic pulse count selection and T2 calculation logging in optimization pipelines.&#10;- Update `src/plot_utils.py` to support filename suffixes for comparison plots.&#10;- Adjust `St2` parameter in `src/spectraIn.py`.&#10;- Reduce `Jmax` in `src/CZopt_v2.py` and update gate time factors in `src/ID_opt_v4.py`.">
+    <list default="true" id="6258686c-39ec-4d47-99d3-26c96c78fa3a" name="Changes" comment="Refine optimization parameters, spectra definitions, and plotting&#10;&#10;- Add `plot_infidelity_vs_M` to `src/plot_utils.py` and integrate it into `src/ID_opt_v4.py`.&#10;- Update `src/ID_opt_v4.py` to use equidistant delays for random optimization initialization and iterate over repetition counts (M).&#10;- Adjust spectral parameters in `src/spectraIn.py` (halve S0 for S11/S22, update S1212) and improve standalone plotting with `asinh` scaling.&#10;- Update `tau_divisor` in `src/ID_opt_v4.py` and `src/CZopt_v2.py`, and reduce `Jmax` in `src/CZopt_v2.py`.&#10;- Enforce `jnp.float64` types in optimization functions.&#10;- Remove obsolete result files from `DraftRun_NoSPAM_Feature/`.">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/control_correlations_Best_Known_Sequence.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/control_correlations_Best_Optimized_Sequence.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/filter_function_comparison.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/filter_spectra_overlay.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/generalized_filter_functions_Best_Known_Sequence.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/generalized_filter_functions_Best_Optimized_Sequence.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_GateTime_cz_v2.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_GateTime_id_v4.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_known_cz_v2.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_known_id_v4.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_opt_cz_v2.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/infs_opt_id_v4.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/noise_correlations.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/params.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/reconstruct.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/results.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/sequence_comparison.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/sequence_comparison_cz_known.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/sequence_comparison_cz_opt.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/sequence_comparison_id_known.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/sequence_comparison_id_opt.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/simulated_spectra.npz" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/DraftRun_NoSPAM_Feature/specs.npz" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/CZopt_plots.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/CZopt_plots.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/CZopt_v2.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/CZopt_v2.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/ID_opt_v4.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/ID_opt_v4.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/plot_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/plot_utils.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/spectraIn.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/spectraIn.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -85,53 +62,54 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;Python tests.Doctests in lax_numpy.executor&quot;: &quot;Debug&quot;,
-    &quot;Python.1212SpecSPAM.executor&quot;: &quot;Run&quot;,
-    &quot;Python.1qQNS.executor&quot;: &quot;Run&quot;,
-    &quot;Python.CZopt.executor&quot;: &quot;Run&quot;,
-    &quot;Python.CZopt_v2.executor&quot;: &quot;Run&quot;,
-    &quot;Python.ID_opt_v2.executor&quot;: &quot;Run&quot;,
-    &quot;Python.ID_opt_v3.executor&quot;: &quot;Run&quot;,
-    &quot;Python.ID_opt_v4.executor&quot;: &quot;Run&quot;,
-    &quot;Python.IDopt.executor&quot;: &quot;Run&quot;,
-    &quot;Python.QNSPlots.executor&quot;: &quot;Run&quot;,
-    &quot;Python.Unnamed.executor&quot;: &quot;Run&quot;,
-    &quot;Python.analyze_this.executor&quot;: &quot;Run&quot;,
-    &quot;Python.main.executor&quot;: &quot;Run&quot;,
-    &quot;Python.observables.executor&quot;: &quot;Run&quot;,
-    &quot;Python.optPlot.executor&quot;: &quot;Run&quot;,
-    &quot;Python.optWindow.executor&quot;: &quot;Run&quot;,
-    &quot;Python.optimize_CZ.executor&quot;: &quot;Run&quot;,
-    &quot;Python.optimize_ID.executor&quot;: &quot;Run&quot;,
-    &quot;Python.plotter_cz.executor&quot;: &quot;Run&quot;,
-    &quot;Python.plotters.executor&quot;: &quot;Run&quot;,
-    &quot;Python.qnsExps.executor&quot;: &quot;Run&quot;,
-    &quot;Python.qnsplots.executor&quot;: &quot;Run&quot;,
-    &quot;Python.reconSpectra.executor&quot;: &quot;Run&quot;,
-    &quot;Python.reconstruction.executor&quot;: &quot;Run&quot;,
-    &quot;Python.scratch.executor&quot;: &quot;Run&quot;,
-    &quot;Python.spectra.executor&quot;: &quot;Debug&quot;,
-    &quot;Python.spectraIn.executor&quot;: &quot;Run&quot;,
-    &quot;Python.test.executor&quot;: &quot;Run&quot;,
-    &quot;Python.test_pulse_construction.executor&quot;: &quot;Run&quot;,
-    &quot;Python.trajectories.executor&quot;: &quot;Run&quot;,
-    &quot;Python.util.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/home/mqasimk/IdeaProjects/QNS-2Q/src1&quot;,
-    &quot;project.structure.last.edited&quot;: &quot;Project&quot;,
-    &quot;project.structure.proportion&quot;: &quot;0.15&quot;,
-    &quot;project.structure.side.proportion&quot;: &quot;0.2&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "Python tests.Doctests in lax_numpy.executor": "Debug",
+    "Python.1212SpecSPAM.executor": "Run",
+    "Python.1qQNS.executor": "Run",
+    "Python.CZopt.executor": "Run",
+    "Python.CZopt_plots.executor": "Run",
+    "Python.CZopt_v2.executor": "Run",
+    "Python.ID_opt_v2.executor": "Run",
+    "Python.ID_opt_v3.executor": "Run",
+    "Python.ID_opt_v4.executor": "Run",
+    "Python.IDopt.executor": "Run",
+    "Python.QNSPlots.executor": "Run",
+    "Python.Unnamed.executor": "Run",
+    "Python.analyze_this.executor": "Run",
+    "Python.main.executor": "Run",
+    "Python.observables.executor": "Run",
+    "Python.optPlot.executor": "Run",
+    "Python.optWindow.executor": "Run",
+    "Python.optimize_CZ.executor": "Run",
+    "Python.optimize_ID.executor": "Run",
+    "Python.plotter_cz.executor": "Run",
+    "Python.plotters.executor": "Run",
+    "Python.qnsExps.executor": "Run",
+    "Python.qnsplots.executor": "Run",
+    "Python.reconSpectra.executor": "Run",
+    "Python.reconstruction.executor": "Run",
+    "Python.scratch.executor": "Run",
+    "Python.spectra.executor": "Debug",
+    "Python.spectraIn.executor": "Run",
+    "Python.test.executor": "Run",
+    "Python.test_pulse_construction.executor": "Run",
+    "Python.trajectories.executor": "Run",
+    "Python.util.executor": "Run",
+    "RunOnceActivity.MCP Project settings loaded": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "main",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "/home/mqasimk/IdeaProjects/QNS-2Q/src1",
+    "project.structure.last.edited": "Project",
+    "project.structure.proportion": "0.15",
+    "project.structure.side.proportion": "0.2",
+    "settings.editor.selected.configurable": "preferences.pluginManager"
   }
-}</component>
+}]]></component>
   <component name="PyConsoleOptionsProvider">
     <option name="myPythonConsoleState">
       <console-settings module-name="QNS-2Q" sdk-home="/usr/bin/python3.12">
@@ -211,14 +189,6 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1718933215862</updated>
-    </task>
-    <task id="LOCAL-00017" summary="Changing the realistic measurement sims">
-      <option name="closed" value="true" />
-      <created>1738948243516</created>
-      <option name="number" value="00017" />
-      <option name="presentableId" value="LOCAL-00017" />
-      <option name="project" value="LOCAL" />
-      <updated>1738948243516</updated>
     </task>
     <task id="LOCAL-00018" summary="Changing the realistic measurement sims">
       <option name="closed" value="true" />
@@ -604,7 +574,15 @@
       <option name="project" value="LOCAL" />
       <updated>1768841089207</updated>
     </task>
-    <option name="localTasksCounter" value="66" />
+    <task id="LOCAL-00066" summary="Refine optimization parameters, spectra definitions, and plotting&#10;&#10;- Add `plot_infidelity_vs_M` to `src/plot_utils.py` and integrate it into `src/ID_opt_v4.py`.&#10;- Update `src/ID_opt_v4.py` to use equidistant delays for random optimization initialization and iterate over repetition counts (M).&#10;- Adjust spectral parameters in `src/spectraIn.py` (halve S0 for S11/S22, update S1212) and improve standalone plotting with `asinh` scaling.&#10;- Update `tau_divisor` in `src/ID_opt_v4.py` and `src/CZopt_v2.py`, and reduce `Jmax` in `src/CZopt_v2.py`.&#10;- Enforce `jnp.float64` types in optimization functions.&#10;- Remove obsolete result files from `DraftRun_NoSPAM_Feature/`.">
+      <option name="closed" value="true" />
+      <created>1768932345546</created>
+      <option name="number" value="00066" />
+      <option name="presentableId" value="LOCAL-00066" />
+      <option name="project" value="LOCAL" />
+      <updated>1768932345546</updated>
+    </task>
+    <option name="localTasksCounter" value="67" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -619,7 +597,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="Agentic cleaning up of optimize_ID.py" />
     <MESSAGE value="QNS experiments cleaned up." />
     <MESSAGE value="Observables.py cleaned up" />
     <MESSAGE value="reconSpectra.py cleaned up." />
@@ -644,7 +621,8 @@
     <MESSAGE value="Increase max iterations for CZ optimization&#10;&#10;- Increase `maxiter` from 1000 to 2000 in `src/CZopt_v2.py` to improve convergence.&#10;- Update optimization results and plots in `DraftRun_NoSPAM_Feature/`." />
     <MESSAGE value="Refactor plotting logic and update optimization pipelines&#10;&#10;- Add `src/plot_utils.py` to centralize visualization for pulse sequences, filter functions, and correlations.&#10;- Update `src/ID_opt_v4.py` to utilize `plot_utils` and implement gate time sweeping with ideal fidelity calculations.&#10;- Update `src/CZopt_v2.py` to use `plot_utils`, refine `mqCDD` construction, and adjust optimization constraints and spectral padding.&#10;- Remove obsolete scripts `src/1212SpecSPAM.py`, `src/plotter_cz.py`, `src/plotters.py`, and `src/test_jax_correlate.py`." />
     <MESSAGE value="Refine optimization logic, spectral processing, and plotting utilities&#10;&#10;- Update `src/ID_opt_v4.py` and `src/CZopt_v2.py` to use padded and mirrored spectral matrices for improved FFT accuracy in overlap calculations.&#10;- Refine `mqCDD` generation in `ID_opt_v4.py` to correctly handle duplicates during nesting.&#10;- Implement dynamic pulse count selection and T2 calculation logging in optimization pipelines.&#10;- Update `src/plot_utils.py` to support filename suffixes for comparison plots.&#10;- Adjust `St2` parameter in `src/spectraIn.py`.&#10;- Reduce `Jmax` in `src/CZopt_v2.py` and update gate time factors in `src/ID_opt_v4.py`." />
-    <option name="LAST_COMMIT_MESSAGE" value="Refine optimization logic, spectral processing, and plotting utilities&#10;&#10;- Update `src/ID_opt_v4.py` and `src/CZopt_v2.py` to use padded and mirrored spectral matrices for improved FFT accuracy in overlap calculations.&#10;- Refine `mqCDD` generation in `ID_opt_v4.py` to correctly handle duplicates during nesting.&#10;- Implement dynamic pulse count selection and T2 calculation logging in optimization pipelines.&#10;- Update `src/plot_utils.py` to support filename suffixes for comparison plots.&#10;- Adjust `St2` parameter in `src/spectraIn.py`.&#10;- Reduce `Jmax` in `src/CZopt_v2.py` and update gate time factors in `src/ID_opt_v4.py`." />
+    <MESSAGE value="Refine optimization parameters, spectra definitions, and plotting&#10;&#10;- Add `plot_infidelity_vs_M` to `src/plot_utils.py` and integrate it into `src/ID_opt_v4.py`.&#10;- Update `src/ID_opt_v4.py` to use equidistant delays for random optimization initialization and iterate over repetition counts (M).&#10;- Adjust spectral parameters in `src/spectraIn.py` (halve S0 for S11/S22, update S1212) and improve standalone plotting with `asinh` scaling.&#10;- Update `tau_divisor` in `src/ID_opt_v4.py` and `src/CZopt_v2.py`, and reduce `Jmax` in `src/CZopt_v2.py`.&#10;- Enforce `jnp.float64` types in optimization functions.&#10;- Remove obsolete result files from `DraftRun_NoSPAM_Feature/`." />
+    <option name="LAST_COMMIT_MESSAGE" value="Refine optimization parameters, spectra definitions, and plotting&#10;&#10;- Add `plot_infidelity_vs_M` to `src/plot_utils.py` and integrate it into `src/ID_opt_v4.py`.&#10;- Update `src/ID_opt_v4.py` to use equidistant delays for random optimization initialization and iterate over repetition counts (M).&#10;- Adjust spectral parameters in `src/spectraIn.py` (halve S0 for S11/S22, update S1212) and improve standalone plotting with `asinh` scaling.&#10;- Update `tau_divisor` in `src/ID_opt_v4.py` and `src/CZopt_v2.py`, and reduce `Jmax` in `src/CZopt_v2.py`.&#10;- Enforce `jnp.float64` types in optimization functions.&#10;- Remove obsolete result files from `DraftRun_NoSPAM_Feature/`." />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

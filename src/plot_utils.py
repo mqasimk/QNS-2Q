@@ -95,6 +95,88 @@ def plot_infidelity_vs_M(M_values, yaxis_known, yaxis_opt, yaxis_nopulse, save_p
     print(f"Saved plot to {save_path}")
     plt.close(fig)
 
+def plot_infidelity_vs_M_labeled(M_values, known_infs, known_labels, opt_infs, opt_labels, nopulse_infs, save_path):
+    """Plots Infidelity vs M with labels for sequences."""
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    # Known
+    ax.plot(M_values, known_infs, 'bs-', label='Known')
+    for m, inf, lab in zip(M_values, known_infs, known_labels):
+        ax.annotate(lab, (m, inf), textcoords="offset points", xytext=(0, 5), ha='center', va='bottom', fontsize=8, rotation=45)
+
+    # Opt
+    ax.plot(M_values, opt_infs, 'ko-', label='Optimized')
+    for m, inf, lab in zip(M_values, opt_infs, opt_labels):
+        ax.annotate(lab, (m, inf), textcoords="offset points", xytext=(0, -5), ha='center', va='top', fontsize=8, rotation=45)
+
+    # No Pulse
+    if nopulse_infs is not None:
+        ax.plot(M_values, nopulse_infs, 'r^-', label='No Pulse')
+
+    ax.set_xscale('log', base=2)
+    ax.set_yscale('log')
+    ax.set_xlabel('Repetitions (M)')
+    ax.set_ylabel('Infidelity')
+    ax.grid(True, which='both', linestyle='--')
+    ax.legend()
+    ax.set_xticks(M_values)
+    ax.get_xaxis().set_major_formatter(ticker.ScalarFormatter())
+    
+    plt.tight_layout()
+    plt.savefig(save_path)
+    print(f"Saved plot to {save_path}")
+    plt.close(fig)
+
+def plot_infidelity_vs_gatetime_all_M(results_by_M, tau, save_path):
+    """Plots Infidelity vs Gate Time for multiple M values with labels."""
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    # Generate colors
+    colors = plt.cm.viridis(np.linspace(0, 0.9, len(results_by_M)))
+    
+    for idx, (M, data) in enumerate(results_by_M.items()):
+        gate_times = np.array(data['gate_times'])
+        gate_times_tau = gate_times / tau
+        
+        # Known
+        known_infs = [x[0] for x in data['known']]
+        known_labels = [x[1] for x in data['known']]
+        
+        color = colors[idx]
+        ax.plot(gate_times_tau, known_infs, marker='s', linestyle='--', color=color, label=f'Known (M={M})', alpha=0.7)
+        
+        # Opt
+        opt_infs = [x[0] for x in data['opt']]
+        opt_labels = [x[1] for x in data['opt']]
+        
+        ax.plot(gate_times_tau, opt_infs, marker='o', linestyle='-', color=color, label=f'Opt (M={M})')
+        
+        # Labels
+        for i, (x, y, lab) in enumerate(zip(gate_times_tau, known_infs, known_labels)):
+             ax.annotate(lab, (x, y), textcoords="offset points", xytext=(0, 5), ha='center', fontsize=6, color=color, rotation=45)
+
+        for i, (x, y, lab) in enumerate(zip(gate_times_tau, opt_infs, opt_labels)):
+             ax.annotate(lab, (x, y), textcoords="offset points", xytext=(0, -10), ha='center', fontsize=6, color=color, rotation=45)
+
+    # No Pulse (from first M)
+    first_M = list(results_by_M.keys())[0]
+    gate_times = np.array(results_by_M[first_M]['gate_times'])
+    gate_times_tau = gate_times / tau
+    nopulse_infs = results_by_M[first_M]['nopulse']
+    ax.plot(gate_times_tau, nopulse_infs, 'r^-', label='No Pulse', linewidth=2)
+
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlabel(r'Gate Time ($\tau$)')
+    ax.set_ylabel('Infidelity')
+    ax.grid(True, which='both', linestyle='--')
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+    plt.tight_layout()
+    plt.savefig(save_path)
+    print(f"Saved plot to {save_path}")
+    plt.close(fig)
+
 def plot_comparison(config, known_seq, opt_seq, T_seq, filename_suffix=""):
     """Plots the switching functions y(t) for comparison."""
     has_known = known_seq is not None
@@ -165,7 +247,7 @@ def plot_comparison(config, known_seq, opt_seq, T_seq, filename_suffix=""):
     print(f"Saved comparison plot to {save_path}")
     plt.close(fig)
 
-def plot_filter_functions(config, known_seq, opt_seq, T_seq):
+def plot_filter_functions(config, known_seq, opt_seq, T_seq, filename_suffix=""):
     """Plots the filter functions F(omega) for comparison using asinh scaling."""
     has_known = known_seq is not None
     has_opt = opt_seq is not None
@@ -239,12 +321,12 @@ def plot_filter_functions(config, known_seq, opt_seq, T_seq):
 
     plt.tight_layout()
     
-    save_path = os.path.join(config.path, "filter_function_comparison.pdf")
+    save_path = os.path.join(config.path, f"filter_function_comparison{filename_suffix}.pdf")
     plt.savefig(save_path)
     print(f"Saved filter function comparison plot to {save_path}")
     plt.close(fig)
 
-def plot_filter_functions_with_spectra(config, known_seq, opt_seq, T_seq):
+def plot_filter_functions_with_spectra(config, known_seq, opt_seq, T_seq, filename_suffix=""):
     """
     Plots filter functions overlaid with spectra.
     When M is large, highlights the filter function values at harmonic frequencies.
@@ -358,7 +440,7 @@ def plot_filter_functions_with_spectra(config, known_seq, opt_seq, T_seq):
         current_col += 1
 
     plt.tight_layout()
-    save_path = os.path.join(config.path, "filter_spectra_overlay.pdf")
+    save_path = os.path.join(config.path, f"filter_spectra_overlay{filename_suffix}.pdf")
     plt.savefig(save_path)
     print(f"Saved filter-spectra overlay plot to {save_path}")
     plt.close(fig)
@@ -422,6 +504,116 @@ def plot_generalized_filter_functions(config, seq, T_seq, label):
     plt.savefig(save_path)
     print(f"Saved generalized filter functions plot to {save_path}")
     plt.close(fig)
+
+def plot_spectra_filter_overlay_6(config, seq, T_seq, label):
+    """
+    Plots 6 separate PDF files for S_ii/S_ij and corresponding Filter functions.
+    (1,1), (2,2), (12,12), (1,2), (1,12), (2,12).
+    Uses asinh scale for y-axis.
+    """
+    if seq is None:
+        return
+
+    print(f"Plotting 6-panel spectra/filter overlay for {label}...")
+    
+    # Use config.w_max for range
+    w_plot = np.linspace(1e3, config.w_max, 1000)
+    freqs_mhz = w_plot / (2 * np.pi * 1e6)
+    
+    pt1, pt2 = seq
+    pt12 = make_tk12(pt1, pt2)
+    
+    Z1 = get_spectral_amplitudes(pt1, T_seq, w_plot)
+    Z2 = get_spectral_amplitudes(pt2, T_seq, w_plot)
+    Z12 = get_spectral_amplitudes(pt12, T_seq, w_plot)
+    
+    # Pairs: (S_idx1, S_idx2, Z_a, Z_b, S_label, G_label, Filename_Suffix)
+    # SMat indices: 1->1, 2->2, 3->12
+    pairs = [
+        (1, 1, Z1, Z1, r"$S^+_{1,1}(\omega)$", r"$G^+_{1,1}(\omega, T)$", "S11"),
+        (2, 2, Z2, Z2, r"$S^+_{2,2}(\omega)$", r"$G^+_{2,2}(\omega, T)$", "S22"),
+        (3, 3, Z12, Z12, r"$S^+_{12,12}(\omega)$", r"$G^+_{12,12}(\omega, T)$", "S1212"),
+        (1, 2, Z1, Z2, r"$S^+_{1,2}(\omega)$", r"$G^+_{1,2}(\omega, T)$", "S12"),
+        (1, 3, Z1, Z12, r"$S^+_{1,12}(\omega)$", r"$G^+_{1,12}(\omega, T)$", "S112"),
+        (2, 3, Z2, Z12, r"$S^+_{2,12}(\omega)$", r"$G^+_{2,12}(\omega, T)$", "S212")
+    ]
+    
+    for idx, (s_i, s_j, Za, Zb, s_label, g_label, suffix) in enumerate(pairs):
+        fig, ax1 = plt.subplots(figsize=(8, 6))
+        ax2 = ax1.twinx()
+        
+        # Filter Function G = Za * conj(Zb) / (w^2 T)
+        G = (Za * np.conj(Zb)) / (w_plot**2 * T_seq)
+        
+        # Spectrum S
+        # Interpolate SMat[s_i, s_j]
+        S_vals = config.SMat[s_i, s_j]
+        # Use right=0. for safety
+        S_interp = np.interp(w_plot, config.w, np.real(S_vals), right=0.) + 1j * np.interp(w_plot, config.w, np.imag(S_vals), right=0.)
+        
+        # Plot G on Left Axis (asinh)
+        scale_G = np.median(np.abs(G))
+        if scale_G == 0: scale_G = 1e-6
+        
+        color_G_real = 'tab:blue'
+        color_G_imag = 'tab:cyan'
+        
+        try:
+            ax1.set_yscale('asinh', linear_width=scale_G)
+            ax1.plot(freqs_mhz, np.real(G), color=color_G_real, label='Re[$G^+$]', linewidth=2)
+            if idx >= 3: # Off-diagonal
+                ax1.plot(freqs_mhz, np.imag(G), color=color_G_imag, linestyle='--', label='Im[$G^+$]', linewidth=2)
+        except ValueError:
+            y_real = np.arcsinh(np.real(G) / scale_G)
+            ax1.plot(freqs_mhz, y_real, color=color_G_real, label='Re[$G^+$]', linewidth=2)
+            if idx >= 3:
+                y_imag = np.arcsinh(np.imag(G) / scale_G)
+                ax1.plot(freqs_mhz, y_imag, color=color_G_imag, linestyle='--', label='Im[$G^+$]', linewidth=2)
+            ax1.set_ylabel(f"asinh($G^+$/{scale_G:.1e})", fontsize=16)
+            
+        ax1.set_ylabel(g_label, color=color_G_real, fontsize=16)
+        ax1.tick_params(axis='y', labelcolor=color_G_real, labelsize=14)
+        ax1.tick_params(axis='x', labelsize=14)
+        
+        # Plot S on Right Axis (asinh)
+        scale_S = np.median(np.abs(S_interp))
+        if scale_S == 0: scale_S = 1e-6
+        
+        color_S_real = 'tab:red'
+        color_S_imag = 'tab:orange'
+        
+        try:
+            ax2.set_yscale('asinh', linear_width=scale_S)
+            ax2.plot(freqs_mhz, np.real(S_interp), color=color_S_real, label='Re[$S^+$]', linewidth=2)
+            if idx >= 3:
+                ax2.plot(freqs_mhz, np.imag(S_interp), color=color_S_imag, linestyle='--', label='Im[$S^+$]', linewidth=2)
+        except ValueError:
+            y_real = np.arcsinh(np.real(S_interp) / scale_S)
+            ax2.plot(freqs_mhz, y_real, color=color_S_real, label='Re[$S^+$]', linewidth=2)
+            if idx >= 3:
+                y_imag = np.arcsinh(np.imag(S_interp) / scale_S)
+                ax2.plot(freqs_mhz, y_imag, color=color_S_imag, linestyle='--', label='Im[$S^+$]', linewidth=2)
+            ax2.set_ylabel(f"asinh($S^+$/{scale_S:.1e})", fontsize=16)
+            
+        ax2.set_ylabel(s_label, color=color_S_real, fontsize=16)
+        ax2.tick_params(axis='y', labelcolor=color_S_real, labelsize=14)
+        
+        # No title
+        ax1.grid(True, alpha=0.3)
+        
+        # Legends
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2, loc='best', fontsize=14)
+        
+        ax1.set_xlabel(r"$\omega(MHz)$", fontsize=16)
+
+        plt.tight_layout()
+        filename = f"spectra_filter_overlay_{suffix}_{label.replace(' ', '_')}.pdf"
+        save_path = os.path.join(config.path, filename)
+        plt.savefig(save_path)
+        print(f"Saved spectra/filter overlay to {save_path}")
+        plt.close(fig)
 
 def plot_noise_correlations(config):
     """Plots the 9 noise correlation functions R(tau)."""

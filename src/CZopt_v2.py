@@ -52,7 +52,7 @@ class CZOptConfig:
     plot_filename: str = "infs_GateTime_cz_v2.pdf"
     
     include_cross_spectra: bool = True
-    tau_divisor: int = 160 / 2
+    tau_divisor: int = 160
     use_simulated: bool = False
     max_pulses: int = 400
     
@@ -1019,13 +1019,36 @@ def run_optimization(config):
         yaxis_opt.append(final_inf)
         xaxis_opt.append(Tg)
 
+    # Save all plotting data
+    min_gate_time = np.pi / (4 * config.Jmax)
+    save_dict = {
+        'taxis': np.array(xaxis_known),
+        'infs_known': np.array(yaxis_known),
+        'infs_opt': np.array(yaxis_opt),
+        'infs_nopulse': np.array(yaxis_nopulse),
+        'tau': config.tau,
+        'min_gate_time': min_gate_time
+    }
+    
+    if best_known_seq_overall is not None:
+        save_dict['best_known_seq_pt1'] = np.array(best_known_seq_overall[0])
+        save_dict['best_known_seq_pt2'] = np.array(best_known_seq_overall[1])
+        save_dict['T_seq_best_known'] = T_seq_best_known
+        
+    if best_opt_seq_overall is not None:
+        save_dict['best_opt_seq_pt1'] = np.array(best_opt_seq_overall[0])
+        save_dict['best_opt_seq_pt2'] = np.array(best_opt_seq_overall[1])
+        save_dict['T_seq_best_opt'] = T_seq_best_opt
+
+    np.savez(os.path.join(config.path, "plotting_data_cz_v2.npz"), **save_dict)
+    print(f"Saved all plotting data to {os.path.join(config.path, 'plotting_data_cz_v2.npz')}")
+
     np.savez(os.path.join(config.path, config.output_path_opt), infs_opt=np.array(yaxis_opt),
              taxis=np.array(xaxis_opt))
     np.savez(os.path.join(config.path, config.output_path_known), infs_known=np.array(yaxis_known),
              taxis=np.array(xaxis_known))
     
     # Plot
-    min_gate_time = np.pi / (4 * config.Jmax)
     plot_utils.plot_infidelity_vs_gatetime(xaxis_known, yaxis_known, xaxis_opt, yaxis_opt, yaxis_nopulse, config.tau, os.path.join(config.path, config.plot_filename), min_gate_time=min_gate_time)
     
     # Plot best sequences
