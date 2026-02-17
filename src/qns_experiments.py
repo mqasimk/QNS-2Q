@@ -26,7 +26,7 @@ jax.config.update("jax_enable_x64", True)
 
 from observables import (make_c_12_0_mt, make_c_12_12_mt, make_c_a_0_mt,
                          make_c_a_b_mt)
-from spectraIn import S_11, S_22, S_1212
+from spectra_input import S_11, S_22, S_1212
 from trajectories import make_noise_mat_arr, solver_prop
 
 

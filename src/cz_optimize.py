@@ -9,7 +9,7 @@ to minimize infidelity in a two-qubit system. It supports:
 4. Optimizing random pulse sequences using JAX-based gradient descent.
 5. Optimizing the coupling strength J dynamically.
 
-Based on ID_opt_v4.py and CZopt.py.
+Based on id_optimize.py and cz_optimize_legacy.py.
 
 Author: [Q]
 Date: [01/18/2026]
@@ -31,7 +31,7 @@ import matplotlib.ticker as ticker
 import numpy as np
 import scipy.optimize
 
-from spectraIn import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
+from spectra_input import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
 import plot_utils
 
 
@@ -54,7 +54,7 @@ class CZOptConfig:
     include_cross_spectra: bool = True
     tau_divisor: int = 160
     use_simulated: bool = False
-    max_pulses: int = 400
+    max_pulses: int = 800
     
     # These will be loaded from the run files
     Tqns: float = field(init=False)
@@ -1021,6 +1021,11 @@ def run_optimization(config):
 
     # Save all plotting data
     min_gate_time = np.pi / (4 * config.Jmax)
+    
+    # Create a dedicated directory for plotting data
+    plotting_dir = os.path.join(config.path, "plotting_data")
+    os.makedirs(plotting_dir, exist_ok=True)
+    
     save_dict = {
         'taxis': np.array(xaxis_known),
         'infs_known': np.array(yaxis_known),
@@ -1040,8 +1045,8 @@ def run_optimization(config):
         save_dict['best_opt_seq_pt2'] = np.array(best_opt_seq_overall[1])
         save_dict['T_seq_best_opt'] = T_seq_best_opt
 
-    np.savez(os.path.join(config.path, "plotting_data_cz_v2.npz"), **save_dict)
-    print(f"Saved all plotting data to {os.path.join(config.path, 'plotting_data_cz_v2.npz')}")
+    np.savez(os.path.join(plotting_dir, "plotting_data_cz_v2.npz"), **save_dict)
+    print(f"Saved all plotting data to {os.path.join(plotting_dir, 'plotting_data_cz_v2.npz')}")
 
     np.savez(os.path.join(config.path, config.output_path_opt), infs_opt=np.array(yaxis_opt),
              taxis=np.array(xaxis_opt))
