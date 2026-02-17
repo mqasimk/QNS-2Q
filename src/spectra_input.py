@@ -35,7 +35,7 @@ def S_11(w):
     :return: ndarray of the value of the function.
     """
     tc = 1e-5
-    S0 = 3e4
+    S0 = 0*3e4
     St2 = 2.5e5
     w0 = 1.4e7
     return (S0*(0*Gauss(w, 1.75*w0, 10/tc)+L(w, w0, 1*tc))
@@ -50,7 +50,7 @@ def S_22(w):
     :return: ndarray of the value of the function.
     """
     tc=1e-5
-    S0 = 2.5e4
+    S0 = 0*2.5e4
     St2 = 1e5
     w0=0.8e7
     return (S0*(Gauss(w, 1.8*w0, 10/tc)+Gauss(w, 2.5*w0, 20/tc))
@@ -65,7 +65,7 @@ def S_1212(w):
     :return: ndarray of the value of the function.
     """
     tc = 1e-3
-    S0 = 1e3
+    S0 = 0*1e3
     St2 = 1e6
     w0 = 1.5*10**7
     #return S0*L(w, w0, 0.2*tc)+ St2*L(w, 0, 0.2*tc)
@@ -200,7 +200,7 @@ if __name__ == "__main__":
     plt.tight_layout()
 
     # Save the simulated spectra
-    fname = "DraftRun_NoSPAM_Feature"
+    fname = "DraftRun_NoSPAM_Boring"
     parent_dir = os.pardir
     path = os.path.join(parent_dir, fname)
     if not os.path.exists(path):

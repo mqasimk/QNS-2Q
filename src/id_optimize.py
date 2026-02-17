@@ -28,7 +28,7 @@ import matplotlib.ticker as ticker
 import numpy as np
 import scipy.optimize
 
-from spectraIn import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
+from spectra_input import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
 import plot_utils
 
 # ==============================================================================
@@ -43,10 +43,10 @@ class Config:
     Constructs the interpolated and ideal spectral matrices used for calculations.
     """
     def __init__(self, 
-                 fname="DraftRun_NoSPAM_Feature",
+                 fname="DraftRun_NoSPAM_Boring",
                  include_cross_spectra=True,
                  Tg=4 * 14 * 1e-6, # Default, will be overridden by loop
-                 tau_divisor=160/2,
+                 tau_divisor=160,
                  
                  # Optimization/Testing Parameters
                  M=1,                      # Repetition count
@@ -981,6 +981,10 @@ def run_optimization_pipeline(config):
     # Store labels for plotting
     labels_known = []
     labels_opt = []
+
+    # Store sequences
+    sequences_known = []
+    sequences_opt = []
     
     best_known_seq_overall = None
     best_opt_seq_overall = None
@@ -994,7 +998,7 @@ def run_optimization_pipeline(config):
     best_opt_label_overall = ""
 
     for i in config.gate_time_factors:
-        # Use Tqns as base for gate time scaling, similar to CZopt_v2
+        # Use Tqns as base for gate time scaling, similar to cz_optimize
         Tg = config.Tqns / 2**(i-1)
         if Tg < config.tau:
             continue
@@ -1042,9 +1046,11 @@ def run_optimization_pipeline(config):
             
         yaxis_known.append(best_known_inf_ideal)
         xaxis_known.append(Tg)
+        sequences_known.append(best_known_seq)
             
         # 2. Random Optimization
         print("  Running Random Optimization...")
+        best_opt_seq = None
         
         # Random candidate selection
         max_n_physical = int(config.T_seq / config.tau) - 1
@@ -1088,8 +1094,37 @@ def run_optimization_pipeline(config):
         
         yaxis_opt.append(best_opt_inf_ideal)
         xaxis_opt.append(Tg)
+        sequences_opt.append(best_opt_seq)
 
     # Save Results
+    min_gate_time = np.pi / (4 * 2e6) # Jmax = 2e6, hardcoded for now or add to config
+    
+    # Create a dedicated directory for plotting data
+    plotting_dir = os.path.join(config.path, "plotting_data")
+    os.makedirs(plotting_dir, exist_ok=True)
+    
+    save_dict = {
+        'taxis': np.array(xaxis_known),
+        'infs_known': np.array(yaxis_known),
+        'infs_opt': np.array(yaxis_opt),
+        'infs_nopulse': np.array(yaxis_nopulse),
+        'tau': config.tau,
+        'min_gate_time': min_gate_time
+    }
+    
+    if best_known_seq_overall is not None:
+        save_dict['best_known_seq_pt1'] = np.array(best_known_seq_overall[0])
+        save_dict['best_known_seq_pt2'] = np.array(best_known_seq_overall[1])
+        save_dict['T_seq_best_known'] = T_seq_best_known
+        
+    if best_opt_seq_overall is not None:
+        save_dict['best_opt_seq_pt1'] = np.array(best_opt_seq_overall[0])
+        save_dict['best_opt_seq_pt2'] = np.array(best_opt_seq_overall[1])
+        save_dict['T_seq_best_opt'] = T_seq_best_opt
+
+    np.savez(os.path.join(plotting_dir, "plotting_data_id_v4.npz"), **save_dict)
+    print(f"Saved all plotting data to {os.path.join(plotting_dir, 'plotting_data_id_v4.npz')}")
+    
     np.savez(os.path.join(config.path, config.output_path_opt), infs_opt=np.array(yaxis_opt),
              taxis=np.array(xaxis_opt))
     np.savez(os.path.join(config.path, config.output_path_known), infs_known=np.array(yaxis_known),
@@ -1158,13 +1193,15 @@ def run_optimization_pipeline(config):
         'gate_times': xaxis_known,
         'known': list(zip(yaxis_known, labels_known)),
         'opt': list(zip(yaxis_opt, labels_opt)),
-        'nopulse': yaxis_nopulse
+        'nopulse': yaxis_nopulse,
+        'sequences_known': sequences_known,
+        'sequences_opt': sequences_opt
     }
 
 if __name__ == "__main__":
     try:
         # Iterate through M values: 1, 2, 4, ..., 512
-        M_values = [2**i for i in range(4)] # Adjust range as needed
+        M_values = [2**i for i in range(8)] # Adjust range as needed
         results_by_M = {}
         
         # For Infidelity vs M plot (at longest gate time)
@@ -1185,10 +1222,11 @@ if __name__ == "__main__":
             config = Config(
                 use_known_as_seed=False,
                 M=m,
-                max_pulses=200,
-                num_random_trials=40,
+                max_pulses=1000,
+                num_random_trials=20,
+                tau_divisor=160,
                 use_simulated=True, # Enable simulated spectra by default for testing
-                gate_time_factors=[-4, -3, -2, -1, 0, 1, 2, 3, 4, 5], # Range of gate times
+                gate_time_factors=[-5, -4, -3, -2, -1, 0], # Range of gate times
                 output_path_known=f"infs_known_id_v4_M{m}.npz",
                 output_path_opt=f"infs_opt_id_v4_M{m}.npz",
                 plot_filename=f"infs_GateTime_id_v4_M{m}.pdf"
@@ -1228,6 +1266,38 @@ if __name__ == "__main__":
         print("="*60)
         
         if last_config:
+            # Save all data generated in the optimization
+            save_all_path = os.path.join(last_config.path, "optimization_data_all_M.npz")
+            data_to_save = {}
+            data_to_save['M_values'] = np.array(M_values)
+
+            def to_numpy_seq(seq):
+                if seq is None: return None
+                return (np.array(seq[0]), np.array(seq[1]))
+
+            for m, res in results_by_M.items():
+                prefix = f"M{m}_"
+                data_to_save[prefix + 'gate_times'] = np.array(res['gate_times'])
+                
+                infs_known, labels_known = zip(*res['known']) if res['known'] else ([], [])
+                data_to_save[prefix + 'infs_known'] = np.array(infs_known)
+                data_to_save[prefix + 'labels_known'] = np.array(labels_known)
+                
+                infs_opt, labels_opt = zip(*res['opt']) if res['opt'] else ([], [])
+                data_to_save[prefix + 'infs_opt'] = np.array(infs_opt)
+                data_to_save[prefix + 'labels_opt'] = np.array(labels_opt)
+                
+                data_to_save[prefix + 'infs_nopulse'] = np.array(res['nopulse'])
+                
+                seqs_known_np = [to_numpy_seq(s) for s in res['sequences_known']]
+                seqs_opt_np = [to_numpy_seq(s) for s in res['sequences_opt']]
+                
+                data_to_save[prefix + 'sequences_known'] = np.array(seqs_known_np, dtype=object)
+                data_to_save[prefix + 'sequences_opt'] = np.array(seqs_opt_np, dtype=object)
+
+            np.savez(save_all_path, **data_to_save)
+            print(f"Saved all optimization data to {save_all_path}")
+
             # Plot Infidelity vs M for longest gate time
             plot_utils.plot_infidelity_vs_M_labeled(
                 M_values, known_infs, known_labels, opt_infs, opt_labels, nopulse_infs,

@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from spectraIn import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
+from spectra_input import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
 
 # --- Configuration ---
 # Directories for the two datasets to be compared

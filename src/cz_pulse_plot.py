@@ -7,7 +7,7 @@ import os
 def make_tk12(tk1, tk2):
     """
     Constructs the interaction frame switching times from single qubit switching times.
-    Logic mirrors CZopt_v2.py.
+    Logic mirrors cz_optimize.py.
     """
     # tk1, tk2 are arrays of pulse times including 0 and T
     # If they are just [0, T], there are no internal pulses.
