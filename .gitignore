@@ -1,0 +1,12 @@
+# Generated output directories
+DraftRun_*/
+
+# Python
+__pycache__/
+*.pyc
+
+# IDE
+.idea/
+
+# Virtual environment
+venv/
