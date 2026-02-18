@@ -749,7 +749,7 @@ def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
         try:
             res = scipy.optimize.minimize(fun_wrapper, jnp.array(initial_params), method='SLSQP',
                                           bounds=bounds, constraints=linear_cons, jac=True,
-                                          tol=1e-14, options={'maxiter': 1000, 'disp': False})
+                                          tol=1e-10, options={'maxiter': 1000, 'disp': False})
             
             inf = res.fun
             
