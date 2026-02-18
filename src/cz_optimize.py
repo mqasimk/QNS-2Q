@@ -433,7 +433,7 @@ def sgn(O, a, b):
     z1q = jnp.array([jnp.array([[1, 0], [0, 1]]), jnp.array([[1, 0], [0, -1]])])
     z2q = jnp.array(
         [jnp.kron(z1q[0], z1q[0]), jnp.kron(z1q[1], z1q[0]), jnp.kron(z1q[0], z1q[1]), jnp.kron(z1q[1], z1q[1])])
-    return jnp.trace(jnp.linalg.inv(O) @ z2q[a] @ z2q[b] @ O @ z2q[a] @ z2q[b]) / 4
+    return jnp.trace(O.conj().T @ z2q[a] @ z2q[b] @ O @ z2q[a] @ z2q[b]) / 4
 
 @jax.jit
 def calculate_cz_fidelity(I_matrix, J, M, dc_12):
@@ -473,6 +473,8 @@ def calculate_cz_fidelity(I_matrix, J, M, dc_12):
         rot_val = (1.0 - sgn(Oi, 1, 2)) * M * J * dc_12
         rot_op = rot_val * z2q[3]
         
+        # Note: For M=1, expm spectral radius is bounded ~O(100). For M>1,
+        # the argument scales linearly with M and may require Pade scaling.
         G = jax.scipy.linalg.expm(-1j * rot_op - val_CO)
         
         return jnp.real(jnp.trace(Oi @ G @ Oj) * 0.25)
@@ -513,21 +515,25 @@ def cost_function(delays_params, n_pulses1, RMat_data, T_seq, tau_min, overlap_f
         vals.append(row_vals)
     I_mat = jnp.array(vals)
     
-    # Calculate DC component of y12 for J optimization
-    # y12 corresponds to pts[3]
     diffs = jnp.diff(pt12)
     signs = jnp.array((-1.0)**jnp.arange(len(diffs)))
     dc_12 = jnp.sum(diffs * signs)
-    
-    # Optimize J
-    # J = pi / (4 * M * dc_12)
-    # Clip J
-    J_target = jnp.pi * 0.25 / (M * dc_12)
+
+    # Safe division: clamp |dc_12| away from zero to prevent gradient explosion
+    abs_dc_12 = jnp.abs(dc_12)
+    safe_dc = jnp.where(abs_dc_12 > 1e-15, dc_12, jnp.sign(dc_12 + 1e-30) * 1e-15)
+
+    J_target = jnp.pi * 0.25 / (M * safe_dc)
     J = jnp.clip(J_target, -Jmax, Jmax)
-    
+
     fid = calculate_cz_fidelity(I_mat, J, M, dc_12)
-    
-    return 1.0 - fid
+
+    # Smooth penalty for infeasible sequences (Jmax cannot achieve required CZ phase)
+    required_dc = jnp.pi * 0.25 / (M * Jmax)
+    feasibility_ratio = abs_dc_12 / required_dc
+    penalty = jnp.where(feasibility_ratio >= 1.0, 0.0, (1.0 - feasibility_ratio) ** 2)
+
+    return 1.0 - fid + penalty
 
 def optimize_sequence(config, M, T_seq, n1, n2, seed_seq=None):
     # Check feasibility of pulse count
@@ -612,7 +618,7 @@ def optimize_sequence(config, M, T_seq, n1, n2, seed_seq=None):
     try:
         res = scipy.optimize.minimize(fun_wrapper, np.array(initial_params), method='SLSQP',
                                       bounds=bounds, constraints=linear_cons, jac=True,
-                                      tol=1e-14, options={'maxiter': 2000, 'disp': False})
+                                      tol=1e-10, options={'maxiter': 2000, 'disp': False})
         
         d1_opt = jnp.array(res.x[:n1])
         d2_opt = jnp.array(res.x[n1:])
@@ -712,8 +718,9 @@ def evaluate_known_sequences_with_T(config, M, T_seq, pLib):
         # This excludes decoupling sequences (like mqCDD) that average interaction to zero
         if config.Jmax * M * jnp.abs(dc_12) < jnp.pi * 0.25:
             continue
-            
-        J_target = jnp.pi * 0.25 / (M * dc_12)
+
+        safe_dc = jnp.where(jnp.abs(dc_12) > 1e-15, dc_12, jnp.sign(dc_12 + 1e-30) * 1e-15)
+        J_target = jnp.pi * 0.25 / (M * safe_dc)
         J = jnp.clip(J_target, -config.Jmax, config.Jmax)
         
         fid = calculate_cz_fidelity(I_mat, J, M, dc_12)
@@ -799,9 +806,15 @@ def calculate_infidelity(seq, config, M, T_seq, use_ideal=False):
     diffs = jnp.diff(pt12)
     signs = jnp.array((-1.0)**jnp.arange(len(diffs)))
     dc_12 = jnp.sum(diffs * signs)
-    J_target = jnp.pi * 0.25 / (M * dc_12)
+
+    # Guard: return max infidelity for infeasible sequences
+    if config.Jmax * M * jnp.abs(dc_12) < jnp.pi * 0.25:
+        return 1.0
+
+    safe_dc = jnp.where(jnp.abs(dc_12) > 1e-15, dc_12, jnp.sign(dc_12 + 1e-30) * 1e-15)
+    J_target = jnp.pi * 0.25 / (M * safe_dc)
     J = jnp.clip(J_target, -config.Jmax, config.Jmax)
-    
+
     fid = calculate_cz_fidelity(I_mat, J, M, dc_12)
     return 1.0 - fid
 
