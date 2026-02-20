@@ -37,34 +37,59 @@ import plot_utils
 
 class Config:
     """
-    Configuration class for pulse optimization.
-    
-    Handles loading of spectral data, system parameters, and optimization settings.
-    Constructs the interpolated and ideal spectral matrices used for calculations.
+    Configuration and data management for pulse sequence optimization.
+
+    This class handles the loading of reconstructed spectral data, physical system
+    parameters, and the configuration of the optimization engine. It constructs
+    the interpolated spectral matrices (S-matrix) used for infidelity calculations.
+
+    Parameters
+    ----------
+    fname : str, optional
+        Data folder name containing results from Stage 1 & 2. Default is "DraftRun_NoSPAM_Boring".
+    include_cross_spectra : bool, optional
+        Whether to include cross-correlated noise terms ($S_{12}, S_{1,12}$, etc.). Default is True.
+    Tg : float, optional
+        Target gate time in seconds.
+    tau_divisor : int, optional
+        Divisor of the QNS time $T$ to determine the minimum pulse interval $\tau$. Default is 160.
+    M : int, optional
+        Number of sequence repetitions (blocks). Default is 1.
+    max_pulses : int, optional
+        Maximum allowed pulses across all repetitions. Default is 100.
+    num_random_trials : int, optional
+        Number of random sequence initializations for optimization. Default is 10.
+    use_known_as_seed : bool, optional
+        If True, use the best known sequence from the library as an optimization seed. Default is False.
+    output_path_known : str, optional
+        Filename for saving known sequence results.
+    output_path_opt : str, optional
+        Filename for saving optimized sequence results.
+    plot_filename : str, optional
+        Filename for the infidelity vs gate time plot.
+    use_simulated : bool, optional
+        If True, load simulated target spectra instead of reconstructed ones. Default is False.
+    gate_time_factors : list of int, optional
+        Powers of 2 to scale the gate time relative to $T_{qns}$.
     """
     def __init__(self, 
                  fname="DraftRun_NoSPAM_Boring",
                  include_cross_spectra=True,
-                 Tg=4 * 14 * 1e-6, # Default, will be overridden by loop
+                 Tg=4 * 14 * 1e-6,
                  tau_divisor=160,
-                 
-                 # Optimization/Testing Parameters
-                 M=1,                      # Repetition count
-                 max_pulses=100,           # Total max pulses allowed
-                 num_random_trials=10,     # Number of random trials
-                 use_known_as_seed=False,  # Use best known sequence as seed
-                 
-                 # Output settings
+                 M=1,
+                 max_pulses=100,
+                 num_random_trials=10,
+                 use_known_as_seed=False,
                  output_path_known="infs_known_id_v4.npz",
                  output_path_opt="infs_opt_id_v4.npz",
                  plot_filename="infs_GateTime_id_v4.pdf",
-                 
-                 # Advanced/Unused Parameters (kept for compatibility)
                  reps_known=None, 
                  reps_opt=None,
                  use_simulated=False,
                  gate_time_factors=None
                  ):
+
         """
         Initialize configuration.
         """
@@ -557,10 +582,23 @@ def evaluate_overlap_comb(pulse_times_a, pulse_times_b, S_packed, omega_k, T_seq
 @jax.jit
 def calculate_idling_fidelity(I_matrix):
     """
-    Calculates the Idling Gate Fidelity F1(T) based on the overlap integrals.
-    Uses a numerically stable formula involving exponentials of sums.
-    
-    I_matrix indices: 0->0, 1->1, 2->2, 3->12.
+    Calculate the two-qubit idling gate fidelity $F_I(T)$ from overlap integrals.
+
+    This function uses a numerically stable formula to compute the average
+    gate fidelity by summing the contributions from all 16 two-qubit Pauli
+    operators. The fidelity is derived from the first-order cumulant expansion
+    of the gate evolution under noise.
+
+    Parameters
+    ----------
+    I_matrix : jax.Array
+        A 4x4 matrix of overlap integrals $I_{a,b} = \int \int dt_1 dt_2 C_{a,b}(t_1, t_2) R_{a,b}(t_1-t_2)$,
+        where $a, b \in \{0, 1, 2, 12\}$.
+
+    Returns
+    -------
+    float
+        The calculated average idling gate fidelity.
     """
     # Commutation rules with Z: 0(I):comm, 1(X):anti, 2(Y):anti, 3(Z):comm
     comm_with_z = jnp.array([0, 1, 1, 0])
@@ -613,6 +651,7 @@ def calculate_idling_fidelity(I_matrix):
             F_total += C_1
             
     return jnp.real(F_total)
+
 
 
 # ==============================================================================

@@ -53,7 +53,7 @@ class QNSExperimentConfig:
         parent_dir: The parent directory to save the results in.
     """
     tau: jnp.float64 = 2.5e-8
-    M: jnp.int64 = 10
+    M: jnp.int64 = 20
     t_grain: jnp.int64 = 1600
     truncate: jnp.int64 = 20
     w_grain: jnp.int64 = 1000
@@ -228,6 +228,13 @@ def main():
         ('C_1_2_MT_2', ['CPMG', 'CDD1-1/4'], 'C_a_b', {'l': 1}),
         ('C_2_1_MT_1', ['FID', 'CPMG'], 'C_a_b', {'l': 2}),
         ('C_2_1_MT_2', ['CDD1-1/4', 'CPMG'], 'C_a_b', {'l': 2}),
+        # FID experiments for DC spectral characterization
+        ('C_12_0_FID_CPMG', ['FID', 'CPMG'], 'C_12_0', {'state': 'pp'}),
+        ('C_12_0_CPMG_FID', ['CPMG', 'FID'], 'C_12_0', {'state': 'pp'}),
+        ('C_12_0_FID_FID',  ['FID', 'FID'],  'C_12_0', {'state': 'pp'}),
+        ('C_12_12_FID',     ['FID', 'FID'],  'C_12_12', {'state': 'pp'}),
+        ('C_1_12_FID',      ['FID', 'FID'],  'C_a_b',   {'l': 1}),
+        ('C_2_12_FID',      ['FID', 'FID'],  'C_a_b',   {'l': 2}),
     ]
 
     for exp_name, pulse_sequence, exp_type, kwargs in experiments:
