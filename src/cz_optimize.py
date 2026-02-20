@@ -438,9 +438,32 @@ def sgn(O, a, b):
 @jax.jit
 def calculate_cz_fidelity(I_matrix, J, M, dc_12):
     """
-    Calculates CZ gate fidelity.
-    I_matrix: 4x4 overlap integrals (indices 0:Null, 1:Z1, 2:Z2, 3:Z12).
+    Calculate the two-qubit CZ gate fidelity from overlap integrals and coupling.
+
+    This function computes the average gate fidelity of a CZ gate implemented
+    via a pulsed sequence with a tunable coupling strength $J$. It accounts
+    for the unitary rotation (controlled-Z) and the dephasing noise captured
+    by the overlap integrals $I_{a,b}$. The fidelity is calculated by
+    constructing the Pauli Transfer Matrix (PTM) of the noisy gate and
+    comparing it to the ideal CZ gate.
+
+    Parameters
+    ----------
+    I_matrix : jax.Array
+        A 4x4 matrix of overlap integrals $I_{a,b}$.
+    J : float
+        Coupling strength for the Ising interaction.
+    M : int
+        Number of sequence repetitions.
+    dc_12 : float
+        DC component of the Ising interaction control function.
+
+    Returns
+    -------
+    float
+        The calculated average gate fidelity for the CZ operation.
     """
+
     z1q = jnp.array([jnp.array([[1, 0], [0, 1]]), jnp.array([[1, 0], [0, -1]])])
     z2q = jnp.array(
         [jnp.kron(z1q[0], z1q[0]), jnp.kron(z1q[1], z1q[0]), jnp.kron(z1q[0], z1q[1]), jnp.kron(z1q[1], z1q[1])])
@@ -536,6 +559,35 @@ def cost_function(delays_params, n_pulses1, RMat_data, T_seq, tau_min, overlap_f
     return 1.0 - fid + penalty
 
 def optimize_sequence(config, M, T_seq, n1, n2, seed_seq=None):
+    """
+    Perform gradient-based pulse timing optimization for a CZ gate.
+
+    This function optimizes the pulse switch times for both qubits and
+    the Ising coupling strength $J$ simultaneously to minimize the gate
+    infidelity. It uses JAX-based automatic differentiation for gradients
+    and the SLSQP algorithm for constrained optimization.
+
+    Parameters
+    ----------
+    config : CZOptConfig
+        Configuration object containing spectral data and optimization settings.
+    M : int
+        Number of repetitions.
+    T_seq : float
+        Total sequence time for one block.
+    n1 : int
+        Number of pulses for qubit 1.
+    n2 : int
+        Number of pulses for qubit 2.
+    seed_seq : tuple of jax.Array, optional
+        Initial pulse times for seeding the optimization.
+
+    Returns
+    -------
+    tuple
+        A tuple containing (best_seq, best_J, best_inf), where `best_seq`
+        is a tuple of (pt1, pt2) absolute pulse times.
+    """
     # Check feasibility of pulse count
     if (n1 + 1) * config.tau > T_seq or (n2 + 1) * config.tau > T_seq:
         return None, 1.0

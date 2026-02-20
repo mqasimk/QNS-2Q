@@ -13,7 +13,9 @@ from typing import Dict, Any
 import numpy as np
 from matplotlib import pyplot as plt
 
-from spectral_inversion import recon_S_11, recon_S_22, recon_S_1_2, recon_S_12_12, recon_S_1_12, recon_S_2_12
+from spectral_inversion import (recon_S_11, recon_S_22, recon_S_1_2, recon_S_12_12, recon_S_1_12, recon_S_2_12,
+                                recon_S_11_dc, recon_S_22_dc, recon_S_1212_dc,
+                                recon_S_1_2_dc, recon_S_1_12_dc, recon_S_2_12_dc)
 from spectra_input import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
 
 
@@ -96,15 +98,41 @@ class SpectraReconstructor:
         """Reconstructs the spectra from the loaded observables."""
         c = self.config
         obs = self.observables
-        self.wk = np.array([2 * np.pi * (n + 1) / c.T for n in range(c.truncate)])
 
+        # Reconstruct spectra at comb harmonics wk = 2*pi*(k+1)/T
+        wk_harmonics = np.array([2 * np.pi * (n + 1) / c.T for n in range(c.truncate)])
+
+        S_11_k = recon_S_11([obs['C_12_0_MT_1'], obs['C_12_0_MT_2']], c_times=c.c_times, m=c.M, T=c.T)
+        S_22_k = recon_S_22([obs['C_12_0_MT_1'], obs['C_12_0_MT_3']], c_times=c.c_times, m=c.M, T=c.T)
+        S_12_12_k = recon_S_12_12([obs['C_1_0_MT_1'], obs['C_2_0_MT_1'], obs['C_12_0_MT_4']], c_times=c.c_times, m=c.M, T=c.T)
+        S_1_2_k = recon_S_1_2([obs['C_12_12_MT_1'], obs['C_12_12_MT_2']], c_times=c.c_times, m=c.M, T=c.T)
+        S_1_12_k = recon_S_1_12([obs['C_1_2_MT_1'], obs['C_1_2_MT_2']], c_times=c.c_times, m=c.M, T=c.T)
+        S_2_12_k = recon_S_2_12([obs['C_2_1_MT_1'], obs['C_2_1_MT_2']], c_times=c.c_times, m=c.M, T=c.T)
+
+        # Reconstruct DC (w=0) values from FID experiments
+        S_11_dc = recon_S_11_dc([obs['C_12_0_FID_CPMG']], c_times=c.c_times, m=c.M, T=c.T,
+                                S_22_k=S_22_k, S_1212_k=S_12_12_k)
+        S_22_dc = recon_S_22_dc([obs['C_12_0_CPMG_FID']], c_times=c.c_times, m=c.M, T=c.T,
+                                S_11_k=S_11_k, S_1212_k=S_12_12_k)
+        S_1212_dc = recon_S_1212_dc([obs['C_12_0_FID_FID']], m=c.M, T=c.T,
+                                    S_11_dc=S_11_dc, S_22_dc=S_22_dc)
+        S_1_2_dc = recon_S_1_2_dc([obs['C_12_12_FID']], m=c.M, T=c.T)
+        S_1_12_dc = recon_S_1_12_dc([obs['C_1_12_FID']], m=c.M, T=c.T)
+        S_2_12_dc = recon_S_2_12_dc([obs['C_2_12_FID']], m=c.M, T=c.T)
+
+        print(f"DC values: S_11(0)={S_11_dc:.4f}, S_22(0)={S_22_dc:.4f}, "
+              f"S_1212(0)={S_1212_dc:.4f}, S_1_2(0)={S_1_2_dc:.4f}, "
+              f"S_1_12(0)={S_1_12_dc:.4f}, S_2_12(0)={S_2_12_dc:.4f}")
+
+        # Prepend DC values (×2 for one-sided PSD convention) to spectrum arrays so wk[0] = 0
+        self.wk = np.concatenate(([0.0], wk_harmonics))
         self.reconstructed_spectra = {
-            "S_11_k": recon_S_11([obs['C_12_0_MT_1'], obs['C_12_0_MT_2']], c_times=c.c_times, m=c.M, T=c.T),
-            "S_22_k": recon_S_22([obs['C_12_0_MT_1'], obs['C_12_0_MT_3']], c_times=c.c_times, m=c.M, T=c.T),
-            "S_1_2_k": recon_S_1_2([obs['C_12_12_MT_1'], obs['C_12_12_MT_2']], c_times=c.c_times, m=c.M, T=c.T),
-            "S_12_12_k": recon_S_12_12([obs['C_1_0_MT_1'], obs['C_2_0_MT_1'], obs['C_12_0_MT_4']], c_times=c.c_times, m=c.M, T=c.T),
-            "S_1_12_k": recon_S_1_12([obs['C_1_2_MT_1'], obs['C_1_2_MT_2']], c_times=c.c_times, m=c.M, T=c.T),
-            "S_2_12_k": recon_S_2_12([obs['C_2_1_MT_1'], obs['C_2_1_MT_2']], c_times=c.c_times, m=c.M, T=c.T),
+            "S_11_k": np.concatenate(([2 * S_11_dc], S_11_k)),
+            "S_22_k": np.concatenate(([2 * S_22_dc], S_22_k)),
+            "S_12_12_k": np.concatenate(([2 * S_1212_dc], S_12_12_k)),
+            "S_1_2_k": np.concatenate(([2 * S_1_2_dc + 0j], S_1_2_k)),
+            "S_1_12_k": np.concatenate(([2 * S_1_12_dc + 0j], S_1_12_k)),
+            "S_2_12_k": np.concatenate(([2 * S_2_12_dc + 0j], S_2_12_k)),
         }
 
     def plot_reconstruction(self):
@@ -163,7 +191,7 @@ class SpectraReconstructor:
                 ax.set_xlabel(r'$\omega$(MHz)', fontsize=plot_params['xlabelfont'])
                 ax.tick_params(direction='in', labelsize=plot_params['tickfont'])
                 ax.grid(True, alpha=0.3)
-                # ax.set_yscale('asinh')
+                ax.set_yscale('asinh')
 
         plt.tight_layout()
         path = os.path.join(os.pardir, self.config.data_folder, 'reconstruct.pdf')
@@ -171,9 +199,10 @@ class SpectraReconstructor:
         plt.show()
 
     def save_reconstructed_spectra(self):
-        """Saves the reconstructed spectra to a .npz file."""
+        """Saves the reconstructed spectra (including DC at w=0) to a .npz file."""
         path = os.path.join(os.pardir, self.config.data_folder, "specs.npz")
-        np.savez(path, S11=self.reconstructed_spectra['S_11_k'], S22=self.reconstructed_spectra['S_22_k'],
+        np.savez(path, wk=self.wk,
+                 S11=self.reconstructed_spectra['S_11_k'], S22=self.reconstructed_spectra['S_22_k'],
                  S12=self.reconstructed_spectra['S_1_2_k'], S1212=self.reconstructed_spectra['S_12_12_k'],
                  S112=self.reconstructed_spectra['S_1_12_k'], S212=self.reconstructed_spectra['S_2_12_k'])
 
