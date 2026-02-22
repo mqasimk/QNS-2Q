@@ -145,34 +145,57 @@ class SpectraReconstructor:
         """Reconstructs the spectra from the loaded observables."""
         c = self.config
         obs = self.observables
+        
+        # Check if error data is available
+        has_errors = any(k.endswith('_err') for k in obs.keys())
+        
+        def get_errs(keys):
+            if not has_errors: return None
+            return [obs[k + '_err'] for k in keys]
 
         # Reconstruct spectra at comb harmonics wk = 2*pi*(k+1)/T
         wk_harmonics = np.array([2 * np.pi * (n + 1) / c.T for n in range(c.truncate)])
 
-        S_11_k = recon_S_11([obs['C_12_0_MT_1'], obs['C_12_0_MT_2']], c_times=c.c_times, m=c.M, T=c.T)
-        S_22_k = recon_S_22([obs['C_12_0_MT_1'], obs['C_12_0_MT_3']], c_times=c.c_times, m=c.M, T=c.T)
-        S_12_12_k = recon_S_12_12([obs['C_1_0_MT_1'], obs['C_2_0_MT_1'], obs['C_12_0_MT_4']], c_times=c.c_times, m=c.M, T=c.T)
-        S_1_2_k = recon_S_1_2([obs['C_12_12_MT_1'], obs['C_12_12_MT_2']], c_times=c.c_times, m=c.M, T=c.T)
-        S_1_12_k = recon_S_1_12([obs['C_1_2_MT_1'], obs['C_1_2_MT_2']], c_times=c.c_times, m=c.M, T=c.T)
-        S_2_12_k = recon_S_2_12([obs['C_2_1_MT_1'], obs['C_2_1_MT_2']], c_times=c.c_times, m=c.M, T=c.T)
+        # Helper to unpack result
+        def call_recon(func, keys, **kwargs):
+            res = func([obs[k] for k in keys], obs_err=get_errs(keys), **kwargs)
+            if has_errors:
+                return res
+            return res, np.zeros(c.truncate) # Dummy error
+
+        S_11_k, S_11_err = call_recon(recon_S_11, ['C_12_0_MT_1', 'C_12_0_MT_2'], c_times=c.c_times, m=c.M, T=c.T)
+        S_22_k, S_22_err = call_recon(recon_S_22, ['C_12_0_MT_1', 'C_12_0_MT_3'], c_times=c.c_times, m=c.M, T=c.T)
+        S_12_12_k, S_12_12_err = call_recon(recon_S_12_12, ['C_1_0_MT_1', 'C_2_0_MT_1', 'C_12_0_MT_4'], c_times=c.c_times, m=c.M, T=c.T)
+        S_1_2_k, S_1_2_err = call_recon(recon_S_1_2, ['C_12_12_MT_1', 'C_12_12_MT_2'], c_times=c.c_times, m=c.M, T=c.T)
+        S_1_12_k, S_1_12_err = call_recon(recon_S_1_12, ['C_1_2_MT_1', 'C_1_2_MT_2'], c_times=c.c_times, m=c.M, T=c.T)
+        S_2_12_k, S_2_12_err = call_recon(recon_S_2_12, ['C_2_1_MT_1', 'C_2_1_MT_2'], c_times=c.c_times, m=c.M, T=c.T)
 
         # Reconstruct DC (w=0) values from FID experiments
-        S_11_dc = recon_S_11_dc([obs['C_12_0_FID_CPMG']], c_times=c.c_times, m=c.M, T=c.T,
-                                S_22_k=S_22_k, S_1212_k=S_12_12_k)
-        S_22_dc = recon_S_22_dc([obs['C_12_0_CPMG_FID']], c_times=c.c_times, m=c.M, T=c.T,
-                                S_11_k=S_11_k, S_1212_k=S_12_12_k)
-        S_1212_dc = recon_S_1212_dc([obs['C_12_0_FID_FID']], m=c.M, T=c.T,
-                                    S_11_dc=S_11_dc, S_22_dc=S_22_dc)
-        S_1_2_dc = recon_S_1_2_dc([obs['C_12_12_FID']], m=c.M, T=c.T)
-        S_1_12_dc = recon_S_1_12_dc([obs['C_1_12_FID']], m=c.M, T=c.T)
-        S_2_12_dc = recon_S_2_12_dc([obs['C_2_12_FID']], m=c.M, T=c.T)
+        # For DC, if has_errors, result is (val, err), else val.
+        def call_recon_dc(func, keys, **kwargs):
+            res = func([obs[k] for k in keys], obs_err=get_errs(keys), **kwargs)
+            if has_errors:
+                return res
+            return res, 0.0
 
-        print(f"DC values: S_11(0)={S_11_dc:.4f}, S_22(0)={S_22_dc:.4f}, "
-              f"S_1212(0)={S_1212_dc:.4f}, S_1_2(0)={S_1_2_dc:.4f}, "
-              f"S_1_12(0)={S_1_12_dc:.4f}, S_2_12(0)={S_2_12_dc:.4f}")
+        S_11_dc, S_11_dc_err = call_recon_dc(recon_S_11_dc, ['C_12_0_FID_CPMG'], c_times=c.c_times, m=c.M, T=c.T,
+                                S_22_k=S_22_k, S_1212_k=S_12_12_k)
+        S_22_dc, S_22_dc_err = call_recon_dc(recon_S_22_dc, ['C_12_0_CPMG_FID'], c_times=c.c_times, m=c.M, T=c.T,
+                                S_11_k=S_11_k, S_1212_k=S_12_12_k)
+        S_1212_dc, S_1212_dc_err = call_recon_dc(recon_S_1212_dc, ['C_12_0_FID_FID'], m=c.M, T=c.T,
+                                    S_11_dc=S_11_dc, S_22_dc=S_22_dc, 
+                                    S_11_dc_err=S_11_dc_err, S_22_dc_err=S_22_dc_err)
+        S_1_2_dc, S_1_2_dc_err = call_recon_dc(recon_S_1_2_dc, ['C_12_12_FID'], m=c.M, T=c.T)
+        S_1_12_dc, S_1_12_dc_err = call_recon_dc(recon_S_1_12_dc, ['C_1_12_FID'], m=c.M, T=c.T)
+        S_2_12_dc, S_2_12_dc_err = call_recon_dc(recon_S_2_12_dc, ['C_2_12_FID'], m=c.M, T=c.T)
+
+        print(f"DC values: S_11(0)={S_11_dc:.4f} +/- {S_11_dc_err:.4f}, "
+              f"S_22(0)={S_22_dc:.4f} +/- {S_22_dc_err:.4f}, "
+              f"S_1212(0)={S_1212_dc:.4f} +/- {S_1212_dc_err:.4f}")
 
         # Prepend DC values (x2 for one-sided PSD convention) to spectrum arrays so wk[0] = 0
         self.wk = np.concatenate(([0.0], wk_harmonics))
+        
         self.reconstructed_spectra = {
             "S_11_k": np.concatenate(([2 * S_11_dc], S_11_k)),
             "S_22_k": np.concatenate(([2 * S_22_dc], S_22_k)),
@@ -180,6 +203,16 @@ class SpectraReconstructor:
             "S_1_2_k": np.concatenate(([2 * S_1_2_dc + 0j], S_1_2_k)),
             "S_1_12_k": np.concatenate(([2 * S_1_12_dc + 0j], S_1_12_k)),
             "S_2_12_k": np.concatenate(([2 * S_2_12_dc + 0j], S_2_12_k)),
+        }
+        
+        # Store errors (multiplying DC error by 2 as well)
+        self.reconstructed_spectra_err = {
+            "S_11_err": np.concatenate(([2 * S_11_dc_err], S_11_err)),
+            "S_22_err": np.concatenate(([2 * S_22_dc_err], S_22_err)),
+            "S_12_12_err": np.concatenate(([2 * S_1212_dc_err], S_12_12_err)),
+            "S_1_2_err": np.concatenate(([2 * S_1_2_dc_err + 0j], S_1_2_err)),
+            "S_1_12_err": np.concatenate(([2 * S_1_12_dc_err + 0j], S_1_12_err)),
+            "S_2_12_err": np.concatenate(([2 * S_2_12_dc_err + 0j], S_2_12_err)),
         }
 
     def _get_output_dir(self, subdir):
@@ -207,23 +240,23 @@ class SpectraReconstructor:
 
         # --- Real-valued spectra: S_11, S_22, S_1212 ---
         real_spectra = [
-            ('S_11_k', S_11, None,
+            ('S_11_k', 'S_11_err', S_11, None,
              r'$S_{1,1}^+(\omega)$'),
-            ('S_22_k', S_22, None,
+            ('S_22_k', 'S_22_err', S_22, None,
              r'$S_{2,2}^+(\omega)$'),
-            ('S_12_12_k', S_1212, None,
+            ('S_12_12_k', 'S_12_12_err', S_1212, None,
              r'$S_{12,12}^+(\omega)$'),
         ]
 
         # --- Complex-valued spectra: S_1_2, S_1_12, S_2_12 ---
         complex_spectra = [
-            ('S_1_2_k',
+            ('S_1_2_k', 'S_1_2_err',
              lambda w_: S_1_2(w_, self.config.gamma),
              r'$S_{1,2}^+(\omega)$'),
-            ('S_1_12_k',
+            ('S_1_12_k', 'S_1_12_err',
              lambda w_: S_1_12(w_, self.config.gamma_12),
              r'$S_{1,12}^+(\omega)$'),
-            ('S_2_12_k',
+            ('S_2_12_k', 'S_2_12_err',
              lambda w_: S_2_12(w_, self.config.gamma_12 - self.config.gamma),
              r'$S_{2,12}^+(\omega)$'),
         ]
@@ -231,29 +264,42 @@ class SpectraReconstructor:
         fig, axs = plt.subplots(2, 3, figsize=(FIG_WIDTH, FIG_HEIGHT))
 
         # Top row: real-valued self-spectra
-        for col, (s_key, theory_fn, _, ylabel) in enumerate(real_spectra):
+        for col, (s_key, err_key, theory_fn, _, ylabel) in enumerate(real_spectra):
             ax = axs[0, col]
             ax.fill_between(w / xunits, 0, theory_fn(w),
                             color=COLORS["grey_fill"], alpha=1.0, zorder=0)
             ax.plot(w / xunits, theory_fn(w), **theory_re_kw)
+            
+            yerr = None
+            if hasattr(self, 'reconstructed_spectra_err') and err_key in self.reconstructed_spectra_err:
+                yerr = self.reconstructed_spectra_err[err_key]
+                
             ax.errorbar(self.wk / xunits, self.reconstructed_spectra[s_key],
-                        **eb_re)
+                        yerr=yerr, **eb_re)
             ax.set_ylabel(ylabel)
 
         # Bottom row: complex-valued cross-spectra
-        for col, (s_key, theory_fn, ylabel) in enumerate(complex_spectra):
+        for col, (s_key, err_key, theory_fn, ylabel) in enumerate(complex_spectra):
             ax = axs[1, col]
             S_theory = theory_fn(w)
+
+            # Get errors if available
+            yerr_re = None
+            yerr_im = None
+            if hasattr(self, 'reconstructed_spectra_err') and err_key in self.reconstructed_spectra_err:
+                err_complex = self.reconstructed_spectra_err[err_key]
+                yerr_re = np.real(err_complex)
+                yerr_im = np.imag(err_complex)
 
             # Real part
             ax.plot(w / xunits, np.real(S_theory), **theory_re_kw)
             ax.errorbar(self.wk / xunits, np.real(self.reconstructed_spectra[s_key]),
-                        **{**eb_re, 'label': r'Re (recon.)'})
+                        yerr=yerr_re, **{**eb_re, 'label': r'Re (recon.)'})
 
             # Imaginary part
             ax.plot(w / xunits, np.imag(S_theory), **theory_im_kw)
             ax.errorbar(self.wk / xunits, np.imag(self.reconstructed_spectra[s_key]),
-                        **{**eb_im, 'label': r'Im (recon.)'})
+                        yerr=yerr_im, **{**eb_im, 'label': r'Im (recon.)'})
             ax.set_ylabel(ylabel)
 
         # Common formatting
@@ -290,6 +336,15 @@ class SpectraReconstructor:
             S12=self.reconstructed_spectra['S_1_2_k'], S1212=self.reconstructed_spectra['S_12_12_k'],
             S112=self.reconstructed_spectra['S_1_12_k'], S212=self.reconstructed_spectra['S_2_12_k'],
         )
+        if hasattr(self, 'reconstructed_spectra_err'):
+            save_dict.update(dict(
+                S11_err=self.reconstructed_spectra_err['S_11_err'],
+                S22_err=self.reconstructed_spectra_err['S_22_err'],
+                S1212_err=self.reconstructed_spectra_err['S_12_12_err'],
+                S12_err=self.reconstructed_spectra_err['S_1_2_err'],
+                S112_err=self.reconstructed_spectra_err['S_1_12_err'],
+                S212_err=self.reconstructed_spectra_err['S_2_12_err'],
+            ))
         np.savez(path, **save_dict)
 
     def run(self):
