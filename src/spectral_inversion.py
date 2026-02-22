@@ -499,7 +499,7 @@ def recon_S_1212_dc(coefs, **kwargs):
     C_12_0_FID_FID = coefs[0]
     # ['FID','FID'] C_12_0 is c_time-independent; average for noise reduction
     meas = np.mean(C_12_0_FID_FID)
-    return (meas / (m*T) - S_11_dc - S_22_dc) / 2
+    return -(meas / (m*T) - S_11_dc - S_22_dc) / 2
 
 
 def recon_S_1_2_dc(coefs, **kwargs):
@@ -577,5 +577,5 @@ def recon_S_2_12_dc(coefs, **kwargs):
     T = kwargs['T']
     C_2_12_FID = coefs[0]
     # ['FID','FID'] C_a_b is c_time-independent; average for noise reduction
-    return np.mean(C_2_12_FID) / (2*m*T)
+    return -np.mean(C_2_12_FID) / (2*m*T)
 

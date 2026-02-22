@@ -166,7 +166,9 @@ def generate_pulse_plot():
     plt.tight_layout()
     
     output_filename = "pulse_sequence_comparison_pub.pdf"
-    output_dir = os.path.dirname(data_file)
+    data_dir = os.path.dirname(os.path.dirname(data_file))  # up from plotting_data/
+    output_dir = os.path.join(data_dir, "figures", "publication")
+    os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, output_filename)
     
     plt.savefig(output_path, format='pdf', dpi=300)

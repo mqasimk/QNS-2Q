@@ -1340,13 +1340,13 @@ if __name__ == "__main__":
             # Plot Infidelity vs M for longest gate time
             plot_utils.plot_infidelity_vs_M_labeled(
                 M_values, known_infs, known_labels, opt_infs, opt_labels, nopulse_infs,
-                os.path.join(last_config.path, "infs_vs_M_id_v4.pdf")
+                os.path.join(plot_utils.get_figures_dir(last_config.path), "infs_vs_M_id_v4.pdf")
             )
-            
+
             # Plot Infidelity vs Gate Time for all M
             plot_utils.plot_infidelity_vs_gatetime_all_M(
                 results_by_M, last_config.tau,
-                os.path.join(last_config.path, "infs_GateTime_id_v4_all_M.pdf")
+                os.path.join(plot_utils.get_figures_dir(last_config.path), "infs_GateTime_id_v4_all_M.pdf")
             )
         
     except Exception as e:

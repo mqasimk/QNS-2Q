@@ -62,7 +62,7 @@ def get_data_paths():
         "plotting_data": os.path.join(base_dir, "plotting_data", "plotting_data_id_v4.npz"),
         "optimization_data": os.path.join(base_dir, "optimization_data_all_M.npz"),
         "params": os.path.join(base_dir, "params.npz"),
-        "output_dir": os.path.join(base_dir, "plotting_data") # Save plots here
+        "output_dir": os.path.join(base_dir, "figures", "publication")
     }
     
     # Ensure output directory exists

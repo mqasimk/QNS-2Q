@@ -71,12 +71,12 @@ def S_11(w):
     jax.Array
         PSD value for qubit 1.
     """
-    tc = 1e-5
+    tc = 1e-6
     S0 = 0*3e4
     St2 = 2.5e5
     w0 = 1.4e7
     return (S0*(0*Gauss(w, 1.75*w0, 10/tc)+L(w, w0, 1*tc))
-            +St2*L(w, 0, 1.5*tc))
+            +St2*L(w, 0, tc))
 
 
 @jax.jit
@@ -94,12 +94,12 @@ def S_22(w):
     jax.Array
         PSD value for qubit 2.
     """
-    tc=1e-5
+    tc=1.5e-6
     S0 = 0*2.5e4
     St2 = 1e5
     w0=0.8e7
     return (S0*(Gauss(w, 1.8*w0, 10/tc)+Gauss(w, 2.5*w0, 20/tc))
-            +St2*L(w, 0, 2*tc))
+            +St2*L(w, 0, tc))
 
 
 @jax.jit
@@ -117,7 +117,7 @@ def S_1212(w):
     jax.Array
         PSD value for the Ising interaction.
     """
-    tc = 1e-3
+    tc = 1e-5
     S0 = 0*1e3
     St2 = 1e6
     w0 = 1.5*10**7

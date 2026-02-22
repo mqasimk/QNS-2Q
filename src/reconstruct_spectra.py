@@ -6,17 +6,64 @@ the reconstruction process, and a main execution block to run the analysis for a
 specified data folder.
 """
 
+import matplotlib
+matplotlib.use('Agg')
+
 import os
 from dataclasses import dataclass, field
 from typing import Dict, Any
 
 import numpy as np
-from matplotlib import pyplot as plt
+import matplotlib.pyplot as plt
 
 from spectral_inversion import (recon_S_11, recon_S_22, recon_S_1_2, recon_S_12_12, recon_S_1_12, recon_S_2_12,
                                 recon_S_11_dc, recon_S_22_dc, recon_S_1212_dc,
                                 recon_S_1_2_dc, recon_S_1_12_dc, recon_S_2_12_dc)
 from spectra_input import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
+
+
+# --- Publication figure constants ---
+
+FIG_WIDTH = 7.0    # Two-column width (inches)
+FIG_HEIGHT = 4.5   # 2-row panel height
+
+COLORS = {
+    "blue": "#0072B2",
+    "vermillion": "#D55E00",
+    "sky_blue": "#56B4E9",
+    "orange": "#E69F00",
+    "black": "#000000",
+    "grey_fill": "#E0E0E0",
+}
+
+# Subfolder inside each data folder for figures
+FIGURES_SUBDIR = "figures"
+RECONSTRUCTION_SUBDIR = os.path.join(FIGURES_SUBDIR, "reconstruction")
+
+
+def setup_pub_rcparams():
+    """Configure matplotlib rcParams for publication-quality figures."""
+    plt.rcParams.update({
+        "text.usetex": True,
+        "font.family": "serif",
+        "font.serif": ["Computer Modern"],
+        "font.size": 10,
+        "axes.labelsize": 10,
+        "axes.titlesize": 10,
+        "legend.fontsize": 7,
+        "xtick.labelsize": 8,
+        "ytick.labelsize": 8,
+        "xtick.direction": "in",
+        "ytick.direction": "in",
+        "xtick.top": True,
+        "ytick.right": True,
+        "lines.linewidth": 1.0,
+        "lines.markersize": 3.5,
+        "axes.linewidth": 0.6,
+        "grid.linewidth": 0.5,
+        "grid.alpha": 0.2,
+        "grid.color": "grey",
+    })
 
 
 @dataclass
@@ -124,7 +171,7 @@ class SpectraReconstructor:
               f"S_1212(0)={S_1212_dc:.4f}, S_1_2(0)={S_1_2_dc:.4f}, "
               f"S_1_12(0)={S_1_12_dc:.4f}, S_2_12(0)={S_2_12_dc:.4f}")
 
-        # Prepend DC values (×2 for one-sided PSD convention) to spectrum arrays so wk[0] = 0
+        # Prepend DC values (x2 for one-sided PSD convention) to spectrum arrays so wk[0] = 0
         self.wk = np.concatenate(([0.0], wk_harmonics))
         self.reconstructed_spectra = {
             "S_11_k": np.concatenate(([2 * S_11_dc], S_11_k)),
@@ -135,76 +182,115 @@ class SpectraReconstructor:
             "S_2_12_k": np.concatenate(([2 * S_2_12_dc + 0j], S_2_12_k)),
         }
 
+    def _get_output_dir(self, subdir):
+        """Returns (and creates) a subfolder inside the data folder for figures."""
+        path = os.path.join(os.pardir, self.config.data_folder, subdir)
+        os.makedirs(path, exist_ok=True)
+        return path
+
     def plot_reconstruction(self):
-        """Plots the reconstructed spectra against the original spectra."""
-        fig, axs = plt.subplots(2, 3, figsize=(16, 9))
+        """Plots publication-quality reconstructed spectra against analytical curves."""
+        setup_pub_rcparams()
+
         w = np.linspace(0, self.config.wmax, self.config.w_grain)
-        #w = w[40:]
         xunits = 1e6
 
-        plot_params = {
-            'lw': 1,
-            'legendfont': 12,
-            'xlabelfont': 16,
-            'ylabelfont': 16,
-            'tickfont': 12,
-        }
+        # Marker/line styling (Okabe-Ito palette)
+        eb_re = dict(fmt='^', color=COLORS["vermillion"],
+                     markersize=3.5, linewidth=0.8, zorder=10, label='Reconstructed')
+        eb_im = dict(fmt='s', color=COLORS["blue"],
+                     markersize=3.0, linewidth=0.8, zorder=10, label='Reconstructed (Im)')
+        theory_re_kw = dict(color=COLORS["vermillion"], linestyle='--', linewidth=1.2,
+                            alpha=0.7, zorder=5, label='Theory')
+        theory_im_kw = dict(color=COLORS["blue"], linestyle='--', linewidth=1.2,
+                            alpha=0.7, zorder=5, label='Theory (Im)')
 
-        # Plot S_11
-        axs[0, 0].plot(self.wk / xunits, self.reconstructed_spectra['S_11_k'], 'r^')
-        axs[0, 0].plot(w / xunits, S_11(w), 'r--', lw=1.5 * plot_params['lw'])
-        axs[0, 0].legend([r'$\hat{S}_{1,1}^+(\omega_k)$', r'$S_{1,1}^+(\omega)$'], fontsize=plot_params['legendfont'])
+        # --- Real-valued spectra: S_11, S_22, S_1212 ---
+        real_spectra = [
+            ('S_11_k', S_11, None,
+             r'$S_{1,1}^+(\omega)$'),
+            ('S_22_k', S_22, None,
+             r'$S_{2,2}^+(\omega)$'),
+            ('S_12_12_k', S_1212, None,
+             r'$S_{12,12}^+(\omega)$'),
+        ]
 
-        # Plot S_22
-        axs[0, 1].plot(self.wk / xunits, self.reconstructed_spectra['S_22_k'], 'r^')
-        axs[0, 1].plot(w / xunits, S_22(w), 'r--', lw=1.5 * plot_params['lw'])
-        axs[0, 1].legend([r'$\hat{S}_{2,2}^+(\omega_k)$', r'$S_{2,2}^+(\omega)$'], fontsize=plot_params['legendfont'])
+        # --- Complex-valued spectra: S_1_2, S_1_12, S_2_12 ---
+        complex_spectra = [
+            ('S_1_2_k',
+             lambda w_: S_1_2(w_, self.config.gamma),
+             r'$S_{1,2}^+(\omega)$'),
+            ('S_1_12_k',
+             lambda w_: S_1_12(w_, self.config.gamma_12),
+             r'$S_{1,12}^+(\omega)$'),
+            ('S_2_12_k',
+             lambda w_: S_2_12(w_, self.config.gamma_12 - self.config.gamma),
+             r'$S_{2,12}^+(\omega)$'),
+        ]
 
-        # Plot S_12_12
-        axs[0, 2].plot(self.wk / xunits, self.reconstructed_spectra['S_12_12_k'], 'r^')
-        axs[0, 2].plot(w / xunits, S_1212(w), 'r--', lw=1.5 * plot_params['lw'])
-        axs[0, 2].legend([r'$\hat{S}_{12,12}^+(\omega_k)$', r'$S_{12,12}^+(\omega)$'], fontsize=plot_params['legendfont'])
+        fig, axs = plt.subplots(2, 3, figsize=(FIG_WIDTH, FIG_HEIGHT))
 
-        # Plot S_1_2
-        axs[1, 0].plot(self.wk / xunits, np.real(self.reconstructed_spectra['S_1_2_k']), 'r^')
-        axs[1, 0].plot(w / xunits, np.real(S_1_2(w, self.config.gamma)), 'r--', lw=1.5 * plot_params['lw'])
-        axs[1, 0].plot(self.wk / xunits, np.imag(self.reconstructed_spectra['S_1_2_k']), 'b^')
-        axs[1, 0].plot(w / xunits, np.imag(S_1_2(w, self.config.gamma)), 'b--', lw=1.5 * plot_params['lw'])
-        axs[1, 0].legend([r'Re[$\hat{S}_{1,2}^+(\omega_k)$]', r'Re[$S_{1,2}^+(\omega)$]', r'Im[$\hat{S}_{1,2}^+(\omega_k)$]', r'Im[$S_{1,2}^+(\omega)$]'], fontsize=plot_params['legendfont'])
+        # Top row: real-valued self-spectra
+        for col, (s_key, theory_fn, _, ylabel) in enumerate(real_spectra):
+            ax = axs[0, col]
+            ax.fill_between(w / xunits, 0, theory_fn(w),
+                            color=COLORS["grey_fill"], alpha=1.0, zorder=0)
+            ax.plot(w / xunits, theory_fn(w), **theory_re_kw)
+            ax.errorbar(self.wk / xunits, self.reconstructed_spectra[s_key],
+                        **eb_re)
+            ax.set_ylabel(ylabel)
 
-        # Plot S_1_12
-        axs[1, 1].plot(self.wk / xunits, np.real(self.reconstructed_spectra['S_1_12_k']), 'r^')
-        axs[1, 1].plot(w / xunits, np.real(S_1_12(w, self.config.gamma_12)), 'r--', lw=1.5 * plot_params['lw'])
-        axs[1, 1].plot(self.wk / xunits, np.imag(self.reconstructed_spectra['S_1_12_k']), 'b^')
-        axs[1, 1].plot(w / xunits, np.imag(S_1_12(w, self.config.gamma_12)), 'b--', lw=1.5 * plot_params['lw'])
-        axs[1, 1].legend([r'Re[$\hat{S}_{1,12}^+(\omega_k)$]', r'Re[$S_{1,12}^+(\omega)$]', r'Im[$\hat{S}_{1,12}^+(\omega_k)$]', r'Im[$S_{1,12}^+(\omega)$]'], fontsize=plot_params['legendfont'])
+        # Bottom row: complex-valued cross-spectra
+        for col, (s_key, theory_fn, ylabel) in enumerate(complex_spectra):
+            ax = axs[1, col]
+            S_theory = theory_fn(w)
 
-        # Plot S_2_12
-        axs[1, 2].plot(self.wk / xunits, np.real(self.reconstructed_spectra['S_2_12_k']), 'r^')
-        axs[1, 2].plot(w / xunits, np.real(S_2_12(w, self.config.gamma_12 - self.config.gamma)), 'r--', lw=1.5 * plot_params['lw'])
-        axs[1, 2].plot(self.wk / xunits, np.imag(self.reconstructed_spectra['S_2_12_k']), 'b^')
-        axs[1, 2].plot(w / xunits, np.imag(S_2_12(w, self.config.gamma_12 - self.config.gamma)), 'b--', lw=1.5 * plot_params['lw'])
-        axs[1, 2].legend([r'Re[$\hat{S}_{2,12}^+(\omega_k)$]', r'Re[$S_{2,12}^+(\omega)$]', r'Im[$\hat{S}_{2,12}^+(\omega_k)$]', r'Im[$S_{2,12}^+(\omega)$]'], fontsize=plot_params['legendfont'])
+            # Real part
+            ax.plot(w / xunits, np.real(S_theory), **theory_re_kw)
+            ax.errorbar(self.wk / xunits, np.real(self.reconstructed_spectra[s_key]),
+                        **{**eb_re, 'label': r'Re (recon.)'})
 
+            # Imaginary part
+            ax.plot(w / xunits, np.imag(S_theory), **theory_im_kw)
+            ax.errorbar(self.wk / xunits, np.imag(self.reconstructed_spectra[s_key]),
+                        **{**eb_im, 'label': r'Im (recon.)'})
+            ax.set_ylabel(ylabel)
+
+        # Common formatting
         for ax_row in axs:
             for ax in ax_row:
-                ax.set_xlabel(r'$\omega$(MHz)', fontsize=plot_params['xlabelfont'])
-                ax.tick_params(direction='in', labelsize=plot_params['tickfont'])
-                ax.grid(True, alpha=0.3)
                 ax.set_yscale('asinh')
+                ax.grid(True, which='major', zorder=0)
+                ax.grid(False, which='minor')
 
-        plt.tight_layout()
-        path = os.path.join(os.pardir, self.config.data_folder, 'reconstruct.pdf')
-        plt.savefig(path)
-        plt.show()
+        # X-labels only on bottom row
+        for ax in axs[1, :]:
+            ax.set_xlabel(r'$\omega$ (MHz)')
+
+        # Legends
+        for ax in axs[0, :]:
+            ax.legend(frameon=False, loc='upper right')
+        for ax in axs[1, :]:
+            ax.legend(frameon=False, loc='upper right', ncol=2)
+
+        plt.tight_layout(pad=0.3)
+        output_dir = self._get_output_dir(RECONSTRUCTION_SUBDIR)
+        output_path = os.path.join(output_dir, "spectral_reconstruction_pub.pdf")
+        plt.savefig(output_path, format='pdf', dpi=300)
+        print(f"Saved reconstruction plot to {output_path}")
+        plt.close(fig)
 
     def save_reconstructed_spectra(self):
         """Saves the reconstructed spectra (including DC at w=0) to a .npz file."""
+        # Save specs.npz at the data folder root (consumed by downstream scripts)
         path = os.path.join(os.pardir, self.config.data_folder, "specs.npz")
-        np.savez(path, wk=self.wk,
-                 S11=self.reconstructed_spectra['S_11_k'], S22=self.reconstructed_spectra['S_22_k'],
-                 S12=self.reconstructed_spectra['S_1_2_k'], S1212=self.reconstructed_spectra['S_12_12_k'],
-                 S112=self.reconstructed_spectra['S_1_12_k'], S212=self.reconstructed_spectra['S_2_12_k'])
+        save_dict = dict(
+            wk=self.wk,
+            S11=self.reconstructed_spectra['S_11_k'], S22=self.reconstructed_spectra['S_22_k'],
+            S12=self.reconstructed_spectra['S_1_2_k'], S1212=self.reconstructed_spectra['S_12_12_k'],
+            S112=self.reconstructed_spectra['S_1_12_k'], S212=self.reconstructed_spectra['S_2_12_k'],
+        )
+        np.savez(path, **save_dict)
 
     def run(self):
         """Runs the full reconstruction pipeline."""
@@ -217,7 +303,7 @@ class SpectraReconstructor:
 def main():
     """Main function to run the spectra reconstruction."""
     # --- User Configuration ---
-    data_folder = "DraftRun_NoSPAM_Feature"
+    data_folder = "DraftRun_NoSPAM_Featureless"
     # ------------------------
 
     try:

@@ -54,9 +54,9 @@ class QNSExperimentConfig:
     """
     tau: jnp.float64 = 2.5e-8
     M: jnp.int64 = 20
-    t_grain: jnp.int64 = 1600
+    t_grain: jnp.int64 = 2000
     truncate: jnp.int64 = 20
-    w_grain: jnp.int64 = 1000
+    w_grain: jnp.int64 = 800
     spec_vec: list = field(default_factory=lambda: [S_11, S_22, S_1212])
     a_sp: np.ndarray = field(default_factory=lambda: jnp.array([1., 1.]))
     c: np.ndarray = field(
@@ -72,7 +72,7 @@ class QNSExperimentConfig:
     gamma: jnp.float64 = T / 14
     gamma_12: jnp.float64 = T / 28
     n_shots: jnp.int64 = 4000
-    fname: str = "DraftRun_NoSPAM_Feature"
+    fname: str = "DraftRun_NoSPAM_Featureless"
     parent_dir: str = os.pardir
 
     def __post_init__(self):

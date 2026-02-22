@@ -939,7 +939,7 @@ def plot_comparison(config, known_seq, opt_seq, T_seq):
 
     plt.tight_layout()
     
-    save_path = os.path.join(config.path, "sequence_comparison_cz.pdf")
+    save_path = os.path.join(plot_utils.get_figures_dir(config.path), "sequence_comparison_cz.pdf")
     plt.savefig(save_path)
     print(f"Saved comparison plot to {save_path}")
     plt.close(fig)
@@ -1119,7 +1119,7 @@ def run_optimization(config):
              taxis=np.array(xaxis_known))
     
     # Plot
-    plot_utils.plot_infidelity_vs_gatetime(xaxis_known, yaxis_known, xaxis_opt, yaxis_opt, yaxis_nopulse, config.tau, os.path.join(config.path, config.plot_filename), min_gate_time=min_gate_time)
+    plot_utils.plot_infidelity_vs_gatetime(xaxis_known, yaxis_known, xaxis_opt, yaxis_opt, yaxis_nopulse, config.tau, os.path.join(plot_utils.get_figures_dir(config.path), config.plot_filename), min_gate_time=min_gate_time)
     
     # Plot best sequences
     if best_known_seq_overall or best_opt_seq_overall:

@@ -8,6 +8,32 @@ import matplotlib.ticker as ticker
 import numpy as np
 import jax.numpy as jnp
 
+# --- Figure output directory layout ---
+# All figures are saved under <data_folder>/figures/<category>/
+FIGURES_DIR = "figures"
+OPTIMIZATION_FIGURES_DIR = os.path.join(FIGURES_DIR, "optimization")
+PUBLICATION_FIGURES_DIR = os.path.join(FIGURES_DIR, "publication")
+
+
+def get_figures_dir(base_path, subdir=OPTIMIZATION_FIGURES_DIR):
+    """Return (and create) a figure output subdirectory inside the data folder.
+
+    Parameters
+    ----------
+    base_path : str
+        Root data folder path (e.g., config.path).
+    subdir : str
+        Subfolder relative to base_path (default: figures/optimization).
+
+    Returns
+    -------
+    str
+        Absolute path to the created directory.
+    """
+    path = os.path.join(base_path, subdir)
+    os.makedirs(path, exist_ok=True)
+    return path
+
 def make_tk12(tk1, tk2):
     """
     Combines two pulse sequences into a single sequence for the 12 interaction.
@@ -242,7 +268,7 @@ def plot_comparison(config, known_seq, opt_seq, T_seq, filename_suffix=""):
 
     plt.tight_layout()
     
-    save_path = os.path.join(config.path, f"sequence_comparison{filename_suffix}.pdf")
+    save_path = os.path.join(get_figures_dir(config.path), f"sequence_comparison{filename_suffix}.pdf")
     plt.savefig(save_path)
     print(f"Saved comparison plot to {save_path}")
     plt.close(fig)
@@ -321,7 +347,7 @@ def plot_filter_functions(config, known_seq, opt_seq, T_seq, filename_suffix="")
 
     plt.tight_layout()
     
-    save_path = os.path.join(config.path, f"filter_function_comparison{filename_suffix}.pdf")
+    save_path = os.path.join(get_figures_dir(config.path), f"filter_function_comparison{filename_suffix}.pdf")
     plt.savefig(save_path)
     print(f"Saved filter function comparison plot to {save_path}")
     plt.close(fig)
@@ -440,7 +466,7 @@ def plot_filter_functions_with_spectra(config, known_seq, opt_seq, T_seq, filena
         current_col += 1
 
     plt.tight_layout()
-    save_path = os.path.join(config.path, f"filter_spectra_overlay{filename_suffix}.pdf")
+    save_path = os.path.join(get_figures_dir(config.path), f"filter_spectra_overlay{filename_suffix}.pdf")
     plt.savefig(save_path)
     print(f"Saved filter-spectra overlay plot to {save_path}")
     plt.close(fig)
@@ -500,7 +526,7 @@ def plot_generalized_filter_functions(config, seq, T_seq, label):
     plt.suptitle(f"Generalized Filter Functions - {label}")
     plt.tight_layout()
     filename = f"generalized_filter_functions_{label.replace(' ', '_')}.pdf"
-    save_path = os.path.join(config.path, filename)
+    save_path = os.path.join(get_figures_dir(config.path), filename)
     plt.savefig(save_path)
     print(f"Saved generalized filter functions plot to {save_path}")
     plt.close(fig)
@@ -610,7 +636,7 @@ def plot_spectra_filter_overlay_6(config, seq, T_seq, label):
 
         plt.tight_layout()
         filename = f"spectra_filter_overlay_{suffix}_{label.replace(' ', '_')}.pdf"
-        save_path = os.path.join(config.path, filename)
+        save_path = os.path.join(get_figures_dir(config.path), filename)
         plt.savefig(save_path)
         print(f"Saved spectra/filter overlay to {save_path}")
         plt.close(fig)
@@ -683,7 +709,7 @@ def plot_noise_correlations(config):
             ax.legend(fontsize='small')
             
     plt.tight_layout()
-    save_path = os.path.join(config.path, "noise_correlations.pdf")
+    save_path = os.path.join(get_figures_dir(config.path), "noise_correlations.pdf")
     plt.savefig(save_path)
     print(f"Saved noise correlations plot to {save_path}")
     plt.close(fig)
@@ -754,7 +780,7 @@ def plot_control_correlations(config, seq, T_seq, M, label):
     plt.suptitle(f"Control Correlation Functions - {label}")
     plt.tight_layout()
     filename = f"control_correlations_{label.replace(' ', '_')}.pdf"
-    save_path = os.path.join(config.path, filename)
+    save_path = os.path.join(get_figures_dir(config.path), filename)
     plt.savefig(save_path)
     print(f"Saved control correlations plot to {save_path}")
     plt.close(fig)
