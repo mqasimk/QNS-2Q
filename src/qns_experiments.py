@@ -53,7 +53,7 @@ class QNSExperimentConfig:
         parent_dir: The parent directory to save the results in.
     """
     tau: jnp.float64 = 2.5e-8
-    M: jnp.int64 = 20
+    M: jnp.int64 = 10
     t_grain: jnp.int64 = 2000
     truncate: jnp.int64 = 20
     w_grain: jnp.int64 = 800
@@ -169,7 +169,7 @@ class ExperimentRunner:
             raise ValueError(f"Invalid experiment type: {exp_type}")
 
         exp_func = exp_map[exp_type]
-        result = exp_func(
+        means, stderrs = exp_func(
             solver_prop,
             pulse_sequence,
             self.config.t_vec,
@@ -185,7 +185,8 @@ class ExperimentRunner:
             c=self.config.c,
             noise_mats=self.noise_mats,
             **kwargs)
-        self.results[exp_name] = result
+        self.results[exp_name] = means
+        self.results[exp_name + '_err'] = stderrs
 
         print(
             f"--- {exp_name} completed in {time.time() - start_time:.2f}s ---")
