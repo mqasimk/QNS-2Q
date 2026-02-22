@@ -14,3 +14,4 @@ __pycache__/
 # Virtual environment
 venv/
 .aider*
+GEMINI.md
