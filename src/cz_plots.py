@@ -172,8 +172,10 @@ def generate_publication_plot():
     # --------------
     plt.tight_layout(pad=0.3)
     output_filename = "infidelity_vs_gatetime_pub.pdf"
-    # Save where the data was obtained from
-    output_dir = os.path.dirname(data_file)
+    # Save into figures/publication/ subfolder of the data folder
+    data_dir = os.path.dirname(os.path.dirname(data_file))  # up from plotting_data/
+    output_dir = os.path.join(data_dir, "figures", "publication")
+    os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, output_filename)
     
     plt.savefig(output_path, format='pdf', dpi=300)
