@@ -241,38 +241,38 @@ if __name__ == "__main__":
     # S_11
     axs[0, 0].plot(wk_np / xunits, np.real(spectra_k['S_11']), 'r^')
     axs[0, 0].plot(w_np / xunits, np.real(spectra['S_11']), 'r--', lw=1.5 * plot_params['lw'])
-    axs[0, 0].legend([r'$\hat{S}_{1,1}^+(\omega_k)$', r'$S_{1,1}^+(\omega)$'], fontsize=plot_params['legendfont'])
+    axs[0, 0].legend([r'$\hat{S}_{1,1}(\omega_k)$', r'$S_{1,1}(\omega)$'], fontsize=plot_params['legendfont'])
 
     # S_22
     axs[0, 1].plot(wk_np / xunits, np.real(spectra_k['S_22']), 'r^')
     axs[0, 1].plot(w_np / xunits, np.real(spectra['S_22']), 'r--', lw=1.5 * plot_params['lw'])
-    axs[0, 1].legend([r'$\hat{S}_{2,2}^+(\omega_k)$', r'$S_{2,2}^+(\omega)$'], fontsize=plot_params['legendfont'])
+    axs[0, 1].legend([r'$\hat{S}_{2,2}(\omega_k)$', r'$S_{2,2}(\omega)$'], fontsize=plot_params['legendfont'])
 
     # S_1212
     axs[0, 2].plot(wk_np / xunits, np.real(spectra_k['S_1212']), 'r^')
     axs[0, 2].plot(w_np / xunits, np.real(spectra['S_1212']), 'r--', lw=1.5 * plot_params['lw'])
-    axs[0, 2].legend([r'$\hat{S}_{12,12}^+(\omega_k)$', r'$S_{12,12}^+(\omega)$'], fontsize=plot_params['legendfont'])
+    axs[0, 2].legend([r'$\hat{S}_{12,12}(\omega_k)$', r'$S_{12,12}(\omega)$'], fontsize=plot_params['legendfont'])
 
     # S_1_2
     axs[1, 0].plot(wk_np / xunits, np.real(spectra_k['S_1_2']), 'r^')
     axs[1, 0].plot(w_np / xunits, np.real(spectra['S_1_2']), 'r--', lw=1.5 * plot_params['lw'])
     axs[1, 0].plot(wk_np / xunits, np.imag(spectra_k['S_1_2']), 'b^')
     axs[1, 0].plot(w_np / xunits, np.imag(spectra['S_1_2']), 'b--', lw=1.5 * plot_params['lw'])
-    axs[1, 0].legend([r'Re[$\hat{S}_{1,2}^+(\omega_k)$]', r'Re[$S_{1,2}^+(\omega)$]', r'Im[$\hat{S}_{1,2}^+(\omega_k)$]', r'Im[$S_{1,2}^+(\omega)$]'], fontsize=plot_params['legendfont'])
+    axs[1, 0].legend([r'Re[$\hat{S}_{1,2}(\omega_k)$]', r'Re[$S_{1,2}(\omega)$]', r'Im[$\hat{S}_{1,2}(\omega_k)$]', r'Im[$S_{1,2}(\omega)$]'], fontsize=plot_params['legendfont'])
 
     # S_1_12
     axs[1, 1].plot(wk_np / xunits, np.real(spectra_k['S_1_12']), 'r^')
     axs[1, 1].plot(w_np / xunits, np.real(spectra['S_1_12']), 'r--', lw=1.5 * plot_params['lw'])
     axs[1, 1].plot(wk_np / xunits, np.imag(spectra_k['S_1_12']), 'b^')
     axs[1, 1].plot(w_np / xunits, np.imag(spectra['S_1_12']), 'b--', lw=1.5 * plot_params['lw'])
-    axs[1, 1].legend([r'Re[$\hat{S}_{1,12}^+(\omega_k)$]', r'Re[$S_{1,12}^+(\omega)$]', r'Im[$\hat{S}_{1,12}^+(\omega_k)$]', r'Im[$S_{1,12}^+(\omega)$]'], fontsize=plot_params['legendfont'])
+    axs[1, 1].legend([r'Re[$\hat{S}_{1,12}(\omega_k)$]', r'Re[$S_{1,12}(\omega)$]', r'Im[$\hat{S}_{1,12}(\omega_k)$]', r'Im[$S_{1,12}(\omega)$]'], fontsize=plot_params['legendfont'])
 
     # S_2_12
     axs[1, 2].plot(wk_np / xunits, np.real(spectra_k['S_2_12']), 'r^')
     axs[1, 2].plot(w_np / xunits, np.real(spectra['S_2_12']), 'r--', lw=1.5 * plot_params['lw'])
     axs[1, 2].plot(wk_np / xunits, np.imag(spectra_k['S_2_12']), 'b^')
     axs[1, 2].plot(w_np / xunits, np.imag(spectra['S_2_12']), 'b--', lw=1.5 * plot_params['lw'])
-    axs[1, 2].legend([r'Re[$\hat{S}_{2,12}^+(\omega_k)$]', r'Re[$S_{2,12}^+(\omega)$]', r'Im[$\hat{S}_{2,12}^+(\omega_k)$]', r'Im[$S_{2,12}^+(\omega)$]'], fontsize=plot_params['legendfont'])
+    axs[1, 2].legend([r'Re[$\hat{S}_{2,12}(\omega_k)$]', r'Re[$S_{2,12}(\omega)$]', r'Im[$\hat{S}_{2,12}(\omega_k)$]', r'Im[$S_{2,12}(\omega)$]'], fontsize=plot_params['legendfont'])
 
     for ax_row in axs:
         for ax in ax_row:

@@ -156,7 +156,7 @@ class Config:
         w_max_sys = 2 * jnp.pi * self.mc / self.Tqns
         # Multiplier to ensure dt is small enough (e.g. ~10-100ns)
         self.w_max = 2 * w_max_sys
-        self.N_w = 120000
+        self.N_w = 20000
         
         self.w = jnp.linspace(0, self.w_max, self.N_w)
         self.w_ideal = jnp.linspace(0, 2 * self.w_max, 2 * self.N_w)
@@ -579,6 +579,67 @@ def evaluate_overlap_comb(pulse_times_a, pulse_times_b, S_packed, omega_k, T_seq
     
     return total * M / T_seq
 
+
+def prepare_time_domain_overlap(SMat, w_grid, tau, T_seq, M):
+    """Prepare folded correlation data for time-domain overlap integral method.
+
+    Applies adaptive zero-padding to achieve dt <= tau/4 for improved time
+    resolution, mirrors spectrum for Hermitian symmetry, IFFTs to obtain R(τ),
+    and folds the correlation across M repetitions.
+
+    Returns
+    -------
+    RMat_data : jnp.ndarray, shape (4, 4, 2*n_base_steps-1)
+        Folded noise correlation matrix on the base-sequence lag grid.
+    dt : float
+        Time-domain grid spacing (seconds).
+    n_base_steps : int
+        Number of time steps spanning one base sequence period T_seq.
+    """
+    N = w_grid.shape[0]
+    dw = float(w_grid[1] - w_grid[0])
+    w_max = float(w_grid[-1])
+
+    # Adaptive padding: ensure dt <= tau / 4
+    # After padding:  array has (1 + pad_factor) * N points
+    # After mirror:   N_sym ≈ 2 * (1 + pad_factor) * N
+    # dt = 2π / (N_sym * dw) ≈ π / ((1 + pad_factor) * w_max)
+    desired_dt = tau / 4
+    pad_factor = max(int(np.ceil(np.pi / (w_max * desired_dt))) - 1, 1)
+
+    SMat_padded = jnp.pad(SMat, ((0, 0), (0, 0), (0, pad_factor * N)))
+
+    # Mirror for Hermitian symmetry: S(-ω) = S*(ω)
+    SMat_sym = jnp.concatenate(
+        [SMat_padded, jnp.conj(jnp.flip(SMat_padded[..., 1:-1], axis=-1))],
+        axis=-1,
+    )
+    N_sym = SMat_sym.shape[-1]
+
+    dt = 2 * np.pi / (N_sym * dw)
+    print(f"  Time-domain setup: pad_factor={pad_factor}, dt={dt*1e9:.2f} ns, "
+          f"tau/4={tau/4*1e9:.2f} ns")
+
+    lags_R = (jnp.arange(N_sym) - N_sym // 2) * dt
+    RMat_vals = jnp.fft.ifft(SMat_sym, axis=-1)
+    RMat_scaled = RMat_vals / dt
+    RMat_shifted = jnp.fft.fftshift(RMat_scaled, axes=-1)
+
+    n_base_steps = int(np.ceil(T_seq / dt))
+
+    @jax.jit
+    def get_folded_matrix(RMat_in):
+        R_flat = RMat_in.reshape(-1, RMat_in.shape[-1])
+        folded_flat = jax.vmap(
+            lambda r: precompute_R_folded(r, lags_R, M, T_seq, dt, n_base_steps)
+        )(R_flat)
+        return folded_flat.reshape(4, 4, -1)
+
+    RMat_data = get_folded_matrix(RMat_shifted)
+
+    return RMat_data, dt, n_base_steps
+
+
 @jax.jit
 def calculate_idling_fidelity(I_matrix):
     """
@@ -730,37 +791,14 @@ def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
             
     else:
         print(f"Using Folded Noise Matrix (M={M})...")
-        N = config.w.shape[0]
-        dw = config.w[1] - config.w[0]
-
-        # Pad SMat with zeros to double the range (improving time resolution dt)
-        SMat_padded = jnp.pad(config.SMat, ((0,0), (0,0), (0, N)))
-
-        # Mirror SMat to ensure Hermitian symmetry
-        SMat_sym = jnp.concatenate([SMat_padded, jnp.conj(jnp.flip(SMat_padded[..., 1:-1], axis=-1))], axis=-1)
-        N_sym = SMat_sym.shape[-1]
-
-        dt = (2 * np.pi / (N_sym * dw))
-        lags_R = (jnp.arange(N_sym) - N_sym//2) * dt
-
-        RMat_vals = jnp.fft.ifft(SMat_sym, axis=-1)
-        RMat_scaled = RMat_vals / dt
-        RMat_shifted = jnp.fft.fftshift(RMat_scaled, axes=-1)
-
-        n_base_steps = int(np.ceil(T_seq / dt))
-
-        @jax.jit
-        def get_folded_matrix(RMat_in):
-            R_flat = RMat_in.reshape(-1, RMat_in.shape[-1])
-            folded_flat = jax.vmap(lambda r: precompute_R_folded(r, lags_R, M, T_seq, dt, n_base_steps))(R_flat)
-            return folded_flat.reshape(4, 4, -1)
-
-        RMat_data = get_folded_matrix(RMat_shifted)
+        RMat_data, dt, n_base_steps = prepare_time_domain_overlap(
+            config.SMat, config.w, config.tau, T_seq, M
+        )
 
         @jax.jit
         def overlap_fn(pt_a, pt_b, data):
             return evaluate_overlap_folded(pt_a, pt_b, data, dt, n_base_steps)
-    
+
     def run_single_optimization(n1, n2, initial_params, label):
         nonlocal best_inf, best_seq
 
@@ -866,32 +904,9 @@ def evaluate_known_sequences(config, M, pLib):
             
     else:
         print(f"Using Folded Noise Matrix (M={M})...")
-        N = config.w.shape[0]
-        dw = config.w[1] - config.w[0]
-
-        # Pad SMat with zeros to double the range (improving time resolution dt)
-        SMat_padded = jnp.pad(config.SMat, ((0,0), (0,0), (0, N)))
-
-        # Mirror SMat to ensure Hermitian symmetry
-        SMat_sym = jnp.concatenate([SMat_padded, jnp.conj(jnp.flip(SMat_padded[..., 1:-1], axis=-1))], axis=-1)
-        N_sym = SMat_sym.shape[-1]
-
-        dt = (2 * np.pi / (N_sym * dw))
-        lags_R = (jnp.arange(N_sym) - N_sym//2) * dt
-
-        RMat_vals = jnp.fft.ifft(SMat_sym, axis=-1)
-        RMat_scaled = RMat_vals / dt
-        RMat_shifted = jnp.fft.fftshift(RMat_scaled, axes=-1)
-
-        n_base_steps = int(np.ceil(T_seq / dt))
-
-        @jax.jit
-        def get_folded_matrix(RMat_in):
-            R_flat = RMat_in.reshape(-1, RMat_in.shape[-1])
-            folded_flat = jax.vmap(lambda r: precompute_R_folded(r, lags_R, M, T_seq, dt, n_base_steps))(R_flat)
-            return folded_flat.reshape(4, 4, -1)
-
-        RMat_data = get_folded_matrix(RMat_shifted)
+        RMat_data, dt, n_base_steps = prepare_time_domain_overlap(
+            config.SMat, config.w, config.tau, T_seq, M
+        )
 
         @jax.jit
         def overlap_fn(pt_a, pt_b, data):
@@ -952,32 +967,9 @@ def calculate_infidelity(seq, config, M, T_seq, use_ideal=False):
         overlap_fn = lambda pt_a, pt_b, data: evaluate_overlap_comb(pt_a, pt_b, data, omega_k, T_seq, M)
 
     else:
-        N = w_grid.shape[0]
-        dw = w_grid[1] - w_grid[0]
-
-        SMat_curr = SMat
-        if not use_ideal:
-             # Pad to reduce discretization error (match Ideal resolution approx)
-             SMat_curr = jnp.pad(SMat, ((0,0), (0,0), (0, N)))
-
-        # Mirror SMat to ensure Hermitian symmetry
-        SMat_sym = jnp.concatenate([SMat_curr, jnp.conj(jnp.flip(SMat_curr[..., 1:-1], axis=-1))], axis=-1)
-        N_sym = SMat_sym.shape[-1]
-
-        dt = (2 * np.pi / (N_sym * dw))
-        lags_R = (jnp.arange(N_sym) - N_sym//2) * dt
-
-        RMat_vals = jnp.fft.ifft(SMat_sym, axis=-1)
-        RMat_scaled = RMat_vals / dt
-        RMat_shifted = jnp.fft.fftshift(RMat_scaled, axes=-1)
-
-        n_base_steps = int(np.ceil(T_seq / dt))
-
-        def get_folded_matrix(RMat_in):
-            R_flat = RMat_in.reshape(-1, RMat_in.shape[-1])
-            folded_flat = jax.vmap(lambda r: precompute_R_folded(r, lags_R, M, T_seq, dt, n_base_steps))(R_flat)
-            return folded_flat.reshape(4, 4, -1)
-        RMat_data = get_folded_matrix(RMat_shifted)
+        RMat_data, dt, n_base_steps = prepare_time_domain_overlap(
+            SMat, w_grid, config.tau, T_seq, M
+        )
 
         overlap_fn = lambda pt_a, pt_b, data: evaluate_overlap_folded(pt_a, pt_b, data, dt, n_base_steps)
 

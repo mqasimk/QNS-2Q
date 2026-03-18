@@ -72,13 +72,13 @@ def plot_all_spectrums(axs, w_plot, wk, specs1, specs2, params):
     s2 = {k: specs2[k] for k in specs2.files}
     gamma, gamma_12 = params['gamma'], params['gamma_12']
 
-    plot_real_spectrum(axs[0, 0], w_plot, wk, s1['S11'], s2['S11'], S_11(w_plot), r'$S_{1,1}^+(\omega)$', r'$\omega$(MHz)', r'$S^+_{a,b}(\omega)$ Hz', [r'$\hat{S}_{1,1}^+(\omega_k)$', r'$\hat{S}_{1,1,mit}^+(\omega_k)$', r'$S_{1,1}^+(\omega)$'])
-    plot_real_spectrum(axs[0, 1], w_plot, wk, s1['S22'], s2['S22'], S_22(w_plot), r'$S_{2,2}^+(\omega)$', r'$\omega$(MHz)', '', [r'$\hat{S}_{2,2}^+(\omega_k)$', r'$\hat{S}_{2,2,mit}^+(\omega_k)$', r'$S_{2,2}^+(\omega)$'])
-    plot_real_spectrum(axs[0, 2], w_plot, wk, s1['S1212'], s2['S1212'], S_1212(w_plot), r'$S_{12,12}^+(\omega)$', r'$\omega$(MHz)', '', [r'$\hat{S}_{12,12}^+(\omega_k)$', r'$\hat{S}_{12,12,mit}^+(\omega_k)$', r'$S_{12,12}^+(\omega)$'])
+    plot_real_spectrum(axs[0, 0], w_plot, wk, s1['S11'], s2['S11'], S_11(w_plot), r'$S_{1,1}(\omega)$', r'$\omega$(MHz)', r'$S^+_{a,b}(\omega)$ Hz', [r'$\hat{S}_{1,1}(\omega_k)$', r'$\hat{S}_{1,1,mit}(\omega_k)$', r'$S_{1,1}(\omega)$'])
+    plot_real_spectrum(axs[0, 1], w_plot, wk, s1['S22'], s2['S22'], S_22(w_plot), r'$S_{2,2}(\omega)$', r'$\omega$(MHz)', '', [r'$\hat{S}_{2,2}(\omega_k)$', r'$\hat{S}_{2,2,mit}(\omega_k)$', r'$S_{2,2}(\omega)$'])
+    plot_real_spectrum(axs[0, 2], w_plot, wk, s1['S1212'], s2['S1212'], S_1212(w_plot), r'$S_{12,12}(\omega)$', r'$\omega$(MHz)', '', [r'$\hat{S}_{12,12}(\omega_k)$', r'$\hat{S}_{12,12,mit}(\omega_k)$', r'$S_{12,12}(\omega)$'])
 
-    plot_complex_spectrum(axs[1, 0], w_plot, wk, s1['S12'], s2['S12'], S_1_2(w_plot, gamma), r'$S_{1,2}^+(\omega)$', r'$\omega$(MHz)', r'$S^+_{a,b}(\omega)$ Hz', [r'Re[$\hat{S}_{1,2}^+(\omega_k)$]', r'Re[$\hat{S}_{1,2,mit}^+(\omega_k)$]', r'Re[$S_{1,2}^+(\omega)$]', r'Im[$\hat{S}_{1,2}^+(\omega_k)$]', r'Im[$\hat{S}_{1,2,mit}^+(\omega_k)$]', r'Im[$S_{1,2}^+(\omega)$]'])
-    plot_complex_spectrum(axs[1, 1], w_plot, wk, s1['S112'], s2['S112'], S_1_12(w_plot, gamma_12), r'$S_{1,12}^+(\omega)$', r'$\omega$(MHz)', '', [r'Re[$\hat{S}_{1,12}^+(\omega_k)$]', r'Re[$\hat{S}_{1,12,mit}^+(\omega_k)$]', r'Re[$S_{1,12}^+(\omega)$]', r'Im[$\hat{S}_{1,12}^+(\omega_k)$]', r'Im[$\hat{S}_{1,12,mit}^+(\omega_k)$]', r'Im[$S_{1,12}^+(\omega)$]'])
-    plot_complex_spectrum(axs[1, 2], w_plot, wk, s1['S212'], s2['S212'], S_2_12(w_plot, gamma_12 - gamma), r'$S_{2,12}^+(\omega)$', r'$\omega$(MHz)', '', [r'Re[$\hat{S}_{2,12}^+(\omega_k)$]', r'Re[$\hat{S}_{2,12,mit}^+(\omega_k)$]', r'Re[$S_{2,12}^+(\omega)$]', r'Im[$\hat{S}_{2,12}^+(\omega_k)$]', r'Im[$\hat{S}_{2,12,mit}^+(\omega_k)$]', r'Im[$S_{2,12}^+(\omega)$]'])
+    plot_complex_spectrum(axs[1, 0], w_plot, wk, s1['S12'], s2['S12'], S_1_2(w_plot, gamma), r'$S_{1,2}(\omega)$', r'$\omega$(MHz)', r'$S^+_{a,b}(\omega)$ Hz', [r'Re[$\hat{S}_{1,2}(\omega_k)$]', r'Re[$\hat{S}_{1,2,mit}(\omega_k)$]', r'Re[$S_{1,2}(\omega)$]', r'Im[$\hat{S}_{1,2}(\omega_k)$]', r'Im[$\hat{S}_{1,2,mit}(\omega_k)$]', r'Im[$S_{1,2}(\omega)$]'])
+    plot_complex_spectrum(axs[1, 1], w_plot, wk, s1['S112'], s2['S112'], S_1_12(w_plot, gamma_12), r'$S_{1,12}(\omega)$', r'$\omega$(MHz)', '', [r'Re[$\hat{S}_{1,12}(\omega_k)$]', r'Re[$\hat{S}_{1,12,mit}(\omega_k)$]', r'Re[$S_{1,12}(\omega)$]', r'Im[$\hat{S}_{1,12}(\omega_k)$]', r'Im[$\hat{S}_{1,12,mit}(\omega_k)$]', r'Im[$S_{1,12}(\omega)$]'])
+    plot_complex_spectrum(axs[1, 2], w_plot, wk, s1['S212'], s2['S212'], S_2_12(w_plot, gamma_12 - gamma), r'$S_{2,12}(\omega)$', r'$\omega$(MHz)', '', [r'Re[$\hat{S}_{2,12}(\omega_k)$]', r'Re[$\hat{S}_{2,12,mit}(\omega_k)$]', r'Re[$S_{2,12}(\omega)$]', r'Im[$\hat{S}_{2,12}(\omega_k)$]', r'Im[$\hat{S}_{2,12,mit}(\omega_k)$]', r'Im[$S_{2,12}(\omega)$]'])
 
 def main():
     """Main function to load data, plot, and save the results."""

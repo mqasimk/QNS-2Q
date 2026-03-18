@@ -71,21 +71,21 @@ def plot_infidelity_vs_gatetime(xaxis_known, yaxis_known, xaxis_opt, yaxis_opt, 
     xaxis_known_tau = np.array(xaxis_known) / tau
     xaxis_opt_tau = np.array(xaxis_opt) / tau
     
-    ax.plot(xaxis_known_tau, yaxis_known, 'bs-', label='Known')
-    ax.plot(xaxis_opt_tau, yaxis_opt, 'ko-', label='Optimized')
+    ax.plot(xaxis_known_tau, yaxis_known, 'bs-', label='CDD')
+    ax.plot(xaxis_opt_tau, yaxis_opt, 'ko-', label='NT')
     if yaxis_nopulse is not None:
         # Ensure yaxis_nopulse matches length of xaxis_known if it was collected in the same loop
         # Assuming yaxis_nopulse corresponds to xaxis_known
-        ax.plot(xaxis_known_tau, yaxis_nopulse, 'r^-', label='No Pulse')
-    
+        ax.plot(xaxis_known_tau, yaxis_nopulse, 'r^-', label='FID')
+
     if min_gate_time is not None:
         min_gate_time_tau = min_gate_time / tau
-        ax.axvline(x=min_gate_time_tau, color='gray', linestyle='--', label='Min Gate Time')
-    
+        ax.axvline(x=min_gate_time_tau, color='gray', linestyle='--', label=r'$T_{G,\min}$')
+
     ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.set_xlabel(r'Gate Time ($\tau$)')
-    ax.set_ylabel('Infidelity')
+    ax.set_xlabel(r'$T_G / \tau$')
+    ax.set_ylabel(r'$1 - F_{\rm pro}$')
     ax.grid(True, which='both', linestyle='--')
     ax.legend()
     
@@ -101,15 +101,15 @@ def plot_infidelity_vs_M(M_values, yaxis_known, yaxis_opt, yaxis_nopulse, save_p
     """Plots Infidelity vs M (Repetitions) with consistent formatting."""
     fig, ax = plt.subplots(figsize=(10, 6))
     
-    ax.plot(M_values, yaxis_known, 'bs-', label='Known')
-    ax.plot(M_values, yaxis_opt, 'ko-', label='Optimized')
+    ax.plot(M_values, yaxis_known, 'bs-', label='CDD')
+    ax.plot(M_values, yaxis_opt, 'ko-', label='NT')
     if yaxis_nopulse is not None:
-        ax.plot(M_values, yaxis_nopulse, 'r^-', label='No Pulse')
-    
+        ax.plot(M_values, yaxis_nopulse, 'r^-', label='FID')
+
     ax.set_xscale('log', base=2)
     ax.set_yscale('log')
     ax.set_xlabel('Repetitions (M)')
-    ax.set_ylabel('Infidelity')
+    ax.set_ylabel(r'$1 - F_{\rm pro}$')
     ax.grid(True, which='both', linestyle='--')
     ax.legend()
     
@@ -126,23 +126,23 @@ def plot_infidelity_vs_M_labeled(M_values, known_infs, known_labels, opt_infs, o
     fig, ax = plt.subplots(figsize=(12, 8))
     
     # Known
-    ax.plot(M_values, known_infs, 'bs-', label='Known')
+    ax.plot(M_values, known_infs, 'bs-', label='CDD')
     for m, inf, lab in zip(M_values, known_infs, known_labels):
         ax.annotate(lab, (m, inf), textcoords="offset points", xytext=(0, 5), ha='center', va='bottom', fontsize=8, rotation=45)
 
     # Opt
-    ax.plot(M_values, opt_infs, 'ko-', label='Optimized')
+    ax.plot(M_values, opt_infs, 'ko-', label='NT')
     for m, inf, lab in zip(M_values, opt_infs, opt_labels):
         ax.annotate(lab, (m, inf), textcoords="offset points", xytext=(0, -5), ha='center', va='top', fontsize=8, rotation=45)
 
     # No Pulse
     if nopulse_infs is not None:
-        ax.plot(M_values, nopulse_infs, 'r^-', label='No Pulse')
+        ax.plot(M_values, nopulse_infs, 'r^-', label='FID')
 
     ax.set_xscale('log', base=2)
     ax.set_yscale('log')
     ax.set_xlabel('Repetitions (M)')
-    ax.set_ylabel('Infidelity')
+    ax.set_ylabel(r'$1 - F_{\rm pro}$')
     ax.grid(True, which='both', linestyle='--')
     ax.legend()
     ax.set_xticks(M_values)
@@ -189,12 +189,12 @@ def plot_infidelity_vs_gatetime_all_M(results_by_M, tau, save_path):
     gate_times = np.array(results_by_M[first_M]['gate_times'])
     gate_times_tau = gate_times / tau
     nopulse_infs = results_by_M[first_M]['nopulse']
-    ax.plot(gate_times_tau, nopulse_infs, 'r^-', label='No Pulse', linewidth=2)
+    ax.plot(gate_times_tau, nopulse_infs, 'r^-', label='FID', linewidth=2)
 
     ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.set_xlabel(r'Gate Time ($\tau$)')
-    ax.set_ylabel('Infidelity')
+    ax.set_xlabel(r'$T_G / \tau$')
+    ax.set_ylabel(r'$1 - F_{\rm pro}$')
     ax.grid(True, which='both', linestyle='--')
     ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     
@@ -238,21 +238,21 @@ def plot_comparison(config, known_seq, opt_seq, T_seq, filename_suffix=""):
         # Row 0: y1
         axs[0, col_idx].step(t*1e6, y1, 'k-', where='post')
         axs[0, col_idx].set_title(f"{title_prefix}\nQubit 1 Switching Function ($y_1$)")
-        axs[0, col_idx].set_ylabel("$y_1(t)$")
+        axs[0, col_idx].set_ylabel(r"$y_1(t)$")
         axs[0, col_idx].set_ylim(-1.2, 1.2)
         axs[0, col_idx].grid(True, alpha=0.3)
-        
+
         # Row 1: y2
         axs[1, col_idx].step(t*1e6, y2, 'k-', where='post')
-        axs[1, col_idx].set_title("Qubit 2 Switching Function ($y_2$)")
-        axs[1, col_idx].set_ylabel("$y_2(t)$")
+        axs[1, col_idx].set_title(r"Qubit 2 Switching Function ($y_2$)")
+        axs[1, col_idx].set_ylabel(r"$y_2(t)$")
         axs[1, col_idx].set_ylim(-1.2, 1.2)
         axs[1, col_idx].grid(True, alpha=0.3)
-        
+
         # Row 2: y12
         axs[2, col_idx].step(t*1e6, y12, 'k-', where='post')
-        axs[2, col_idx].set_title("Interaction Switching Function ($y_{12}$)")
-        axs[2, col_idx].set_ylabel("$y_{12}(t)$")
+        axs[2, col_idx].set_title(r"Interaction Switching Function ($y_{12}$)")
+        axs[2, col_idx].set_ylabel(r"$y_{12}(t)$")
         axs[2, col_idx].set_xlabel(r"Time ($\mu$s)")
         axs[2, col_idx].set_ylim(-1.2, 1.2)
         axs[2, col_idx].grid(True, alpha=0.3)
@@ -333,20 +333,20 @@ def plot_filter_functions(config, known_seq, opt_seq, T_seq, filename_suffix="")
         plot_asinh(axs[2, col_idx], freqs_mhz, F12, 'g', "$F_{12}$")
         axs[2, col_idx].set_title("Interaction Filter Function ($F_{12}$)")
         if not axs[2, col_idx].get_ylabel(): axs[2, col_idx].set_ylabel(r"$F_{12}(\omega)$")
-        axs[2, col_idx].set_xlabel("Frequency (MHz)")
+        axs[2, col_idx].set_xlabel(r"$\omega$ (MHz)")
         axs[2, col_idx].grid(True, alpha=0.3)
 
     current_col = 0
     if has_known:
         plot_col(current_col, known_seq, "Best Known Sequence")
         current_col += 1
-    
+
     if has_opt:
         plot_col(current_col, opt_seq, "Best Optimized Sequence")
         current_col += 1
 
     plt.tight_layout()
-    
+
     save_path = os.path.join(get_figures_dir(config.path), f"filter_function_comparison{filename_suffix}.pdf")
     plt.savefig(save_path)
     print(f"Saved filter function comparison plot to {save_path}")
@@ -452,7 +452,7 @@ def plot_filter_functions_with_spectra(config, known_seq, opt_seq, T_seq, filena
             
             ax1.set_title(f"{title_prefix}\n{F_labels[row]} vs {spectra_labels[row]}")
             if row == 2:
-                ax1.set_xlabel("Frequency (MHz)")
+                ax1.set_xlabel(r"$\omega$ (MHz)")
             
             ax1.grid(True, which='both', alpha=0.3)
 
@@ -556,12 +556,12 @@ def plot_spectra_filter_overlay_6(config, seq, T_seq, label):
     # Pairs: (S_idx1, S_idx2, Z_a, Z_b, S_label, G_label, Filename_Suffix)
     # SMat indices: 1->1, 2->2, 3->12
     pairs = [
-        (1, 1, Z1, Z1, r"$S^+_{1,1}(\omega)$", r"$G^+_{1,1}(\omega, T)$", "S11"),
-        (2, 2, Z2, Z2, r"$S^+_{2,2}(\omega)$", r"$G^+_{2,2}(\omega, T)$", "S22"),
-        (3, 3, Z12, Z12, r"$S^+_{12,12}(\omega)$", r"$G^+_{12,12}(\omega, T)$", "S1212"),
-        (1, 2, Z1, Z2, r"$S^+_{1,2}(\omega)$", r"$G^+_{1,2}(\omega, T)$", "S12"),
-        (1, 3, Z1, Z12, r"$S^+_{1,12}(\omega)$", r"$G^+_{1,12}(\omega, T)$", "S112"),
-        (2, 3, Z2, Z12, r"$S^+_{2,12}(\omega)$", r"$G^+_{2,12}(\omega, T)$", "S212")
+        (1, 1, Z1, Z1, r"$S_{1,1}(\omega)$", r"$G_{1,1}(\omega, T_G)$", "S11"),
+        (2, 2, Z2, Z2, r"$S_{2,2}(\omega)$", r"$G_{2,2}(\omega, T_G)$", "S22"),
+        (3, 3, Z12, Z12, r"$S_{12,12}(\omega)$", r"$G_{12,12}(\omega, T_G)$", "S1212"),
+        (1, 2, Z1, Z2, r"$S_{1,2}(\omega)$", r"$G_{1,2}(\omega, T_G)$", "S12"),
+        (1, 3, Z1, Z12, r"$S_{1,12}(\omega)$", r"$G_{1,12}(\omega, T_G)$", "S112"),
+        (2, 3, Z2, Z12, r"$S_{2,12}(\omega)$", r"$G_{2,12}(\omega, T_G)$", "S212")
     ]
     
     for idx, (s_i, s_j, Za, Zb, s_label, g_label, suffix) in enumerate(pairs):
@@ -632,7 +632,7 @@ def plot_spectra_filter_overlay_6(config, seq, T_seq, label):
         lines2, labels2 = ax2.get_legend_handles_labels()
         ax1.legend(lines1 + lines2, labels1 + labels2, loc='best', fontsize=14)
         
-        ax1.set_xlabel(r"$\omega(MHz)$", fontsize=16)
+        ax1.set_xlabel(r"$\omega$ (MHz)", fontsize=16)
 
         plt.tight_layout()
         filename = f"spectra_filter_overlay_{suffix}_{label.replace(' ', '_')}.pdf"
