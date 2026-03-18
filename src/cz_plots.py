@@ -102,21 +102,21 @@ def generate_publication_plot():
     fig, ax = plt.subplots()
 
     # Plot No Pulse
-    ax.loglog(x_data, infs_nopulse, 
-              marker='^', linestyle=':', color=colors["black"], 
-              label='No Pulse', clip_on=False,
+    ax.loglog(x_data, infs_nopulse,
+              marker='^', linestyle=':', color=colors["black"],
+              label='FID', clip_on=False,
               linewidth=2.0, markersize=5, zorder=10)
 
     # Plot Known Sequences
-    ax.loglog(x_data, infs_known, 
-              marker='o', linestyle='-', color=colors["blue"], 
-              label='Known Sequences', clip_on=False,
+    ax.loglog(x_data, infs_known,
+              marker='o', linestyle='-', color=colors["blue"],
+              label='CDD', clip_on=False,
               linewidth=2.0, markersize=5, zorder=10)
 
     # Plot Optimized Sequences
-    ax.loglog(x_data, infs_opt, 
-              marker='s', linestyle='--', color=colors["vermillion"], 
-              label='Optimized', clip_on=False,
+    ax.loglog(x_data, infs_opt,
+              marker='s', linestyle='--', color=colors["vermillion"],
+              label='NT', clip_on=False,
               linewidth=2.0, markersize=5, zorder=10)
               
     # Plot Minimum Gate Time
@@ -124,8 +124,8 @@ def generate_publication_plot():
 
     # 4. Axes & Labels
     # ----------------
-    ax.set_xlabel(r"Gate Time ($\tau$)")
-    ax.set_ylabel("Infidelity")
+    ax.set_xlabel(r"$T_G / \tau$")
+    ax.set_ylabel(r"$1 - F_{\rm pro}$")
     
     # Calculate dynamic x-axis limits
     # Include min_gate_time_tau in the range calculation

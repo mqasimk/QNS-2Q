@@ -1,0 +1,1009 @@
+\documentclass[%
+ reprint,
+superscriptaddress,
+%groupedaddress,
+%unsortedaddress,
+%runinaddress,
+%frontmatterverbose, 
+%preprint,
+%preprintnumbers,
+%nofootinbib,
+%nobibnotes,
+%bibnotes,
+ amsmath,amssymb,
+ aps,
+pra,
+%prb,
+%rmp,
+%prstab,
+%prstper,
+%floatfix,
+]{revtex4-2}
+
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{siunitx}
+\PassOptionsToPackage{dvipsnames}{xcolor}
+\usepackage{graphicx,color,xcolor}% Include figure files
+\usepackage{dcolumn}% Align table columns on decimal point
+\usepackage{bm}% bold math
+\usepackage{hyperref}% add hypertext capabilities
+%\usepackage[mathlines]{lineno}% Enable numbering of text and display math
+%\linenumbers\relax % Commence numbering lines
+
+%\usepackage[showframe,%Uncomment any one of the following lines to test 
+%%scale=0.7, marginratio={1:1, 2:3}, ignoreall,% default settings
+%%text={7in,10in},centering,
+%%margin=1.5in,
+%%total={6.5in,8.75in}, top=1.2in, left=0.9in, includefoot,
+%%height=10in,a5paper,hmargin={3cm,0.8in},
+%]{geometry}
+% amsmath already loaded via class options; xcolor loaded above with dvipsnames
+\usepackage{tabularx}
+\usepackage{braket}
+\usepackage{bbold}
+\usepackage{appendix}
+\usepackage{comment}
+\usepackage{subcaption}
+\captionsetup{justification=raggedright,singlelinecheck=false}
+
+\newcommand{\lv}[1]{{\color{TealBlue}#1}}
+\newcommand{\vl}[1]{{\color{RubineRed} #1}}
+\newcommand{\qk}[1]{{\color{OliveGreen}#1}}
+
+\begin{document}
+
+\title{Noise-tailored two-qubit gates 
+%Generating two-qubit noise-tailored control using 
+from spectral reconstruction}
+
+\author{Muhammad Qasim Khan}
+ \email{muhammad.q.khan.gr@dartmouth.edu}
+\affiliation{Department of Physics and Astronomy, Dartmouth College, Hanover, New Hampshire 03755, USA}
+
+\author{Leigh M. Norris}
+\email{leigh.norris@quantinuum.com}
+\affiliation{Johns Hopkins University Applied Physics Laboratory, %11100 Johns Hopkins Road, 
+Laurel, Maryland 20723, USA}
+\affiliation{Quantinuum, Broomfield, Colorado, USA}
+
+\author{Lorenza Viola}
+\email{lorenza.viola@dartmouth.edu}
+\affiliation{Department of Physics and Astronomy, Dartmouth College, Hanover, New Hampshire 03755, USA}
+
+
+\date{\today}% It is always \today, today,
+             %  but any date may be explicitly specified
+
+\begin{abstract}
+High-fidelity two-qubit entangling gates in the presence of spatiotemporally correlated noise are a fundamental prerequisite for scalable, fault-tolerant quantum computation. Noise-tailored quantum control offers a powerful strategy to combat such decoherence by actively minimizing spectral overlap between the control filter functions and the characterized noise power spectra; however, its efficacy is bounded by the accuracy of the underlying noise characterization, which may be compromised by state preparation and measurement (SPAM) errors. Here, we introduce a comprehensive, end-to-end theoretical framework for generating high-fidelity, noise-tailored two-qubit operations--both memory (idling) and maximally entangling gates--that rigorously accounts for spatiotemporally correlated dephasing noise while remaining resilient to implementation nonidealities. By integrating SPAM-robust and SPAM-mitigated frequency-comb quantum noise spectroscopy, we extract unbiased classical two-qubit dephasing spectra, which we then leverage to construct an exact, non-perturbative model of the noisy gate dynamics within the Pauli transfer matrix formalism. The resulting process infidelity serves as a cost function for constrained gradient-descent pulse optimization. We demonstrate that for environments characterized by complex, multi-peaked power spectral densities, our noise-tailored sequences decisively outperform standard concatenated dynamical decoupling families, achieving process infidelity suppression of up to two orders of magnitude in the optimal gate-duration regime while strictly respecting physical hardware constraints, including minimum pulse separation and maximum coupling strength. Conversely, for monotonically decreasing $1/f^\alpha$ spectra, the optimization robustly recovers equivalent high-order decoupling solutions. Our work establishes a complete, scalable pipeline, from robust spectral characterization to noise-optimized control for enhancing multi-qubit gate performance in realistic quantum devices.
+\end{abstract}
+
+%\keywords{Suggested keywords}%Use showkeys class option if keyword
+                              %display desired
+\maketitle
+
+\tableofcontents
+
+%% \qk{[FIGURE SUGGESTION — HIGH PRIORITY: Add an end-to-end pipeline schematic figure showing:
+%% Noise environment $\to$ SPAM-robust/mitigated QNS $\to$ Reconstructed spectra $\to$ PTM-based cost function $\to$
+%% Gradient-descent optimization $\to$ Noise-tailored pulse sequence. This is standard for methods papers
+%% of this scope and would dramatically improve accessibility.]}
+
+\section{Introduction}
+
+High-fidelity two-qubit entangling gates are a fundamental prerequisite for scaling quantum information processors and achieving fault tolerance \cite{NgPreskill, Acharya2025}. However, the performance of these gates is typically limited by decoherence from environmental noise. In many leading solid-state platforms, such as superconducting and spin qubits, this noise is not simple; it is generically non-Markovian, exhibiting complex temporal and spatial correlations \cite{Bylander2011Jul, PhysRevA.95.022121, Uwe2020}. Spatiotemporally correlated noise can induce unwanted history dependence, crosstalk, and error propagation, posing a significant challenge to the fidelity of entangling operations and, ultimately, to quantum fault tolerance \cite{Sarovar2020detectingcrosstalk, PhysRevA.104.L050404, PhysRevA.102.022221}.
+
+A powerful strategy to combat such environments is the use of noise-optimized or ``noise-tailored'' quantum control. Rather than applying generic control sequences, noise-tailored protocols use a quantitative understanding of the specific noise environment to design control pulses that actively minimize decoherence. This is often achieved by shaping the control filter function to ensure minimal spectral overlap with the characterized noise power spectrum \cite{Faoro}. While standard dynamical decoupling (DD) sequences are effective at suppressing low-frequency noise \cite{Khodjasteh2013-ut, PazSilva2016}, these ``one-size-fits-all'' approaches may not be optimal for complex spectral landscapes, such as those with high-frequency peaks or non-monotonic features.
+
+To implement any noise-tailored protocol, one must first obtain an accurate, quantitative characterization of the relevant noise spectra. Hamiltonian-level quantum noise spectroscopy (QNS) has emerged as an ideal tool for this task, with multipulse frequency comb protocols being particularly well-suited for characterizing spatiotemporally correlated dephasing noise in multiqubit systems \cite{CombMultiaxis, PhysRevA.94.012109, PhysRevA.95.022121, PhysRevLett.116.150503}. These QNS protocols use the qubit device itself as a spectrometer, using applied control sequences to sample the noise spectra at desired frequencies.
+
+A critical vulnerability of standard QNS protocols, however, is their high sensitivity to state preparation and measurement (SPAM) errors \cite{PhysRevApplied.22.024074}. Realistic SPAM error rates can significantly bias spectral reconstructions, often masking important noise features or causing spectra to be overestimated. This challenge has motivated the development of SPAM-robust QNS protocols that can successfully separate and estimate noise spectra even in the presence of implementation nonidealities. Furthermore, standard SPAM mitigation techniques often fail to separately characterize the distinct contributions from state preparation (SP) and measurement (M) errors, which can lead to biased and overestimated observable expectation values \cite{khan2025}. Accurate, high-fidelity characterization thus requires protocols that can disambiguate all three error sources: SP, M, and environmental noise.
+
+In this work, we establish a comprehensive framework for designing noise-tailored two-qubit entangling and idling gates that rigorously accounts for spatiotemporally correlated dephasing noise. By integrating SPAM-robust and SPAM-mitigated frequency-comb quantum noise spectroscopy (QNS), we demonstrate the reconstruction of unbiased noise spectra even in the presence of significant implementation nonidealities. We utilize these characterized spectra to construct a non-perturbative model of the noisy gate dynamics based on the corresponding Pauli Transfer Matrix (PTM), which serves as the cost function for gradient-based pulse optimization. We show that for complex, multi-peaked spectral landscapes, our noise-tailored sequences significantly outperform standard dynamical decoupling families, achieving error suppression by up to two orders of magnitude in the optimal gate-time regime.
+
+This paper is organized as follows. In Sec. \ref{sec::background}, we review the necessary theoretical background, starting with the formalism for noise spectra and dephasing-preserving control. We then detail the established two-qubit frequency-comb QNS protocol, our model of SPAM errors, and the Pauli Transfer Matrix (PTM) formalism. In Sec. \ref{sec::metrics}, we define the noisy gate performance metrics that form the basis of our optimization, including direct PTM reconstruction and analytical model of high-fidelity gates under dephasing. We also introduce our protocols for handling implementation nonidealities; Sec. \ref{sec::SRQNS} develops a SPAM-robust QNS protocol for both single- and two-qubit systems, while Sec. \ref{sec::SMQNS} presents a more general SPAM-mitigated QNS framework. In Sec. \ref{sec::optGates}, we present our main results on gate optimization. We define the optimization window and sampling rates, describe our gradient-descent methods, and apply this framework to design and analyze noise-tailored idle (memory) gates and entangling gates, presenting numerical results for varying spectral landscapes. Sec. \ref{sec::conclusion} provides our concluding remarks.
+
+
+\section{Background}
+\label{sec::background}
+Two-qubit quantum noise spectroscopy (QNS) protocols employing frequency-comb generation techniques have been investigated for both single-axis (dephasing) and multi-axis noise \cite{PhysRevA.94.012109, PhysRevLett.107.230501, CombMultiaxis, PhysRevA.95.022121}. Comb-based QNS approaches have also been proposed for two-qubit systems subject to spatiotemporally-correlated dephasing noise arising from quantum baths, with results extending to larger $N$-qubit systems \cite{PhysRevA.95.022121}. A review of these established findings is pertinent to our work, as estimation of noise spectra forms the foundation for optimizing both memory and entangling operations.
+
+We consider an $N$-qubit system interacting with a noisy environment or ``bath". The joint Hamiltonian of the system and bath in the lab frame takes the form $H(t)=H_\text{S}+H_\text{B}(t)+H_\text{SB}(t)$, where $H_\text{S}=\sum_{l=1}^N\omega_l Z_l/2$ and $H_\text{B}(t)$ represent the internal Hamiltonians of the system and bath, respectively, and $H_\text{SB}(t)$ represents the system-bath interaction. We specialize to a dephasing model where the bath couples to each qubit along $Z$, satisfying the commutation relation $[H_\text{S},H_\text{SB}]=0$. In the interaction picture associated with $H_\text{S}$ and $H_\text{B}(t)$, the Hamiltonian is given by
+\begin{align}
+    H_\text{R}(t)&=\sum_{l=1}^N \zeta_l(t) Z_l + \sum_{1\leq l <l'\leq N} \zeta_{ll'}(t) Z_{ll'},
+\end{align}
+where $Z_0=\mathbb{1}$, $Z_l$ is the Pauli $Z$ operator on qubit $l$ and $Z_{ll'}=Z_lZ_{l'}\equiv Z_l\otimes Z_{l'}$.
+In general, $\zeta_l(t)$ and $\zeta_{ll'}(t)$ are time-dependent bath operators, representing noise on the system due its interaction with the bath. Here, we approximate the bath as classical and treat $\zeta_l(t)$ and $\zeta_{ll'}(t)$ as scalar stochastic processes. We additionally restrict $\zeta_l(t)$ and $\zeta_{ll'}(t)$ to be Gaussian, zero-mean, and stationary.
+
+Next, we introduce qubit control through the dephasing-preserving control Hamiltonian $H_\text{c}(t)$, which consists of instantaneous off-axis ($X$ or $Y$) $\pi$-pulses. In the rotating-frame, it can be expressed through normalized delta-functions and the pulse times for each qubit (indexed by $l$) $\{t_{k_l}\}$, $H_\text{c}(t)=\sum_{l=1}^N\sum_{k_l} \pi\delta(t-t_{k_l})X_l/2$. In the interaction picture associated with this control Hamiltonian, we obtain the toggling-frame Hamiltonian $\tilde{H}(t)=U_\text{c}^\dagger(t)H_\text{R}(t)U_\text{c}(t)$
+\begin{align}
+    \tilde{H}(t)&=\sum_{a,a'\in \mathcal{I}_N}y_{a,a'}(t)Z_{a'}\zeta_{a}(t) ,\\
+    y_{a,a'}(t)&=\frac{1}{2^N}\text{Tr}\left[U_\text{c}(t)Z_a U_\text{c}^\dagger(t)Z_{a'}\right].
+\end{align}
+Here, $\mathcal{I}_N$ is a list of indices $\{0, l, ll'|1\leq l<l'\leq N\}$ with $Z_0\equiv\mathbb{1}$ and $Z_{ll'}\equiv Z_{l}Z_{l'}$. 
+The dynamics for such a system can be best understood through a cumulant expansion in terms of the bath correlation functions $\braket{\zeta_{a}(t)\zeta_{a'}(t')}_c$ and subsequently transforming into the frequency domain. For stationary noise processes the power spectral densities (spectra and polyspectra) completely characterize the system-bath dynamics.
+
+\subsection{Noise spectra}
+In real systems, noise processes may exhibit complex behavior with high-order spatial and temporal auto-correlations \cite{Ramon,Sung2019}. To leading order, however, system dynamics depend on two-point correlation functions of the noise processes. The noise spectra, which depend on Fourier transforms of the two-point correlation functions, encapsulate the effect of the noise on the dynamics of the system in the frequency domain.
+
+Our goal is to estimate the spectra of the noise processes $\zeta_l(t)$ and $\zeta_{ll'}(t)$. We focus on classical noise, where the bath operators commute. The classical noise spectra are defined as the Fourier transform of the symmetrized bath correlation functions:
+\begin{align}
+    S_{a,b}(\omega) &= \int_{-\infty}^\infty d\tau\, e^{-i\omega\tau}\langle \zeta_a(\tau)\zeta_b(0)\rangle_{c},
+\end{align}
+where $a,\,b\in\{\ell,\ell\ell'\,|\,\ell,\ell'=1,\ldots,N\}$. The spectra satisfy the symmetry property $S_{a,b}(\omega) = S_{b,a}(-\omega)^*$.
+
+The diagonal elements $S_{a,a}(\omega)$ are the \textit{self-spectra}. These are real-valued, non-negative functions representing the power spectral density of the noise acting on a specific channel (single-qubit or interaction). The off-diagonal elements $S_{a,b}(\omega)$ (where $a \neq b$) are the \textit{cross-spectra}. These are generally complex-valued and characterize the spatiotemporal correlations between different noise sources. The real part of the cross-spectrum describes the correlation of noise components that are in-phase, while the imaginary part describes those in quadrature.
+
+\subsection{General cumulant expansion}
+\label{app::cumu}
+Cumulant expansions are a useful tool for expressing observable expectation values of a quantum system in the presence of spatiotemporally correlated noise. Starting from a separable system-bath state $\rho_{SB}(0)=\rho_0\otimes\rho_B$ at time $t=0$, the expectation value of an \textit{invertible} operator $O$ at time $t$ can be expressed as \cite{PhysRevA.95.022121}
+\begin{align} 
+    E_{\rho_0}\left[O(t)\right]&=\braket{\text{Tr}_{SB}\left[\rho_{SB}(t)O\right]}_c \nonumber\\
+    &=\text{Tr}_{S}\left[\braket{\mathcal{T}_+e^{-i\int_{-t}^tds\,\tilde{H}_O(s)}}_{c}\rho_{0}O\right].
+\end{align}
+Here, $E_{\rho_0}[O(t)]$ denotes the expected value of $O$ at time $t$ when the initial state of the system is $\rho_0$, and the operator-dependent Hamiltonian $\tilde{H}_O(s)$ is defined as
+\begin{align}
+    \tilde{H}_O(s)&\equiv\Bigg\{\begin{matrix}
+        -O^{-1}\tilde{H}(t-s)O & \text{for }0<s\leq t\\
+        \tilde{H}(t+s) & \text{for }-t\leq s < 0.
+    \end{matrix}
+\end{align}
+For Gaussian noise and dephasing-preserving control, the cumulant expansion can be truncated exactly at the second order \cite{CombMultiaxis}. The observable expectation values are expressed as:
+\begin{align}
+\label{eq::expcumu}
+    E_{\rho_0}[O(t)]&=\text{Tr}\left[e^{-C_O^{(1)}(t)-C_O^{(2)}(t)/2!}\rho_0 O\right].
+\end{align}
+The first-order cumulant $C_O^{(1)}(t)=0$ for zero-mean noise processes. For the diagonal control considered here (instantaneous $\pi$-pulses), the switching functions simplify to $y_{a,a'}(t) = y_a(t)\delta_{a,a'}$, where $y_a(t) \in \{-1, 1\}$. Consequently, the second-order cumulant simplifies to a sum over pairs of noise sources:
+\begin{align}
+    \frac{C_{O}^{(2)}(t)}{2!}&=-\sum_{a,b\in\mathcal{I}_N}[\text{sgn}(O,a,0)-1]\frac{Z_aZ_b}{2}\notag\\
+    &\qquad\quad\times\int_{-\infty}^{\infty}\frac{d\omega}{2\pi}S_{a,b}(\omega)G_{a,b}(\omega,t),
+    \label{eq::c2_spectra}
+\end{align}
+where the sign function is $\text{sgn}(O,a,b)\equiv\frac{1}{2^N}\text{Tr}\left[O^{\dagger}Z_aZ_bOZ_aZ_b\right]$.
+The generalized filter functions $G_{a,b}(\omega,t)$ now depend directly on the fundamental filter functions of the individual noise channels:
+\begin{align}
+    G_{a,b}(\omega,t)&=F^{(1)}_{a}(\omega,t)F^{(1)}_{b}(-\omega,t).
+\end{align}
+These are derived from the Fourier transforms of the switching functions $y_a(t)$:
+\begin{align}
+    F_{a}^{(1)}(\omega, t)&=\int_0^t ds\,y_{a}(s)e^{i\omega s}.
+\end{align}
+Eq. (\ref{eq::c2_spectra}) demonstrates that the system dynamics are governed by the overlap between the noise spectra $S_{a,b}(\omega)$ and the control filter functions $G_{a,b}(\omega,t)$. For noise suppression, control is designed to minimize this overlap; for QNS, the control is selected to maximize overlap at specific probe frequencies.
+
+\subsection{Two-qubit frequency-comb QNS}
+\label{sec::FCQNS}
+In this section, we specialize the general formalism to a two-qubit system ($N=2$) subject to diagonal control, following the reconstruction procedure presented in Ref. \cite{PhysRevA.95.022121}.
+
+Under local, instantaneous $\pi$-pulses, the control matrices are diagonal ($y_{a,a'}(t) = y_a(t)\delta_{a,a'}$). Consequently, the generalized filter functions simplify to $G_{a,b}(\omega,t) = F^{(1)}_a(\omega,t)F^{(1)}_b(-\omega,t)$. The second-order cumulant, which we reference throughout this work, simplifies to:
+\begin{align}
+    \frac{C_{O}^{(2)}(t)}{2!}&=-\sum_{a,b\in\mathcal{I}_2}[\text{sgn}(O,a,0)-1]\frac{Z_aZ_b}{2}\notag\\
+    &\qquad\qquad\times\int_{-\infty}^{\infty}\frac{d\omega}{2\pi}S_{a,b}(\omega)G_{a,b}(\omega,t).
+\end{align}
+We can project the second cumulant onto the basis of operators $Z_a$:
+\begin{align}
+    \frac{C_O^{(2)}(t)}{2!}&=\sum_{a\in\mathcal{I}_2}\mathcal{C}_{O,a}(t)Z_a.
+\end{align}
+The coefficients $\mathcal{C}_{O,a}(t)$ are linear combinations of the overlap integrals we wish to measure. For a two-qubit system, the relevant indices are $a,b \in \{1, 2, 12\}$ (representing $Z_1, Z_2, Z_1Z_2$). Due to symmetry, the relevant coefficients for reconstruction are:
+\begin{align}\label{eq::coeff1}
+    \mathcal{C}_{a,b}(t)&=2\int_{-\infty}^\infty \frac{d\omega}{2\pi}\text{Re}\left[S_{a,12}(\omega)G_{a,12}(\omega,t)\right],\\
+    \mathcal{C}_{a,0}(t)&=\int_{-\infty}^\infty \frac{d\omega}{2\pi}\sum_{k\in \{a,12\}}\text{Re}\left[S_{k,k}(\omega)G_{k,k}(\omega,t)\right],\\
+    \mathcal{C}_{12,0}(t)&=\int_{-\infty}^\infty \frac{d\omega}{2\pi}\sum_{k=1}^2\text{Re}\left[S_{k,k}(\omega)G_{k,k}(\omega,t)\right],\\
+    \mathcal{C}_{12,12}(t)&=2\int_{-\infty}^\infty \frac{d\omega}{2\pi}\text{Re}\left[S_{1,2}(\omega)G_{1,2}(\omega,t)\right].\label{eq::coeff4}
+\end{align}
+
+The coefficients are linear combinations of functions that depend on measured observable expectation values,
+\begin{align}
+    \label{eq::typo1}
+    \mathcal{C}_{a,b}(t)&=A^+_a(t)-A^-_a(t),\\
+    \label{eq::typo2}
+    \mathcal{C}_{a,0}(t)&=A^+_a(t)+A^-_a(t),\\
+    \mathcal{C}_{12,0}(t)&=D^+(t)+D^-(t),\\
+    \mathcal{C}_{12,12}(t)&=D^+(t)-D^-(t),
+\end{align}
+where
+\begin{align}
+    A^\pm_a(t)&\equiv -\frac{1}{4}\ln\left\{E_{\psi_a^\pm}[X_a(t)]^2+E_{\psi_a^\pm}[Y_a(t)]^2\right\},\\
+    D^\pm(t)&\equiv-\frac{1}{4}\ln\Big\{\left(E_{\psi_{12}}[X_1Y_2(t)]\pm E_{\psi_{12}}[Y_1X_2(t)]\right)^2\notag\\
+    &\qquad+\left(E_{\psi_{12}}[X_1X_2(t)]\mp E_{\psi_{12}}[Y_1Y_2(t)]\right)^2\Big\},
+\end{align}
+for $a\in\{1,2\}$, with the initial states defined in Table \ref{tab:init} \footnote{In \cite{PhysRevA.95.022121} $\mathcal{C}_{a,b}(t)=A^+_a(t)+A^-_a(t)$ and $\mathcal{C}_{a,0}(t)=A^+_a(t)-A^-_a(t)$; this is a typo that does not invalidate the results of the rest of the publication, the correct expression is presented in this work.}.
+\begin{table}[b!]
+    \centering
+    \renewcommand{\arraystretch}{1.5}
+    \begin{tabular}{|l|l|}
+        \hline
+        \textbf{Initial state preparation} & \textbf{Observables measured} \\
+        \hline
+        $\psi^\pm_1=|x_+\rangle\otimes|z_\pm\rangle$ & $X_1, Y_1$ \\
+        $\psi^\pm_2=|z_\pm\rangle\otimes|x_+\rangle$ & $X_2, Y_2$ \\
+        $\psi_{12}=|x_+\rangle\otimes|x_+\rangle$ & $X_1X_2, Y_1Y_2, X_1Y_2, Y_1X_2$ \\
+        \hline
+    \end{tabular}
+    \caption{State preparations and the corresponding observables measured for a two qubit noise spectroscopy protocol.}
+    \label{tab:init}
+\end{table}
+
+These coefficients are experimentally accessible through measurements of specific observables, as detailed in Table \ref{tab:init}. 
+
+To estimate the spectra $S_{a,b}(\omega)$, we employ a frequency-comb protocol. By repeating a base sequence of duration $T$ for $M \gg 1$ repetitions, the filter functions approximate a frequency comb:
+\begin{align}\label{eq::comb}
+    G_{a,b}(\omega,MT)\approx\frac{2\pi M}{T}\sum_{k=-\infty}^\infty\delta(\omega-\omega_k)G_{a,b}(\omega,T),
+\end{align}
+where $\omega_k\equiv 2\pi k/T$ are the harmonic frequencies. 
+
+To deconvolute the spectra from the filter functions, we vary the control sequences. We utilize Concatenated Dynamical Decoupling (CDD) sequences. A base sequence of duration $T$ may consist of a single $\text{CDD}_n$ block, or a concatenation of multiple scaled CDD blocks (e.g., two $\text{CDD}_n$ blocks of duration $T/2$). This flexibility allows us to generate linearly independent filter functions. We denote a sequence formed by $m$ repetitions of a CDD block within the base time $T$ as $[\text{CDD}_n]_m$.
+
+Substituting the comb approximation into the coefficient expressions yields a discrete sum. For example, for real symmetric spectra (like the self-spectra $S_{a,a}$), the coefficient measured after $M$ repetitions for a specific pulse sequence $p$ is:
+\begin{align}
+\label{eq::gencoeff}
+    \left[\mathcal{C}^{(p)}_{a,b}(MT)\right]&\approx \sum_{k=0}^{k_\text{max}} U^{(p)}_{k} S_{a,b}(\omega_k),
+\end{align}
+where the reconstruction matrix element is defined by the filter function of sequence $p$ at harmonic $k$:
+\begin{align}
+    U^{(p)}_{k}=\frac{M}{T}(2-\delta_{k,0})\text{Re}\left[G^{(p)}_{a,b}(\omega_k,T)\right].
+\end{align}
+By performing measurements using a set of linearly independent sequences $p \in \{1, \dots, P\}$, we construct a linear system $\vec{C} = \mathbf{U} \vec{S}$. Inverting this matrix allows us to solve for the spectral amplitudes $\vec{S} = \{S_{a,b}(\omega_k)\}$ at the harmonic frequencies. 
+
+Table \ref{tab:exps} summarizes the specific experiments (pairs of sequences on Qubit 1 and Qubit 2) used to isolate and reconstruct each spectral component. From the results of Experiment (1a) and (1b), we can isolate the estimate for the self-spectrum $\hat{S}_{1,1}(\omega_k)$. The difference in the measured coefficients is:
+\begin{align}
+    &\left[\hat{\mathcal{C}}_{12,0}^{(1.\,a)}(MT)\right]-\left[\hat{\mathcal{C}}_{12,0}^{(1.\,b)}(MT)\right]\notag\\
+    &\qquad\quad\approx\frac{M}{T}\sum_{k=0}^{k_{\max}}\text{Re}\Big\{\hat{S}_{1,1}(\omega_k)\Big(G_{1,1}^{(1.\,a)}(\omega_k, T) \notag\\
+    &\qquad\qquad\qquad\qquad\qquad- G_{1,1}^{(1.\,b)}(\omega_k, T)\Big)\Big\}.
+\end{align}
+The corresponding reconstruction matrix element is
+\begin{align}
+    U_{k}^{(1,1)}&=\frac{M}{T}\text{Re}\Big\{G_{1,1}^{(1.\,a)}(\omega_k, T) - G_{1,1}^{(1.\,b)}(\omega_k, T)\Big\},
+\end{align}
+and the spectrum is reconstructed through the inverse, $\hat{S}_{1,1}(\omega_k) = [U^{(1,1)}]^{-1}_{k} (\hat{\mathcal{C}}^{(1.\,a)}(MT) - \hat{\mathcal{C}}^{(1.\,b)}(MT))$.
+
+For the self-spectrum of the second qubit, the reconstruction matrix is
+\begin{align}
+    U_{k}^{(2,2)}&=\frac{M}{T}\text{Re}\Big\{G_{2,2}^{(1.\,a)}(\omega_k, T) - G_{2,2}^{(1.\,c)}(\omega_k, T)\Big\}.
+\end{align}
+Using results from Experiment (1.a) and (1.c), we reconstruct the spectrum
+\begin{align}
+    \hat{S}_{2,2}(\omega_k) &= [U^{(2,2)}]^{-1}_{k}\Big\{\hat{\mathcal{C}}_{12,0}^{(1.\,a)}(MT) - \hat{\mathcal{C}}_{12,0}^{(1.\,c)}(MT)\Big\}.
+\end{align}
+This concludes the single-qubit self-spectra. The procedure for the reconstruction of the remaining spectra is outlined in Appendix \ref{app::char}.
+\begin{table*}[h]
+    \centering
+    \caption{Summary of experiments for two-qubit noise spectroscopy. Experiments are grouped by a numerical ID, which corresponds to families of measurements. Each row specifies the dynamical decoupling sequence applied to each qubit, the constructed output function $\mathcal{C}_{O,l}$, and the corresponding measurement observables.}
+    \label{tab:exps}
+    \begin{tabular}{@{}lllll@{}}
+        \toprule
+        \textbf{Experiment ID} & \textbf{Qubit 1} & \textbf{Qubit 2} & \textbf{$\mathcal{C}_{O,l}$} & \textbf{Observables Measured} \\
+        \midrule
+        1.a & $\text{CDD}_2$ & $\text{CDD}_2$ & \multirow{3}{*}{$\mathcal{C}_{12,0}(MT)$} & \multirow{3}{*}{$X_1X_2, Y_1Y_2, X_1Y_2, Y_1X_2$} \\
+        1.b & $\text{CDD}_3$ & $\text{CDD}_2$ & & \\
+        1.c & $\text{CDD}_2$ & $\text{CDD}_3$ & & \\
+        \midrule
+        2.a & $\text{CDD}_2$ & $\text{CDD}_2$ & \multirow{2}{*}{$\mathcal{C}_{12,12}(MT)$} & \multirow{2}{*}{$X_1X_2, Y_1Y_2, X_1Y_2, Y_1X_2$} \\
+        2.b & $\text{CDD}_3$ & $\text{CDD}_2$ & & \\
+        \midrule
+        3.a & $\text{CDD}_1$ & $\text{CDD}_1^{(1/2)}$ & $\mathcal{C}_{1,0}(MT)$ & $X_1, Y_1$ \\
+        3.b & $\text{CDD}_1^{(1/2)}$ & $\text{CDD}_1$ & $\mathcal{C}_{2,0}(MT)$ & $X_2, Y_2$ \\
+        3.c & $\text{CDD}_1$ & $\text{CDD}_1$ & $\mathcal{C}_{12,0}(MT)$ & $X_1X_2, Y_1Y_2, X_1Y_2, Y_1X_2$ \\
+        \midrule
+        4.a & $\text{CDD}_2$ & FID & \multirow{2}{*}{$\mathcal{C}_{1,2}(MT)$} & \multirow{2}{*}{$X_1, Y_1$} \\
+        4.b & $\text{CDD}_2$ & $\text{CDD}_1^{(1/4)}$ & & \\
+        \midrule
+        5.a & FID & $\text{CDD}_2$ & \multirow{2}{*}{$\mathcal{C}_{2,1}(MT)$} & \multirow{2}{*}{$X_2, Y_2$} \\
+        5.b & $\text{CDD}_1^{(1/4)}$ & $\text{CDD}_1$ & & \\
+        \bottomrule
+    \end{tabular}
+\end{table*}
+
+\subsection{Modeling SPAM errors}
+Single-qubit SPAM errors can be modeled as described in \cite{PhysRevApplied.22.024074} by defining $\vec{\alpha}^{(l)}_{SP}$ as the Bloch vector for the faulty initial state of the qubit $l\in\{1,2\}$, and the POVMs for the four faulty projections that make up an uncorrelated two-qubit readout as $\Pi_{u,v}=\Pi_u\otimes\Pi_v$ or $u,v\in\{z_+,z_-\}$.
+
+Experiments typically begin with the qubits in the ground state of the system. We will denote a faulty, separable preparation of qubits 1 and 2 in the ground state by
+\begin{align}
+    \rho_\text{in}&=\frac{1}{4}\left\{(\mathbb{1}^{(1)}+\vec{\sigma}^{(1)}\cdot\vec\alpha^{(1)}_{SP})\otimes(\mathbb{1}^{(2)}+\vec{\sigma}^{(2)}\cdot\vec\alpha^{(2)}_{SP})\right\}.
+\end{align}
+We will work under the assumption that the NISQ system is `good' in the sense that the state-preparation is such that $\alpha^{z,(l)}_{SP}>0$. This means that the system is prepared close to the ground state but may deviate from the ideal preparation through coherent errors or unwanted mixture. Faulty preparation in separable states other than the ground state, such as the states in Table \ref{tab:init}, are modeled by starting from $\rho_\text{in}$ and applying high-fidelity single-qubit operations. To consider the effect of state-preparation errors, we must consider each faulty state-preparation individually. A generalized approach is discussed in the Sec. \ref{sec::SRQNS} within the context of SPAM robust QNS protocols.
+
+We model the measurement process using Positive Operator-Valued Measures (POVMs). For a single qubit $l$, the noisy measurement operators $\{\Pi^{(l)}_{z_+}, \Pi^{(l)}_{z_-}\}$ associated with the outcomes $+1$ and $-1$ are defined in the computational basis $\{|0\rangle, |1\rangle\}$ as:
+\begin{align}
+    \Pi^{(l)}_{z_+}&=\begin{bmatrix}
+        \frac{1+\alpha^{(l)}_M+\delta_l}{2} & 0\\
+        0 & \frac{1-\alpha^{(l)}_M+\delta_l}{2}
+    \end{bmatrix}, \quad
+    \Pi^{(l)}_{z_-} = \mathbb{1} - \Pi^{(l)}_{z_+}.
+\end{align}
+Here, $\alpha_M^{(l)} \in [0,1]$ quantifies the measurement visibility (or fidelity scale), and $\delta_l \in [-1,1]$ represents measurement bias or asymmetry. 
+
+For the two-qubit case, assuming spatially uncorrelated readout errors, the joint POVM elements are formed by tensor products $\Pi_{u,v}=\Pi_u^{(1)}\otimes\Pi_v^{(2)}$ for $u,v\in\{z_+,z_-\}$. The relationship between the ideal computational basis states and the measured probabilities is governed by the confusion matrix $A = A^{(1)} \otimes A^{(2)}$, where the single-qubit confusion matrix $A^{(l)}$ is defined such that $[A^{(l)}]_{ij} = P(\text{outcome } i | \text{state } j)$:
+\begin{align}
+    A^{(l)}&=\begin{bmatrix}
+        \frac{1+\alpha_M^{(l)}+\delta_l}{2} & \frac{1-\alpha_M^{(l)}+\delta_l}{2}\\
+        \frac{1-\alpha_M^{(l)}-\delta_l}{2} & \frac{1+\alpha_M^{(l)}-\delta_l}{2}
+    \end{bmatrix}.
+\end{align}
+Experimentally, we access the estimator $\hat{E}_{\rho_{\text{in}}}[O(t)]$, which is corrupted by both state preparation (SP) and measurement (M) errors. We denote the expectation value corrupted \textit{only} by SP errors as $\overline{E}_{\rho_{\text{in}}}[O(t)] \equiv \text{Tr}[O \mathcal{U}(t)\rho_{\text{in}}\mathcal{U}^\dagger(t)]$. The transformation relating the fully noisy estimate to the SP-noisy value for $Z$-basis observables is:
+\begin{align}
+    \hat{E}_{\psi^\pm_l}\left[Z_l(t)\right]&=\alpha^{(l)}_M\overline{E}_{\psi^\pm_l}\left[Z_l(t)\right]+\delta_l,\\
+    \hat{E}_{\psi_{12}}\left[Z_1Z_2(t)\right]&=\alpha_M^{(1)}\alpha_M^{(2)}\overline{E}_{\psi_{12}}\left[Z_1Z_2(t)\right]\notag\\
+    &\quad+\alpha_M^{(1)}\delta_2\overline{E}_{\psi_{12}}\left[Z_1(t)\right]\notag\\
+    &\quad+\alpha_M^{(2)}\delta_1\overline{E}_{\psi_{12}}\left[Z_2(t)\right]+\delta_1\delta_2.
+\end{align}
+These relations hold under the mapping $Z_l \to X_l, Y_l$ for the respective basis measurements.
+
+\subsection{Pauli transfer matrices} 
+The Pauli Transfer Matrix (PTM) formalism provides a convenient representation of quantum channels (CPTP maps) as real matrices acting on the vector space of Pauli operators. For an $N$-qubit system, the Hilbert-Schmidt space of operators is spanned by the orthonormal basis of normalized Pauli operators:
+\begin{align}
+    \mathcal{P} = \{|P_k\rangle\rangle \equiv \frac{1}{\sqrt{2^N}} P_k \mid k=0,\dots,4^N-1\},
+\end{align}
+where $P_k \in \{I, X, Y, Z\}^{\otimes N}$ are ordered lexicographically. In this Liouville representation, a quantum state $\rho$ is vectorized as $|\rho\rangle\rangle$ with components $\rho_k = \langle\langle P_k | \rho \rangle\rangle = \text{Tr}(P_k^\dagger \rho)/\sqrt{2^N}$.
+
+A quantum channel $\Phi$ maps to a superoperator $\mathcal{E}$ acting on this space, $\ket{\Phi(\rho)}\rangle=\mathcal{E}\ket{\rho}\rangle$. The elements of the PTM $\mathcal{E}$ are defined by the action of the channel on the basis elements:
+\begin{align}
+    \mathcal{E}_{ij} &= \langle\langle P_i | \mathcal{E} | P_j \rangle\rangle = \frac{1}{2^{N}}\text{Tr}\left[P_i \Phi(P_j)\right].
+\end{align}
+This representation is particularly powerful for our protocol because, for Pauli noise channels (such as pure dephasing), the PTM is diagonal. The diagonal elements $\mathcal{E}_{kk}$ correspond directly to the decay factors of the expectation values of the Pauli observables, providing a direct link between the cumulant expansion of the measurable expectation values and the matrix description of the gate error.
+
+Key properties of the PTM include:
+\begin{enumerate}
+    \item \textbf{Trace Preservation:} Since $\text{Tr}[\Phi(\rho)] = \text{Tr}[\rho]$, the first row is fixed: $\mathcal{E}_{0j} = \delta_{0j}$.
+    \item \textbf{Unitality:} If the map is unital ($\Phi(\mathbb{1}) = \mathbb{1}$), as is the case for pure dephasing noise, the first column is fixed: $\mathcal{E}_{i0} = \delta_{i0}$.
+\end{enumerate}
+
+\section{Noisy gate performance metrics}
+\label{sec::metrics}
+
+\qk{With the spectral characterization framework and SPAM error model in place, we now turn to the gate performance metrics that will serve as the optimization objective.}
+
+The quality of a quantum gate is typically quantified through a fidelity measure that compares the experimental implementation to the ideal target operation. Two standard metrics are the average gate fidelity and the process fidelity. Both can be expressed in terms of the Pauli Transfer Matrix (PTM) of the target gate, $\mathcal{U}_G$, and the effective noisy channel, $\mathcal{E}$.
+
+The process fidelity is defined as the normalized trace overlap between the two superoperators:
+\begin{align}
+    F_{\text{pro}}(\mathcal{U}_G, \mathcal{E}) &= \frac{1}{4^N} \text{Tr}\left[\mathcal{U}_G^\dagger \mathcal{E}\right].
+\end{align}
+The average gate fidelity, which corresponds to the fidelity averaged over Haar-random input states, is linearly related to the process fidelity via
+\begin{align}
+    F_{\text{avg}}(\mathcal{U}_G, \mathcal{E}) &= \frac{d F_{\text{pro}}(\mathcal{U}_G, \mathcal{E}) + 1}{d + 1},
+\end{align}
+where $d=2^N$ is the dimension of the Hilbert space. Since our analysis of the system dynamics allows for the analytical construction of $\mathcal{E}$, we utilize the process fidelity (or equivalently, the process infidelity $1-F_{\text{pro}}$) as the primary metric for optimizing two-qubit gates.
+
+\subsection{Direct PTM reconstruction}
+While the PTM provides a complete description of the channel, experimentally we only have access to observable expectation values. We can reconstruct the PTM elements $\mathcal{E}_{ij}$ by exploiting the completeness of the Pauli basis. The PTM element $\mathcal{E}_{ij}$ represents the projection of the evolved Pauli operator $P_j$ onto $P_i$:
+\begin{align}
+    \mathcal{E}_{ij} &= \frac{1}{2^N} \text{Tr}\left[P_i \mathcal{E}(P_j)\right].
+\end{align}
+To measure this experimentally, one prepares an eigenstate of $P_j$, denoted as $\rho_j$, and measures the expectation value of $P_i$ after the gate operation. Specifically, for $j \neq 0$, we prepare the state $\rho_{\text{in}} = (\mathbb{1} + P_j)/2^N$. The resulting expectation value yields the matrix element directly, provided the noise is unital (as is the case for dephasing):
+\begin{align}
+    E_{\rho_{\text{in}}}[P_i(T)] &= \text{Tr}[P_i \mathcal{E}(\rho_{\text{in}})] = \mathcal{E}_{ij}.
+\end{align}
+This direct correspondence allows us to map the analytical cumulant expansion of expectation values to the elements of the process matrix.
+
+\subsection{Modeling of high-fidelity gates}
+\label{sec::highFid}
+
+To perform entangling operations, we extend the control Hamiltonian to include a tunable two-qubit coupling. In the rotating frame, the control Hamiltonian $H_c(t)$ typically takes the form:
+\begin{align}
+\label{eq::CZHam}
+    H_c(t) &= \sum_{l=1}^N \sum_{k_l} \frac{\pi}{2} \delta(t-t_{k_l}) X_l + J(t) Z_1 Z_2,
+\end{align}
+where $J(t)$ represents the envelope of the effective $ZZ$-interaction.
+Moving to the interaction picture defined by this control, the total toggling-frame Hamiltonian $\tilde{H}(t)$ contains both the deterministic coupling required for the gate and the stochastic noise terms:
+\begin{align}
+    \tilde{H}(t) &= \tilde{H}_{\text{det}}(t) + \tilde{H}_{\text{noise}}(t) \nonumber \\
+    &= y_{12}(t)J(t)Z_1Z_2 + \sum_{a \in \mathcal{I}_2} y_{a}(t) Z_a \zeta_{a}(t).
+\end{align}
+Here, the switching functions $y_a(t)$ arise from the single-qubit frame transformations. The deterministic term contributes to the first-order cumulant, generating the coherent evolution of the target gate:
+\begin{align}
+    C_{O}^{(1)}(t) &= -i \int_0^t ds \left[\tilde{H}_{\text{det}}(s), O\right] \nonumber \\
+    &\propto [1-\text{sgn}(O,1,2)] Z_1 Z_2 \int_0^t ds \, y_{12}(s) J(s).
+\end{align}
+The stochastic component contributes to the second-order cumulant, describing the decoherence. Using the expansion in Eq. (\ref{eq::expcumu}), the PTM elements of the noisy implementation $\mathcal{E}(T)$ are given by:
+\begin{align}
+    \mathcal{E}_{ij}(T) &= \text{Tr}\left[P_i \exp\left( -iC^{(1)} - \frac{1}{2}C^{(2)} \right) P_j \right].
+\end{align}
+Substituting the spectral decomposition of the second cumulant from Eq. (\ref{eq::c2_spectra}), we find that the decay of the PTM elements is governed by the overlap of the noise spectra with the generalized filter functions.
+
+In the weak-noise limit \cite{tsai_benchmarking_2024}, the process infidelity can be approximated by expanding the exponential to second order. For a target gate generated by $H_c$, the infidelity is dominated by the noise-control overlap:
+\begin{align}
+    1 - F_{\text{pro}}(\mathcal{U}_G, \mathcal{E}) &\approx \frac{1}{2} \sum_{a,b \in \mathcal{I}_2} \int_{-\infty}^{\infty} \frac{d\omega}{2\pi} S_{a,b}(\omega) G_{a,b}(\omega, T).
+\end{align}
+This expression provides the objective function for our optimization: to realize a high-fidelity gate, we must design the control (and thus the filter functions $G_{a,b}$) to be orthogonal to the noise spectra $S_{a,b}(\omega)$ while simultaneously satisfying the condition that the first-order cumulant integrates to the desired entangling phase.
+
+\qk{The fidelity expressions derived above assume access to the true noise spectra $S_{a,b}(\omega)$. In practice, however, spectral estimates obtained from standard QNS protocols are corrupted by SPAM errors, which can significantly bias the reconstructed spectra and, consequently, the optimized gate performance. This motivates the SPAM-robust and SPAM-mitigated protocols developed in the following two sections.}
+
+% [Old version of Sec. III removed — see git history if needed]
+
+\section{SPAM-Robust frequency-comb QNS}
+\label{sec::SRQNS}
+
+\qk{Throughout Secs.~\ref{sec::SRQNS} and \ref{sec::SMQNS}, we employ distinct diacritics to track the SPAM content of observable estimators: $\hat{E}$ denotes the raw (SPAM-corrupted) estimate, $\overline{E}$ the estimate corrected for measurement errors only (still affected by state-preparation errors), $\tilde{E}$ the twisted estimate obtained via pre-measurement bit-flips, $\mathcal{E}^+$ the asymmetry-removed estimate, and $\underline{E}$ the fully SPAM-mitigated estimate.}
+
+In this section, we demonstrate the feasibility of implementing a QNS protocol using estimators that possess intrinsic robustness against SPAM errors, while also examining the fundamental limitations of this approach. For clarity of presentation, we introduce a \textit{twisting} operation that enables the symmetrization of asymmetric readout errors. The twisted estimate for an observable expectation value, denoted as $\tilde{E}_{\rho_0}^\pm[O(t)]$, is defined as
+
+\begin{align}
+    \tilde{E}^\pm_{\rho_0}[O(t)]&=\frac{\hat{E}_{\rho_0}[O(t)]\pm\hat{E}_{\rho_0}[O_{X_1X_2}(t)]}{2},
+\end{align}
+where the estimate $\hat{E}_{\rho_0}[O_{X_1X_2}(t)]$ is measured by applying a pre-measurement bit-flip to all the qubits in the system, or equivalently, measuring the observable $O_{X_1X_2}\equiv X_1X_2 OX_1X_2$ at time $t$. We also introduce the \textit{wringing} operation to symmetrize the error contributions to the initial state from $\alpha^{x,(l)}_{SP}$ and $\alpha^{y,(l)}_{SP}$ at time $t=0$ as a map on the fiducial state for the system,
+\begin{align}
+    \mathcal{W}_\pm\left\{E_{\rho_0}[O(t)]\right\}&=\frac{E_{\rho_0}[O(t)]\pm E_{Z_1Z_2\rho_0Z_1Z_2}[O(t)]}{2}.
+\end{align}
+We first consider the single-qubit case, subsequently extending the discussion to the more complex two-qubit system.
+
+\smallskip
+
+\subsection{Single-qubit SPAM-robust 
+%frequency-comb 
+QNS}
+
+Single-qubit QNS of dephasing noise is a special case of the $N$-qubit Hamiltonian under discussion and deserves specific focus in our discussion for SPAM robust estimators for frequency-comb QNS. For $N=1$, the absence of Ising interactions leads to a simplified toggling-frame Hamiltonian, $\tilde{H}_1(t)$, given by:
+\begin{align}
+    \tilde{H}_1(t)&=y_{1}(t)\zeta_1(t)Z_1.
+\end{align}
+It can be shown that for $\tilde{H}_1(t)$ the second order cumulant only depends on the $\mathbb{1}$ term, i.e. $C_O^{(2)}(t)/2!=\mathcal{C}_{O,0}\mathbb{1}$ \cite{PhysRevLett.107.230501} and
+
+\begin{align}
+    \mathcal{C}_{O,0}(t)&=\left[1-\text{sgn}(O,1,0)\right]\int_{-\infty}^\infty\frac{d\omega}{4\pi}\left|F_{1}^{(1)}(\omega,T)\right|^2S_{1,1}(\omega).
+\end{align}
+Following the protocol described in Section \ref{sec::FCQNS} we can use $\text{CDD}_2$ (CPMG) sequences to establish a well-conditioned frequency-comb QNS problem. The coefficient $\mathcal{C}_{1,0}(MT)$ can subsequently be estimated from measurements of $\hat{A}_1^+(MT)$ and $\hat{A}_1^-(MT)$, in the presence of SPAM errors. Under the twisting operation
+
+\begin{align}
+    \tilde{E}^-_{\psi^\pm_1}[X_1(t)]&=\alpha_M^{(1)}\alpha_{SP}^{z,(1)}E_{\psi^\pm_1}[X_1(t)],
+\end{align}
+and the result is similar for $\tilde{E}^-_{\psi^\pm_1}[Y_1(t)]$. SPAM errors bias the estimates for $A^\pm_l(t)$ directly constructed out of expectation values, in a way that is not separable. Therefore, to separate out the SPAM error contribution, we must used twisted expectation values in defining the estimates
+\begin{align}
+    \hat{A}^\pm_1(MT)&=-\frac{1}{4}\ln\left\{\tilde{E}^-_{\psi^\pm_1}[X_1(MT)]^2+\tilde{E}^-_{\psi^\pm_1}[Y_1(MT)]^2\right\}.
+\end{align}
+In terms of the SPAM error free values,
+\begin{align}
+    \hat{A}^\pm_1(MT)&=A^\pm_1(MT)-\frac{1}{2}\ln\left[\alpha_M^{(1)}\alpha_{SP}^{z,(1)}\right].
+\end{align}
+The resulting estimate for the coefficient $\mathcal{C}_{1,0}(t)$ can be written as the sum of the ideal value and the SPAM error contribution
+\begin{align}
+    \hat{\mathcal{C}}_{1,0}(MT)&=\mathcal{C}_{1,0}(MT)-\ln\left[\alpha_M^{(1)}\alpha_{SP}^{z,(1)}\right].
+\end{align}
+Under a large number of repetitions of the base sequence $M\gg1$, $\hat{\mathcal{C}}_{1,0}(MT)$ scales linearly with $M$, with the SPAM term as the intercept in a time-series analysis, explicitly,
+
+\begin{align}
+\label{eq:C_approx_concise}
+    \hat{\mathcal{C}}_{1,0}(MT)&\approx\frac{M}{T}\sum_{k=1}^{k_\text{max}}\left|F_{1}^{(1)}(\omega_k,T)\right|^2S_{1,1}(\omega_k)\notag\\
+    &\qquad\qquad\qquad\qquad-\ln\left[\left(\alpha_M^{(1)}\alpha_{SP}^{z,(1)}\right)^2\right].
+\end{align}
+A set of coefficients, $\{\hat{\mathcal{C}}_{1,0}(M_iT)\}_{i=1}^{n_M}$, as the simulation in Fig.\,\ref{fig::CvsM}, is experimentally obtained for varied numbers of repetitions $\forall M_i \gg 1$. Linear regression of these data with respect to $M_i$ separates the SPAM term (intercept, corresponding to $-\ln[\alpha_M^{(1)}\alpha_{SP}^{z,(1)}]$ in Eq.\,(\ref{eq:C_approx_concise})) from the SPAM-free estimates $\underline{\mathcal{C}}_{1,0}(MT)$, which are derived from the gradient. These SPAM-free estimates facilitate spectral reconstruction robust to SPAM errors.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\linewidth]{figures/C_1_0_MT_vs_M.pdf}
+    \caption{Linear scaling of the estimated noise coefficients, $C_{1,0}^{(l)}(MT)$, as a function of the number of sequence repetitions, $M$. The data is from a simulation of a single-qubit, SPAM-robust Quantum Noise Spectroscopy (QNS) protocol for different pulse sequences indexed by $l=1,\dots,5$. As described by Eq.\,\ref{eq:C_approx_concise}, the relationship is linear. A linear regression of this data allows for the separation of the desired SPAM-free noise estimate (derived from the gradient) from the SPAM error contribution (given by the y-intercept, $-\ln\left[\alpha_z^{(1)}\right]$). Key simulation parameters include state preparation and measurement (SPAM) parameters $\alpha_M=0.97$ and $\alpha_\text{SP}^{(z)}=0.99$, a base sequence duration $T=4\mu s$ and $\tau=25ns$, and $n_\text{shots}=2000$ for each data point.}
+    \label{fig::CvsM}
+\end{figure}
+
+\smallskip
+
+\subsection{Two-qubit SPAM-robust QNS}
+
+Two-qubit frequency-comb QNS utilizes estimates of both single and two-qubit observables for spectral characterization. The analysis of SPAM errors is bifurcated, addressing the effects of SPAM on two-qubit expectation values separately from those on single-qubit expectation values. The set of relevant two-qubit observables is denoted $O_{12} \in \{X_1X_2, Y_1X_2, X_1Y_2, Y_1Y_2\}$ and the set of relevant single-qubit observables is $O_l \in \{X_l, Y_l\}$ for $l \in \{1, 2\}$. The cumulants are identical for all expectation values of observables within the two-qubit set, and similarly for those within the single-qubit set for a given qubit index. This feature significantly simplifies the SPAM error analysis, as it reduces to considering the projection of the relevant cumulant and quantum state onto a single characteristic observable from each set.
+
+
+We can address the measurement errors by utilizing the twisting operation. We have already shown that $\tilde{E}^-_{\psi^\pm_{l}}[O_l(MT)]=\alpha_M^{(l)}\overline{E}_{\psi_l^\pm}[O_l(MT)]$. It is also true that
+\begin{align}
+    \tilde{E}^+_{\psi^\pm_{l}}[O_l(MT)]&=\delta_l,\\
+    \tilde{E}^+_{\psi_{12}}[O_{12}(MT)]&=\alpha_M^{(1)}\alpha_M^{(2)}\overline{E}_{\psi_{12}}[O_{12}(MT)]+\delta_1\delta_2.
+\end{align}
+Recall that the overline notation implies the presence of state-preparation errors. To remove the contribution of the asymmetry parameter, consider the estimator $\mathcal{E}^+_{\psi_{12}}[O_{12}(MT)]\equiv\tilde{E}^+_{\psi_{12}}[O_{12}(MT)]-\tilde{E}^+_{\psi^+_{1}}[O_1(MT)]\tilde{E}^+_{\psi^+_{2}}[O_2(MT)]$, which can be expressed in terms of the measurement error parameters:
+\begin{align}
+    \mathcal{E}^+_{\psi_{12}}[O_{12}(MT)]&=\alpha_M^{(1)}\alpha_M^{(2)}\overline{E}_{\psi_{12}}[O_{12}(MT)].
+\end{align}
+This estimator is multiplicative in measurement error parameters and is still affected by state-preparation errors.
+\begin{widetext}
+To address the state-preparation errors we can use the wringing operation to design an estimator for $\hat{D}^\pm(MT)$ from which SPAM errors separate out as a time-independent term
+\begin{align}
+    \hat{D}^\pm(MT)&=-\frac{1}{4}\ln\Big\{(\mathcal{W}_+\{\mathcal{E}^+_{\psi_{12}}[X_1Y_2]\}\pm\mathcal{W}_+\{\mathcal{E}^+_{\psi_{12}}[Y_1X_2]\})^2+(\mathcal{W}_+\{\mathcal{E}^+_{\psi_{12}}[X_1X_2]\}\mp\mathcal{W}_+\{\mathcal{E}^+_{\psi_{12}}[Y_1Y_2]\})^2\Big\}.
+\end{align}
+In terms of the SPAM-free $D^\pm(MT)$,
+\begin{align}
+    \hat{D}^\pm(MT)&=D^\pm(MT)-\frac{1}{2}\ln\left[\left(\alpha_M^{(1)}\alpha_M^{(2)}\right)^2 \left(\alpha_{SP}^{z,(1)}\alpha_{SP}^{z,(2)}\mp\alpha_{SP}^{y,(1)}\alpha_{SP}^{y,(2)}\right)^2\right].
+\end{align}
+From $\hat{\mathcal{C}}_{12,12}(MT)=\hat{D}^+(MT)-\hat{D}^-(MT)$ and $\hat{\mathcal{C}}_{12,0}(MT)=\hat{D}^+(MT)+\hat{D}^-(MT)$ it follows that
+\begin{align}
+    \hat{\mathcal{C}}_{12,12}(MT)&=\mathcal{C}_{12,12}(MT)-\ln\left[\frac{\alpha_{SP}^{z,(1)}\alpha_{SP}^{z,(2)}-\alpha_{SP}^{y,(1)}\alpha_{SP}^{y,(2)}}{\alpha_{SP}^{z,(1)}\alpha_{SP}^{z,(2)}+\alpha_{SP}^{y,(1)}\alpha_{SP}^{y,(2)}}\right],\\
+    \hat{\mathcal{C}}_{12,0}(MT)&=\mathcal{C}_{12,0}(MT)-\ln\left[\left(\alpha_M^{(1)}\alpha_M^{(2)}\right)^2 \left(\left(\alpha_{SP}^{z,(1)}\alpha_{SP}^{z,(2)}\right)^2-\left(\alpha_{SP}^{y,(1)}\alpha_{SP}^{y,(2)}\right)^2\right)\right].
+\end{align}
+For large base-sequence repetitions,
+\begin{align}
+    \hat{\mathcal{C}}_{12,12}(MT)&\approx\frac{2M}{T}\sum_{k=1}^{k_\text{max}}\text{Re}\left\{S_{1,2}(\omega_k)F^{(1)}_{1}(\omega_k,T)F^{(1)}_{2}(-\omega_k,T)\right\}-\ln\left[\frac{\alpha_{SP}^{z,(1)}\alpha_{SP}^{z,(2)}-\alpha_{SP}^{y,(1)}\alpha_{SP}^{y,(2)}}{\alpha_{SP}^{z,(1)}\alpha_{SP}^{z,(2)}+\alpha_{SP}^{y,(1)}\alpha_{SP}^{y,(2)}}\right],\\
+    \hat{\mathcal{C}}_{12,0}(MT)&\approx\frac{M}{T}\sum_{k=1}^{k_\text{max}}\sum_{l=1,2}S_{l,l}(\omega_k)\left|F^{(1)}_{l}(\omega_k,T)\right|^2-\ln\left[\left(\alpha_M^{(1)}\alpha_M^{(2)}\right)^2 \left(\left(\alpha_{SP}^{z,(1)}\alpha_{SP}^{z,(2)}\right)^2-\left(\alpha_{SP}^{y,(1)}\alpha_{SP}^{y,(2)}\right)^2\right)\right].
+\end{align}
+\end{widetext}
+This difference in scaling can be exploited through linear regression to characterize the SPAM-free coefficients $\underline{\mathcal{C}}_{12,12}(MT)$ and $\underline{\mathcal{C}}_{12,0}(MT)$. The remaining task is the SPAM-robust estimation of $\mathcal{C}_{1,0}(MT)$, $\mathcal{C}_{2,0}(MT)$, $\mathcal{C}_{1,2}(MT)$ and $\mathcal{C}_{2,1}(MT)$. These coefficients depend on the single qubit expectation values $E_{\psi_l^\pm}[O_l(t)]$. For these observables, the presence of correlations between the Ising noise and the single-qubit noise ($S_{1,12}(\omega),\,S_{2,12}(\omega)\neq 0$) makes it difficult to separate SPAM errors even with the twisting and wringing operation we have introduced. If, however, $S_{1,12}(\omega)=S_{2,12}(\omega)= 0$, then by definition $\mathcal{C}_{1,2}(t)=\mathcal{C}_{2,1}(t)=0$, and an estimate for $\mathcal{C}_{l,0}(MT)$ can be defined using only the twisting operations,
+\begin{align}
+    \hat{A}_l^\pm(t)&=-\frac{1}{4}\ln\left\{\tilde{E}^-_{\psi_l^\pm}[X_l(t)]^2+\tilde{E}^-_{\psi_l^\pm}[Y_l(t)]^2\right\},\\
+    \hat{A}_l^\pm(t)&=A^\pm_l(t)\notag\\
+    &\qquad-\frac{1}{2}\ln\left[\left(\alpha_M^{(l)}\right)^2 \left(\left(\alpha_{SP}^{z,(l)}\right)^2+\left(\alpha_{SP}^{y,(l)}\right)^2\right)\right],
+\end{align}
+from which it follows that,
+\begin{align}
+    \hat{\mathcal{C}}_{l,0}(MT)&=\hat{A}^+_l(MT)+\hat{A}^-_l(MT),\\
+    \hat{\mathcal{C}}_{l,0}(MT)&=\mathcal{C}_{l,0}(MT)\notag\\
+    &\qquad-\ln\left[\left(\alpha_M^{(l)}\right)^2 \left(\left(\alpha_{SP}^{z,(l)}\right)^2+\left(\alpha_{SP}^{y,(l)}\right)^2\right)\right].
+\end{align}
+As before, the coefficient scales linearly in the number of repetitions of the base-sequence; therefore, it is possible to characterize all but the $S_{1,12}(\omega),\,S_{2,12}(\omega)$ classical spectra through a protocol that is inherently robust to SPAM errors.
+
+%% \qk{[FIGURE SUGGESTION — MEDIUM: Add a validation figure for the SPAM-mitigated QNS protocol, analogous to
+%% Fig.~1 for the SPAM-robust case, showing reconstructed spectra vs.\ true spectra under SPAM-mitigated QNS,
+%% possibly with error bars from finite shot noise.]}
+
+\section{SPAM-Mitigated QNS}
+\label{sec::SMQNS}
+A SPAM-robust QNS protocol was presented in Sec.\, \ref{sec::SRQNS}, which allows for spectral reconstruction that is free from SPAM errors by introducing a significant overhead in the experimental implementation. In this section we use state-of-the-art SPAM mitigation techniques to mitigate SPAM errors and reconstruct the noise spectra free from SPAM errors. This approach can characterize all the classical spectra present in the system. The separate characterization of state-preparation and measurement error parameters \cite{khan2025} allows for the reconstruction of the confusion matrix $\hat{A}$ for the two-qubit measurement errors present in the system under consideration, using the estimated parameters $\hat{\alpha}^{(l)}_M$ and $\hat{\delta}_{l}$ for $l \in \{1,2\}$.
+
+The inverse of this matrix can be used to construct an unbiased estimator for the observable expectation values that are free from measurement errors. Measurements on a quantum system are conducted in the fixed computational basis. The expectation value of any observable is constructed by a premeasurement rotation into the eigenbasis of the measured observable. This allows us to define the measurement error-mitigated estimator of the observable expectation value $\overline{E}_{\rho_0}[O(t)]$ in terms of the eigenvalues of $O$ (denoted $O(u)$), the measurement probability at time $t$ defined as $\pi_v(t)\equiv \text{Tr}[\Pi_v \rho(t)]$, and the inverse of the confusion matrix, $\hat{A}^{-1}$:
+\begin{align}
+    \overline{E}_{\rho_0}[O(t)]&=\sum_{u,v\in\{z_+,z_-\}^{\otimes 2}}O(u)\left[\hat{A}^{-1}\right]_{u,v}\pi_v(t).
+\end{align}
+
+In practice, this reconstruction is achieved by mapping the measured observables $O\in\{X_1,X_2,Y_1,Y_2,X_1X_2,Y_1Y_2,X_1Y_2,Y_1X_2\}$ to the set of diagonal operators in the computational basis \textemdash $\{Z_1,Z_2,Z_1Z_2\}$ \textemdash and measuring these. The measurement error-free estimate is denoted by an overline ($\overline{E}$) to reflect the presence of state-preparation errors that have not yet been addressed. To mitigate the state-preparation errors from the estimated observable expectation values, we must first remove the contribution of $\alpha_{SP}^{x,(l)}$ and $\alpha_{SP}^{y,(l)}$ from the resulting expectation values. This can be achieved by twirling each qubit under randomized phase operators or through the use of high-fidelity single-qubit corrective rotations on the fiducial state. These operations preserve only the $\alpha^{z,(l)}_{SP}$ component of the initial state, and the expressions simplify under the limit $\alpha^{x,(l)}_{SP},\alpha^{y,(l)}_{SP}\rightarrow 0$. Assuming the parameters $\hat{\alpha}^{z,(l)}_{SP}$ have been estimated, the fully SPAM-mitigated two-qubit observable expectation values are given by:
+\begin{align}
+    \underline{E}_{\psi_{12}}\left[O_{12}(t)\right]&=\frac{\overline{E}_{\psi_{12}}\left[O_{12}(t)\right]}{\hat{\alpha}^{z,(1)}_{SP}\hat{\alpha}^{z,(2)}_{SP}}.
+\end{align}
+
+The presence of three-body bath-mediated interactions leads to single-qubit observable expectation values that are affected by the state-preparation parameters of both qubits. SPAM-mitigated observable expectation values can still be reconstructed through a second confusion matrix $\hat{B}_l$, which is defined as:
+\begin{align}
+    \hat{B}_l\equiv\frac{\hat{\alpha}_{SP}^{z,(l)}}{4}\begin{bmatrix}
+        1+\hat{\alpha}_{SP}^{z,(l')} & 1-\hat{\alpha}_{SP}^{z,(l')}\\
+        1-\hat{\alpha}_{SP}^{z,(l')} & 1+\hat{\alpha}_{SP}^{z,(l')}
+    \end{bmatrix},
+\end{align}
+where $l'$ denotes the complementary qubit ($l' \neq l$). Inverting this matrix allows us to estimate the SPAM-mitigated single-qubit expectation values:
+\begin{align}
+    \begin{bmatrix}
+        \underline{E}_{\psi_l^+}\left[O_l(t)\right]\\
+        \underline{E}_{\psi_l^-}\left[O_l(t)\right]
+    \end{bmatrix}&=\hat{B}_l^{-1}\begin{bmatrix}
+        \overline{E}_{\psi_l^+}\left[O_l(t)\right]\\
+        \overline{E}_{\psi_l^-}\left[O_l(t)\right]
+    \end{bmatrix}.
+\end{align}
+
+For a system with effective state-preparation ($\alpha_{SP}^{z,(l)}>0$) the matrix is invertible as $\det(\hat{B}_l)=\hat{\alpha}_{SP}^{z,(l)}\hat{\alpha}_{SP}^{z,(l')}/4$. As the initial state gets closer to a mixed state, the determinant falls to 0 quadratically. These SPAM-mitigated observable expectation values can then be used to reconstruct the entire set of classical spectra.
+
+\qk{Before proceeding, we briefly contrast the two SPAM-handling strategies. The SPAM-robust protocol (Sec.~\ref{sec::SRQNS}) requires no prior knowledge of the SPAM parameters and achieves robustness through linear regression over varying repetition numbers $M$; however, it introduces significant experimental overhead and cannot characterize the cross-spectra $S_{l,12}(\omega)$ when these are nonzero. The SPAM-mitigated protocol (Sec.~\ref{sec::SMQNS}) instead estimates and inverts the SPAM parameters directly, enabling characterization of all classical spectra at lower overhead, but at the cost of relying on accurate SPAM parameter estimation. In the gate optimization that follows, we assume access to the SPAM-free spectra provided by either approach.}
+
+\section{Noise-tailored gates}
+\label{sec::optGates}
+
+\qk{Armed with unbiased spectral estimates from SPAM-robust or SPAM-mitigated QNS, we now formulate the noise-tailored gate optimization.}
+
+\subsection{Methods}
+The gate optimization is carried out using a gradient-descent algorithm with the process fidelity, $F_{\text{pro}}(\mathcal{U}_G, \mathcal{E})$, of the noisy gate serving as the cost function. The user defines the target gate by specifying the total gate time $T_G$ and a minimum pulse separation $\tau$, with the constraint $T_G \geq 2\tau$ to allow for at least one control pulse per qubit. 
+
+The primary control resources are the application times of the instantaneous $\pi$-pulses for each qubit. We denote these times by the ordered sets $\vec{t}^{(l)} = \{t_k^{(l)}\}_{k=1}^{N_l}$ for qubit $l \in \{1, 2\}$, strictly ordered such that $t_{k+1}^{(l)} > t_k^{(l)}$ for all $k$, where $N_l$ represents the total number of pulses applied to qubit $l$. These temporal sets constitute the optimization parameters for the gradient-descent algorithm.
+
+The optimization evaluates the PTM $\mathcal{E}(T_G, \vec{t}^{(1)}, \vec{t}^{(2)})$, constructed using the SPAM-free reconstructed spectra $S_{a,b}(\omega_k)$. Because the cumulant expansions used to construct $\mathcal{E}(T_G, \vec{t}^{(1)}, \vec{t}^{(2)})$ require continuous spectral functions, we employ linear interpolation between the discretely characterized data points. The optimization is performed in the time domain, mapping directly to the physical pulse sequences, which significantly accelerates gradient evaluations (see Appendix \ref{app::deriv_fidelity} for details). The specific pulse sequences that minimize the objective function are selected as the optimal noise-tailored control.
+
+It is crucial to systematically acknowledge that a gate optimized over linearly interpolated spectra may deviate from the true global optimum on physical hardware. High-frequency spectral features beyond the Nyquist frequency ($\omega > \omega_{\text{Ny}}$) or sharp resonances not resolved by the coarse-grained frequency-comb QNS might degrade the true experimental fidelity despite yielding a theoretically minimal cost. Nonetheless, because iterative optimization via direct experimental process tomography is computationally and practically prohibitive, optimizing over the inferred, SPAM-mitigated spectra provides the most systematic and scalable path forward. 
+
+Finally, we address the computational constraints of gate optimization, which may be overcome by further parallelization and increased computational resources. The hyper-parameters include the number of pulses per qubit ($N_1, N_2$) and the number of repetitions ($M$) of the base sequence duration $T_M = T_G/M$. The allowed number of pulses $N_l^{(M)}$ is upper-bounded by $T_M$ and lower-bounded by the minimum pulse separation $\tau$. Across all configurations of $M$, the optimization landscape encompasses $\mathcal{O}(\sum_M N_1^{(M)}N_2^{(M)})$ randomly initialized parameters. For long-duration operations, such as the idling gate, this parameter space can easily approach $\sim 10^9$ possibilities. Consequently, exact computations of the Jacobian and Hessian (which can have $\sim 10^3$ and $\sim 10^6$ elements, respectively) become extremely expensive per gradient-descent step. 
+
+To optimize efficiently, we incorporate bootstrap sampling alongside random feature selection. We perform random feature selection by iterating through possible base sequence times $T_M$ while randomly selecting the number of pulses $N_l$ for each qubit, and we use bootstrap sampling to randomly create copies of the sample system for distributed optimization. While this systematic down-selection does not exhaustively scan the entire parameter space, it is highly efficient and demonstrably produces optimized sequences that outperform standard dynamical decoupling solutions. 
+
+We benchmark our gate-optimization protocol against rigorous grid searches over known families of pulse sequences that can fit within the base sequence time $T_M$ for all $M$. The specific standard sequence that generates the highest gate fidelity over the characterized noise spectra is selected as the baseline optimized gate. Specifically, we compare against concatenated dynamical decoupling sequences applied locally ($\text{CDD}_{n_1,n_2}^M$) or globally ($\text{mqCDD}_{n_1,n_2}^M$).
+
+\subsection{Hard constraints}
+While soft constraints are an obvious solution to address the problem of minimum allowed pulse separation, in practice they are difficult to work with. Gradients can diverge when the pulse vectors get `crowded', narrow Gaussian barriers can be bypassed (disturbing the strict temporal ordering of the pulse vectors), and violating sequences can still pass through the optimization procedure only to be discarded later.
+
+An alternative, robust setup can be constructed by using the delays between consecutive pulses as the optimization parameters. The linear constraints defining the minimum pulse separation, $t_{k+1}^{(l)} - t_k^{(l)} \geq \tau$, are not natively amenable to the fixed `box' constraints that standard numerical optimizers (such as the Sequential Least SQuares Programming, or SLSQP, algorithm) efficiently utilize.
+
+Under a transformation to a delay vector space, these constraints become fixed bounds. We define the delay vector components for each qubit $l \in \{1, 2\}$ as:
+\begin{align}
+    \delta_k^{(l)} &= t_k^{(l)} - t_{k-1}^{(l)},
+\end{align}
+for $k=1, \dots, N_l$, where we define the initial boundary condition $t_0^{(l)} \equiv 0$. The inverse transformation recovers the absolute pulse times via a cumulative sum:
+\begin{align}
+    t_k^{(l)} &= \sum_{i=1}^k \delta_i^{(l)}.
+\end{align}
+
+In this transformed space, the minimum pulse separation constraint manifests simply as a lower bound on the individual delay vector components: $\delta_k^{(l)} \geq \tau$. The upper limit on these components is restricted by the total target gate time, $T_G$. To enforce that the entire sequence fits within the fixed duration $T_G$ and leaves at least a minimum separation $\tau$ before the sequence ends, we impose a single linear inequality constraint on the sum of the delays for each qubit. The complete set of constraints for qubit $l$ can be expressed as:
+\begin{align}
+    T_G \geq \delta_k^{(l)} &\geq \tau, \\
+    T_G - \sum_{k=1}^{N_l} \delta_k^{(l)} &\geq \tau.
+\end{align}
+
+The optimization cost function, minimizing the process infidelity, is then explicitly parameterized by these delay vectors:
+\begin{align}
+    L_G(T_G, \vec{\delta}^{(1)}, \vec{\delta}^{(2)}) &= 1 - F_{\text{pro}}\left(\mathcal{U}_G, \mathcal{E}(T_G, \vec{\delta}^{(1)}, \vec{\delta}^{(2)})\right).
+\end{align}
+
+By optimizing the delay vectors $\vec{\delta}^{(l)}$ instead of the absolute pulse timing vectors $\vec{t}^{(l)}$, we successfully transform $N_l$ coupled linear inequality constraints into $N_l$ independent box constraints and exactly one linear inequality constraint per qubit, significantly improving the stability and efficiency of the numerical optimizer.
+
+\subsection{Idling gate}
+Consider the idling (or memory) gate, which \qk{provides the cleanest testbed for noise-tailored optimization, as it isolates the decoherence-suppression problem from the additional constraints of entangling-phase accumulation}.
+This is a decoupling gate that preserves the state of the system in the presence of spatiotemporally correlated dephasing noise.
+Such a gate, ideally, would map each Pauli operator to itself, which translates to the PTM being a $16 \times 16$ identity matrix; thus, $\mathcal{U}_\mathbb{1} = \mathbb{1}_{16\times 16}$.
+The process fidelity of the idle gate for target time $T_G$ is strictly the normalized trace of the PTM $\mathcal{E}_\mathbb{1}$ corresponding to the noisy gate implementation.
+Integrating the delay vector parameterization introduced previously, the fidelity is analytically represented by $F_{\text{pro}}\left(\mathcal{U}_\mathbb{1}, \mathcal{E}_\mathbb{1}(T_G, \vec{\delta}^{(1)}, \vec{\delta}^{(2)})\right)$:
+\begin{align}
+    F_{\text{pro}}\left(\mathcal{U}_\mathbb{1}, \mathcal{E}_\mathbb{1}\right) &= \frac{1}{16} \sum_{k=0}^{15} \left[\mathcal{E}_\mathbb{1}(T_G, \vec{\delta}^{(1)}, \vec{\delta}^{(2)})\right]_{kk}.
+\end{align}
+
+Under dephasing-preserving control parameterized by the physical delay vectors, this fidelity can be written explicitly in terms of the cumulant expansion discussed in Section \ref{sec::highFid}.
+Accounting for the trace over the 4-dimensional Hilbert space for 2 qubits, the expression is:
+\begin{align}
+    F_{\text{pro}}(\mathcal{U}_\mathbb{1}, \mathcal{E}_\mathbb{1}) &= \frac{1}{64} \sum_{k=0}^{15} \text{Tr}\left[e^{-\mathcal{C}^{(2)}_{P_k}(T_G, \vec{\delta}^{(1)}, \vec{\delta}^{(2)})/2!}\right].
+\end{align}
+
+The second-order cumulant can be written in the frequency domain, directly incorporating the parameterized filter functions:
+\begin{align}
+    &\frac{\mathcal{C}^{(2)}_{P_k}(T_G, \vec{\delta}^{(1)}, \vec{\delta}^{(2)})}{2!} = -\sum_{a,b\in \mathcal{I}_2} \left[\text{sgn}(P_k,a,0)-1\right]\frac{Z_a Z_b}{2} \notag\\
+    &\qquad\qquad\qquad \times \int_{-\infty}^\infty \frac{d\omega}{2\pi} S_{a,b}(\omega) G_{a,b}\left(\omega, T_G, \vec{\delta}^{(1)}, \vec{\delta}^{(2)}\right).
+\end{align}
+This expression demonstrates explicitly how the parameterized control resources interact with the characterized noise spectra.
+By using the delay parameters instead of absolute times, the search space bounds remain fixed and stable during gradient-descent optimization.
+To keep the optimization search space tenable and ensure we are considering sequences that optimally suppress multi-qubit dephasing noise, we constrain our comparisons to the established family of CDD sequences introduced in the previous section.
+
+%% \qk{[FIGURE SUGGESTION — HIGH PRIORITY: Add a figure (or subfigure panel) showing all input spectra
+%% $S_{a,b}(\omega)$ used in the numerical experiments — both the ``featured'' (multi-peaked) and
+%% ``monotonically decreasing'' ($1/f^\alpha$) cases. Readers need to see what these terms mean concretely.]}
+
+\subsection{Monotonically decreasing spectra}
+
+We first evaluate the optimization framework against spectral landscapes characterized by a monotonically decreasing profile, such as generic $1/f$ noise. In this regime, the theoretical objective is to efficiently concentrate the control filter function's spectral density at the highest possible frequencies. Consequently, the numerically optimized noise-tailored (NT) sequences are expected to converge toward the behavior of optimal known dynamical decoupling families. As illustrated in Fig.\,\ref{fig:idling_fidelity_boring}, standard Concatenated Dynamical Decoupling (CDD) sequences consistently match or marginally outperform the numerically optimized NT control over a wide range of gate times. This is an anticipated consequence of the CDD sequence design, which analytically guarantees a high cancellation order at $\omega = 0$ and is demonstrably highly effective for isolating the system from low-frequency-dominated environments.
+
+The underlying mechanism is evident in the spectral overlap integrals that define the second-order cumulants. Fig.\,\ref{fig:S1212overlapboring} compares the spectral overlap of the best-performing analytical sequence ($\text{CDD}_{3,2}^{128}$) and the corresponding numerical sequence ($\text{NT}_{7,13}^{64}$) with the strictly decreasing $S_{12,12}^+(\omega)$ spectrum. The aperiodic nature of the optimized sequence inadvertently generates broader low-frequency passbands in the generalized filter function $G_{12,12;12,12}(\omega, T_G)$, which leads to higher dephasing rates compared to the precise recursive nulls engineered into the CDD sequences.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\linewidth]{figures/infidelity_vs_gatetime_id_best_M_boring_pub.pdf}
+    \caption{Dependence of the Idling gate infidelity on evolution time $\tau$ when the spectra are \qk{monotonically decreasing}. The plot compares three regimes: FID (dotted black line, triangles), best sequences from the CDD family of pulses (solid blue line, circles), and numerically optimized pulses (dashed orange line, squares). In the regime of monotonically decreasing spectra, the best optimized sequences do no beat the known CDD sequences. If they do it is only marginally.}
+    \label{fig:idling_fidelity_boring}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\linewidth]{figures/spectra_overlay_S1212_pub.pdf}
+    \caption{The spectral overlap for the longest gate ($T_G=256\mu$s) in Fig.\,\ref{fig:idling_fidelity_boring}, between the $S_{12,12}^+(\omega)$ spectrum and the generalized filter-function $G_{12,12;12,12}^+(\omega,T_G)$ for the best known sequence ($\text{CDD}_{3,2}^{128}$) and the best optimized sequence ($NT_{7,13}^{64}$). The optimized noise-tailored sequence do not mitigate low frequency noise as effectively as CDD sequences.}
+    \label{fig:S1212overlapboring}
+\end{figure}
+
+\subsection{Featured spectral landscapes}
+
+The comparative advantage of numerical optimization becomes starkly apparent when evaluating complex spectral landscapes, particularly those exhibiting high-frequency resonances or multi-peaked cross-spectra that vary across the multi-qubit system. For such environments, noise-tailored control distributes the spectral density of the filter functions more effectively than standard pulse sequences, which are fundamentally constrained to specific frequency bands. 
+
+As shown in Fig.\,\ref{fig:idling_infidelity}, the presence of featured spectra completely inverts the performance hierarchy observed in the monotonic case. The standard CDD sequences exhibit significant performance degradation because their rigid harmonic structures generate fixed passbands; these inadvertently permit spectral leakage when aligned with higher-frequency environmental noise peaks. In contrast, the numerical optimization algorithm iteratively shapes the generalized filter functions to actively identify and exploit the minima in the noise power spectral density. By relaxing the constraints of recursive periodicity, the aperiodic noise-tailored sequences successfully navigate the complex spectral terrain, yielding a robust suppression of the overlap integrals and a corresponding enhancement in the process fidelity.
+
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{figures/infidelity_vs_gatetime_id_best_M_pub.pdf}
+    \caption{Dependence of the Idling gate infidelity on evolution time $\tau$ when the spectra are featured. The plot compares three regimes: FID (dotted black line, triangles), best sequences from the CDD family of pulses (solid blue line, circles), and numerically optimized pulses (dashed orange line, squares). Both control methods exhibit a characteristic fidelity "sweet spot" at $\tau = 640$, balancing control error against environmental decoherence. At this optimum, the standard sequences achieve the global minimum infidelity of $3.67 \times 10^{-5}$, slightly outperforming the optimized pulses ($7.06 \times 10^{-5}$). However, the optimized pulses demonstrate superior robustness at intermediate durations; at $\tau = 2560$, the optimized scheme suppresses error by a factor of $\sim 4.4$ compared to the best known sequence ($5.81 \times 10^{-4}$ vs. $2.55 \times 10^{-3}$).}
+\label{fig:idling_infidelity}
+\end{figure}
+\smallskip
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{figures/spectra_overlay_S22_pub.pdf}
+    \caption{The spectral overlap for the longest gate ($T_G=256\mu$s) in Fig.\,\ref{fig:idling_infidelity} between the $S_{2,2}^+(\omega)$ spectrum and the generalized filter-function $G_{2,2}^+(\omega,T_G)$ for the best known sequence ($\text{CDD}_{3,2}^{128}$) and the best optimized sequence ($NT_{275,391}^2$). The optimized noise-tailored sequence can seek the minima much more effectively.}
+\label{fig:S22overlap}
+\end{figure}
+\smallskip
+
+\subsection{Entangling gates and physical constraints}
+
+\qk{We now extend the optimization framework from idling to entangling gates, which introduces several additional challenges: the control must accumulate a precise $\pi/4$ entangling phase through the first-order cumulant, the tunable coupling strength is bounded by $J_{\text{max}}$, and the interaction channel itself is subject to environmental dephasing noise $\beta_{12}(t)$ that must be simultaneously suppressed.}
+
+We consider a bipartite qubit system featuring local, individually addressable off-axis control and a tunable, longitudinal Ising coupling. In the presence of local dephasing, two-body coupling noise, and control amplitude fluctuations, the rotating-frame Hamiltonian is parameterized as:
+\begin{align}
+    H_R(t)&=\beta_1(t)Z_1+\beta_2(t)Z_2 \nonumber\\
+    & \quad +\left[J_0(t)+\beta_{12}(t)\right]Z_1Z_2\nonumber\\
+    & \qquad +\frac{\Omega_1^x(t)}{2}X_1+\frac{\Omega_2^x(t)}{2}X_2.
+\end{align}
+The target operation is the maximally entangling Controlled-Z (CZ) gate, generated by the ideal unitary $U_{\text{CZ}} = \exp\{-i\frac{\pi}{4}(Z_1Z_2 - Z_1 - Z_2)\}e^{-i\frac{\pi}{4}}$. Assuming the local $Z$-rotations are executed virtually via instantaneous phase-tracking, the entangling objective reduces to generating a noise-protected $\exp\{-i\frac{\pi}{4}Z_1Z_2\}$ rotation.
+
+Moving to the toggling frame defined by the local dephasing-preserving control, the Hamiltonian bifurcates into commuting deterministic control and stochastic noise components. Utilizing the generalized filter functions $G_{a,b}(\omega,t)$ established in Sec.~\ref{sec::background}, the noisy gate evolution is fully characterized by the operator-dependent cumulant expansion:
+\begin{align}
+    C_O^{(1)}(t)&=\left[1-\text{sgn}(O,1,2)\right]Z_1Z_2\int_0^t ds \, y_{12}(s)J_0(s),\\
+    \frac{C_{O}^{(2)}(t)}{2!}&=-\sum_{a,b\in\mathcal{I}_2}[\text{sgn}(O,a,0)-1]\frac{Z_aZ_b}{2}\notag\\
+    &\qquad\qquad\times\int_{-\infty}^{\infty}\frac{d\omega}{2\pi}S_{a,b}(\omega)G_{a,b}(\omega,t),
+\end{align}
+where \qk{$a,b\in\mathcal{I}_2\setminus\{0\}=\{1,2,12\}$, since $\zeta_0$ is absent}. Therefore, generating a noise-tailored gate constitutes a constrained optimization problem: strictly minimizing the spectral overlap in $C_O^{(2)}(t)$ while enforcing that the first-order cumulant $C_O^{(1)}(t)$ accumulates precisely a $\pi/4$ phase.
+
+To construct a rigorous, gauge-invariant cost function for this optimization, we map the operator-dependent dynamics to the Pauli Transfer Matrix (PTM) formalism. The process fidelity $F_{\text{pro}}(\Gamma_{\text{CZ}}, \overline{\Gamma}_{\text{CZ}}(T))$ provides the exact distance metric to be maximized.
+
+However, physical hardware imposes conditions on the accessible control space, specifically, the minimum allowable pulse separation $\tau$ and the maximum tunable coupling strength $J_{\text{max}}$. 
+
+While $\tau$ inherently restricts the achievable decoupling order by bounding the sequence density, $J_{\text{max}}$ dictates the fundamental minimum gate duration $T_G$. For the noise-tailored control to successfully execute the protocol, the temporal overlap between the multi-qubit switching function $y_{12}(t)$ and the pulse envelope $J_0(t)$ must be sufficient to integrate to the required entangling phase. If $J_{\text{max}}$ is overly restrictive, high-fidelity operations become physically inaccessible regardless of sequence complexity. 
+
+Consequently, the optimization landscape is strictly bounded. The minimum operational time is constrained by the coupling amplitude, while the maximum allowable time is constrained by the exponential accumulation of unmitigated environmental decoherence.
+
+%% \qk{[FIGURE SUGGESTION — MEDIUM: Add a spectral overlap panel for the CZ entangling gate, analogous to
+%% Figs.~3/5 for the idling gate, comparing CDD vs.\ NT filter functions against the featured spectra.
+%% This would visually explain the headline two-orders-of-magnitude result.]}
+
+\subsection{Performance analysis}
+
+To quantitatively evaluate the efficacy of the noise-tailored (NT) control relative to established dynamical decoupling (DD) protocols, we analyze the scaling of the process infidelity, $1 - F_{\text{pro}}$, as a function of the total gate time, $T_G$. The numerical optimization results, illustrated in Fig.\,\ref{fig:infidelity_vs_time}, establish a substantial performance advantage for the NT sequences in realizing high-fidelity entangling operations. The gradient-descent pipeline systematically identifies optimal pulse configurations that suppress the process infidelity by up to two orders of magnitude relative to the highest-performing sequences within the CDD family.
+
+This comparative advantage is maximized in the intermediate gate-duration regime, centered approximately at $T_G = 320\tau$. At this specific evolution time, the numerically optimized NT sequence achieves a global minimum infidelity of $4.40 \times 10^{-4}$. By contrast, for identical operational durations, the standard CDD sequence fidelity is bounded at $1.43 \times 10^{-1}$, while the unmodulated free-induction decay (FID) baseline yields $4.75 \times 10^{-1}$. 
+
+This error suppression—spanning two orders of magnitude relative to CDD and three orders of magnitude relative to the uncorrected baseline—defines an optimal operational regime. This minimum arises from a fundamental and systematic physical trade-off: the duration $T_G$ is sufficiently extended to support the high pulse density requisite for precise filter-function shaping and exact phase accumulation, yet brief enough to preclude the exponential domination of unmitigated environmental decoherence.
+
+Outside this optimal window, performance predictably degrades. As $T_G$ extends beyond $\approx 10^3\tau$, the infidelity of the NT sequences asymptotically approaches the uncorrected baseline, reflecting the long-time regime where environmental decoherence overwhelmingly dominates the dynamics. Conversely, in the ultrashort-time limit, the achievable fidelity is strictly bounded by the theoretical minimum gate duration ($T_{G,\min} \approx 15.71\tau$). In this regime, the physical constraints imposed by the maximum coupling strength $J_{\text{max}}$ and the minimum pulse separation $\tau$ mathematically preclude the insertion of a sufficient number of decoupling $\pi$-pulses to effectively minimize the overlap integrals.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=1\linewidth]{figures/infidelity_vs_gatetime_pub.pdf}
+    \caption{This figure shows the dependence of gate infidelity on evolution time $\tau$. The plot compares three control regimes: no decoupling pulse (dotted black line, triangles), CDD-family pulses (solid blue line, circles), and the numerically optimized pulses (dashed orange line, squares). The vertical gray dashed line indicates the theoretical minimum gate time ($\tau_{\min} \approx 15.71$) constrained by the gate amplitude. While the unmodulated and standard schemes show a monotonic increase in error with gate time, the optimized pulse reveals a distinct fidelity sweet spot at $\tau = 320$, achieving a minimum infidelity of $4.40 \times 10^{-4}$. This represents a suppression of error by approximately two orders of magnitude compared to CDD sequences ($1.43 \times 10^{-1}$) and three orders of magnitude compared to the pulse-free baseline ($4.75 \times 10^{-1}$).}
+\label{fig:infidelity_vs_time}
+\end{figure}
+\begin{figure*}[t!]
+    \centering
+    \includegraphics[width=1\linewidth]{figures/pulse_sequence_comparison_pub.pdf}
+    \caption{a) The best standard decoupling sequence (left column), characterized by regular, periodic switching of the single-qubit controls $y_{1}(t)$ and $y_{2}(t)$. Note that the interaction control term $y_{12}(t)$ (bottom left) remains constant, leaving coherent coupling errors (from the $\beta_{12}(t)Z_1Z_2$ noise term) uncorrected.
+    (b) The numerically optimized sequence (right column). The optimizer breaks the periodic symmetry and introduces rapid, sign-alternating modulation into the interaction switching function ($y_{12}(t)$, bottom right). 
+    This active suppression of the coupling term is the primary mechanism allowing the optimized pulse to outperform standard sequences in the presence of strong $ZZ$ environmental noise.}
+    \label{fig:seq_comparison}
+\end{figure*}
+
+\subsection{Pulse sequence characteristics}
+
+The physical mechanism driving this performance improvement becomes evident upon examining the time-domain structures of the respective control sequences. Fig.~\ref{fig:seq_comparison} contrasts the single and two-qubit switching functions, $y_{l}(t)$ and $y_{12}(t) \equiv y_1(t)y_2(t)$, for the optimal baseline CDD sequence (left column) against the numerically optimized noise-tailored sequence (right column) evaluated at the optimal gate duration.
+
+The optimal standard DD sequence exhibits the characteristic recursive, highly periodic switching structure inherent to concatenated protocols. While this strict periodicity analytically guarantees a high-order filter function roll-off that optimally suppresses low-frequency $1/f$-type dephasing, it simultaneously generates rigid, localized passbands at higher harmonic frequencies. If the environmental noise spectra $S_{a,b}(\omega)$ feature resonances that align with these passbands, the decoupling efficiency is severely compromised. Furthermore, satisfying the constraints for coherent phase accumulation in the $Z_1 Z_2$ coupling channel imposes severe structural limitations on standard DD families. To accumulate the requisite $\pi/4$ entangling phase under a constant or slowly varying coupling $J_0(t)$, the two-body switching function $y_{12}(t)$ must retain a strictly non-vanishing temporal mean. For standard CDD sequences applied globally, this often restricts the allowable local controls to $y_1(t) = y_2(t)$, which trivially enforces $y_{12}(t) = 1$ identically for the duration of the gate. As illustrated in Fig.~\ref{fig:seq_comparison}a, this static interaction switching function leaves the target multi-qubit system completely unmodulated in the two-body basis, rendering it entirely vulnerable to both two-body environmental dephasing [$\beta_{12}(t)$] and uncharacterized multiplicative control noise on the entangling drive.
+
+In contrast, the numerically optimized control sequence (Fig.~\ref{fig:seq_comparison}b) deliberately breaks this periodic symmetry. By lifting the constraints of recursive sequence nesting, the gradient-descent optimization explores a fully aperiodic parameter space, positioning the instantaneous local $\pi$-pulses to actively and asynchronously shape the multi-qubit generalized filter functions $G_{a,b}(\omega, T_G)$. Instead of generically concentrating suppression power strictly near $\omega = 0$, the aperiodic noise-tailored filter functions dynamically adapt, allocating their spectral nulls to directly overlap with the specific high-frequency spectral peaks characterized by the SPAM-mitigated QNS protocol.
+
+Most crucially, the optimized framework achieves simultaneous decoupling and entanglement generation. As observed in the lower-right panel of Fig.~\ref{fig:seq_comparison}, the optimized sequence introduces rapid, sign-alternating modulation into the interaction switching function $y_{12}(t)$. This active toggling effectively averages out the stochastic noise native to the $Z_1 Z_2$ coupling channel, robustly isolating the system from $\beta_{12}(t)$ fluctuations. Simultaneously, the optimizer precisely breaks the parity of this toggling to maintain the exact asymmetric temporal area required for the first-order cumulant to integrate deterministically to the target $\pi/4$ entangling phase. This capacity to actively filter interaction-channel noise while concurrently preserving deterministic coherent dynamics highlights the fundamental operational advantage of aperiodic noise-tailored control over analytically rigid standard sequences.
+
+%% \qk{[ADDITIONAL FIGURE SUGGESTIONS:
+%% — MEDIUM: Robustness/sensitivity analysis — plot showing infidelity vs.\ spectral perturbation magnitude
+%%   to address reviewer concerns about sensitivity to errors in reconstructed spectra.
+%% — LOW: Summary comparison table consolidating FID/best-CDD/best-NT infidelities at key gate times.
+%% — LOW: Convergence analysis of the optimizer (cost function vs.\ iteration count) as supplemental material.]}
+
+\section{Conclusion}
+\label{sec::conclusion}
+
+In this work, we have established and numerically validated a comprehensive, end-to-end theoretical framework for generating high-fidelity, noise-tailored two-qubit quantum operations in the presence of generic, spatiotemporally correlated dephasing noise. Recognizing that the efficacy of any noise-tailored control protocol is intrinsically bounded by the accuracy of the underlying spectral characterization, we first introduced SPAM-robust and SPAM-mitigated extensions to two-qubit frequency-comb quantum noise spectroscopy (QNS). These advancements enable the unbiased estimation of classical dephasing self and cross-spectra, effectively decoupling environmental noise signatures from persistent state-preparation and measurement nonidealities. Leveraging these reconstructed, SPAM-free spectra, we formulated a non-perturbative, exact second-order cumulant model of the noisy multi-qubit dynamics utilizing the Pauli Transfer Matrix (PTM) formalism. By defining the process infidelity as a cost function directly governed by the spectral overlap between the characterized environmental noise and the generalized control filter functions, we successfully deployed a constrained gradient-descent optimization to discover aperiodic pulse sequences that systematically minimize decoherence for both idling (memory) and maximally entangling (Controlled-Z) operations.
+
+Our numerical analysis demonstrates that in environments characterized by complex, featured, or multi-peaked power spectral densities, these aperiodic noise-tailored sequences decisively outperform standard dynamically decoupled (DD) families, such as Concatenated DD (CDD). Specifically, we demonstrated infidelity suppressions of up to two orders of magnitude in the intermediate gate-duration optimal regime. Conversely, in the limit of monotonically decreasing $1/f^\alpha$ noise—where standard periodic DD sequences are analytically known to excel—our optimization algorithm robustly converges to equivalent high-order decoupling solutions, validating the generality of the numerical approach. Crucially, our framework for entangling operations explicitly accommodates realistic hardware constraints, enforcing strict physical bounds on the maximum continuous interaction strength $J_\text{max}$ and the minimum finite pulse separation $\tau$, while actively mitigating the deleterious effects of multiplicative control noise on the entangling drive.
+
+While this methodology provides a rigorous foundation for noise-tailored multi-qubit control, several avenues for future theoretical investigation remain. The present formalism is specialized to classical, zero-mean Gaussian dephasing processes. However, state-of-the-art solid-state and atomic quantum processors generically experience broad-spectrum multi-axis noise—encompassing both transverse relaxation and longitudinal dephasing—as well as non-commuting quantum noise arising from finite-temperature quantum baths. Extending the SPAM-mitigated QNS and PTM-based optimization pipeline to map and decouple these generalized multi-axis and quantum noise channels is a natural and vital next step. Furthermore, a more exhaustive theoretical treatment must move beyond strictly dephasing-preserving instantaneous control to explicitly model finite-width pulses, leakage errors, and comprehensive control-noise parameterizations.
+
+Finally, the ultimate utility of this characterization and optimization pipeline rests on its empirical validation. Experimental deployment of this framework on a physical two-qubit architecture is essential to definitively benchmark the achievable fidelity gains over standard analytical sequences in the presence of realistic, physically correlated noise environments. As quantum processors scale toward the fault-tolerant regime, extending this integrated noise-tailoring methodology beyond bipartite systems to address pervasive spatiotemporal crosstalk in larger multi-qubit arrays will remain an outstanding challenge.
+
+\smallskip
+
+\section*{Acknowledgments} 
+
+Work at Dartmouth was supported in part by .... ARO Multidisciplinary Research Program of the University Research Initiative (MURI) Grant No. W911NF1810218.
+
+%%%%%%%%%%%% 
+
+\bibliography{aps_v2}% Produces the bibliography via BibTeX.
+
+
+\appendix
+\begin{widetext}
+\section{Cumulant expansion under control noise}
+\label{app::controlnoiseCE}
+Under the noisy control Hamiltonian $\tilde{H}_c(t)=J_0(t)y_{12}(t)\left(1+\xi(t)\right)Z_1Z_2$, the additive cumulant can be evaluated explicitly using the definition presented in \cite{CombMultiaxis}:
+\begin{align}
+    \frac{C_{O,c}^{(2)}(t)}{2!}&=\int_0^t ds_1\int_0^{s_1} ds_2\Big\{C^{(2)}(\tilde{H}_c(s_1),\tilde{H}_c(s_2))+C^{(2)}(\tilde{H}_{O,c}(s_2),\tilde{H}_{O,c}(s_1)) \notag\\
+    &\qquad\qquad\qquad\qquad-C^{(2)}(\tilde{H}_{O,c}(s_1),\tilde{H}_{c}(s_2))-C^{(2)}(\tilde{H}_{O,c}(s_2),\tilde{H}_{c}(s_1))\Big\},
+\end{align}
+where $C^{(2)}(A,B)=\langle AB \rangle-\tfrac{1}{2}(\langle A \rangle\langle B \rangle+\langle B \rangle\langle A \rangle)$, and the operator-dependent Hamiltonian is defined as $\tilde{H}_{O,c}(t)\equiv O^{-1}\tilde{H}_{c}(t)O$. For the given interaction, this simplifies to $\tilde{H}_{O,c}(t)=\text{sgn}(O,1,2)\tilde{H}_c(t)$. Because the control Hamiltonian commutes with itself at different times, we can expand and simplify the expression:
+\begin{align}
+    \frac{C_{O,c}^{(2)}(t)}{2!}&=\int_0^t ds_1\int_0^{s_1}ds_2\Big\{J_0(s_1)J_0(s_2)y_{12}(s_1)y_{12}(s_2)\left[1+\langle \xi(s_1)\xi(s_2)\rangle\right] - J_0(s_1)J_0(s_2)y_{12}(s_1)y_{12}(s_2)\notag\\
+    &\qquad\qquad\qquad +J_0(s_1)J_0(s_2)y_{12}(s_1)y_{12}(s_2)\left[1+\langle \xi(s_1)\xi(s_2)\rangle\right] - J_0(s_1)J_0(s_2)y_{12}(s_1)y_{12}(s_2)\notag\\
+    &\qquad\qquad\qquad -\text{sgn}(O,1,2)J_0(s_1)J_0(s_2)y_{12}(s_1)y_{12}(s_2)\left[1+\langle \xi(s_1)\xi(s_2)\rangle\right] \notag\\
+    &\qquad\qquad\qquad+ J_0(s_1)J_0(s_2)y_{12}(s_1)y_{12}(s_2)\notag\\
+    &\qquad\qquad\qquad-\text{sgn}(O,1,2)J_0(s_1)J_0(s_2)y_{12}(s_1)y_{12}(s_2)\left[1+\langle \xi(s_1)\xi(s_2)\rangle\right] \notag\\
+    &\qquad\qquad\qquad+ J_0(s_1)J_0(s_2)y_{12}(s_1)y_{12}(s_2)\Big\}\notag\\
+    &=2[1-\text{sgn}(O,1,2)]\int_0^t ds_1 \int_0^{s_1}ds_2 J_0(s_1)J_0(s_2)y_{12}(s_1)y_{12}(s_2)\langle \xi(s_1-s_2)\xi(0)\rangle.
+\end{align}
+We transform this into the frequency domain by substituting the Fourier transform of the noise auto-correlation function and exchanging the order of integration:
+\begin{align}
+    \frac{C_{O,c}^{(2)}(t)}{2!}&=2[1-\text{sgn}(O,1,2)]\int_{-\infty}^\infty\frac{d\omega}{2\pi}S_\xi(\omega) \int_0^t ds_1\int_0^{s_1}ds_2 J_0(s_1)J_0(s_2)y_{12}(s_1)y_{12}(s_2)e^{i\omega (s_1-s_2)}.
+\end{align}
+Writing the cumulant in this form allows us to identify the second-order non-fundamental filter function:
+\begin{align}
+    \overline{F}^{(2)}_{12}(\omega, -\omega, t)&=\int_0^t ds_1\int_0^{s_1}ds_2 J_0(s_1)J_0(s_2)y_{12}(s_1)y_{12}(s_2)e^{i\omega(s_1-s_2)}.
+\end{align}
+The cumulant can then be expressed in terms of this filter function as:
+\begin{align}
+    \frac{C_{O,c}^{(2)}(t)}{2!}&=[1-\text{sgn}(O,1,2)]\int_{-\infty}^\infty\frac{d\omega}{2\pi}S_\xi(\omega)\overline{F}^{(2)}_{12}(\omega, -\omega, t).
+\end{align}
+Further simplification is achieved by recognizing that the control-noise power spectral density $S_\xi(\omega)$ is a symmetric real function, and the Fourier transform of a real-valued function can be decomposed into a symmetric real part and an anti-symmetric imaginary part. The convolution integral over the imaginary part vanishes identically, yielding:
+\begin{align}
+    \int_{-\infty}^\infty\frac{d\omega}{2\pi}S_\xi(\omega)\overline{F}^{(2)}_{12}(\omega, -\omega, t) &= \int_{-\infty}^\infty\frac{d\omega}{2\pi}S_\xi(\omega)\text{Re}\left[\overline{F}^{(2)}_{12}(\omega, -\omega, t)\right] \notag\\
+    &= \frac{1}{2} \int_{-\infty}^\infty\frac{d\omega}{2\pi}S_\xi(\omega)\left[\overline{F}^{(2)}_{12}(\omega, -\omega, t) + \overline{F}^{(2)}_{12}(-\omega, \omega, t)\right] \notag\\
+    &= \frac{1}{2} \int_{-\infty}^\infty\frac{d\omega}{2\pi}S_\xi(\omega)\left|\overline{F}^{(1)}_{12}(\omega, t)\right|^2,
+\end{align}
+where we have defined the first-order interaction filter function $\overline{F}^{(1)}_{12}(\omega, t) \equiv \int_0^t ds\, J_0(s) y_{12}(s) e^{i\omega s}$. This leads to the final, simplified expression:
+\begin{align}
+    \frac{C_{O,c}^{(2)}(t)}{2!}&=[1-\text{sgn}(O,1,2)]\int_{-\infty}^\infty\frac{d\omega}{2\pi}S_\xi(\omega)\left|\overline{F}^{(1)}_{12}(\omega, t)\right|^2.
+\end{align}
+
+\section{Expansion of the cumulant in the Pauli $Z$ basis}
+\label{app::COs}
+The second-order cumulant can be expanded in the Pauli $Z$ basis utilizing the coefficients:
+\begin{align}
+    \mathcal{C}_{O,a}&=\frac{1}{2^N}\text{Tr}\left[\frac{C_O^{(2)}}{2!}Z_a\right].
+\end{align}
+As established in \cite{PhysRevA.95.022121}, the coefficients required for the reconstruction of the classical spectra in the \qk{leading-order ($M_1$, i.e., Gaussian)} model can be explicitly formulated in terms of the noise spectra $S_{a,b}(\omega)$ and the generalized filter functions $G_{a,b}(\omega, t) = F_a^{(1)}(\omega, t)F_b^{(1)}(-\omega, t)$ as follows:
+\begin{align}
+    \mathcal{C}_{l,0}(t)&=\int_{-\infty}^\infty \frac{d\omega}{2\pi}\sum_{a\in \{l,12\}}\text{Re}\left[S_{a,a}(\omega)G_{a,a}(\omega, t)\right],\\
+    \label{eq::c1,2}
+    \mathcal{C}_{1,2}(t)&=2\int_{-\infty}^\infty \frac{d\omega}{2\pi}\text{Re}\left[S_{1,12}(\omega)G_{1,12}(\omega, t)\right],\\
+    \label{eq::c2,1}
+    \mathcal{C}_{2,1}(t)&=2\int_{-\infty}^\infty \frac{d\omega}{2\pi}\text{Re}\left[S_{2,12}(\omega)G_{2,12}(\omega, t)\right],\\
+    \mathcal{C}_{12,0}(t)&=\int_{-\infty}^\infty \frac{d\omega}{2\pi}\sum_{l=1}^2\text{Re}\left[S_{l,l}(\omega)G_{l,l}(\omega, t)\right],\\
+    \label{eq::c1212}
+    \mathcal{C}_{12,12}(t)&=2\int_{-\infty}^\infty \frac{d\omega}{2\pi}\text{Re}\left[S_{1,2}(\omega)G_{1,2}(\omega,t)\right].
+\end{align}
+\end{widetext}
+
+\section{Characterization of the remaining spectra}
+\label{app::char}
+We now detail the reconstruction of the classical cross-spectra. Eq.\,\eqref{eq::c1212} shows that the measurable coefficient $\hat{\mathcal{C}}_{12,12}(MT)$ is given by the convolution of the real part of the classical cross-spectrum and the generalized filter function $G_{1,2}(\omega, MT)$. In the limit $M\gg 1$, this becomes a discrete sum:
+\begin{align}
+    \mathcal{C}_{12,12}(MT)&\approx\frac{2M}{T}\sum_{k=1}^{k_{\max}}\text{Re}\left\{S_{1,2}(\omega_k)G_{1,2}(\omega_k, T)\right\}.
+\end{align}
+The generalized filter function is given by $G_{1,2}(\omega_k, T)=F_1^{(1)}(\omega_k, T)F_2^{(1)}(-\omega_k, T)$. By applying a $\text{CDD}_3$ sequence on qubit 1 and a $\text{CDD}_1$ sequence on qubit 2 (Experiment 2.a), we ensure that $G_{1,2}(\omega_k, T)$ is strictly real. Consequently, it follows that:
+\begin{multline}
+    \text{Re}\left\{S_{1,2}(\omega_k)G_{1,2}^{(2.\,a)}(\omega_k, T)\right\} = \\
+    \text{Re}\left\{S_{1,2}(\omega_k)\right\}\text{Re}\left\{G_{1,2}^{(2.\,a)}(\omega_k, T)\right\}.
+\end{multline}
+Similarly, we can generate a purely imaginary filter function by applying a $\text{CDD}_3$ pulse on qubit 1 and a CPMG pulse on qubit 2 (Experiment 2.b). In this configuration:
+\begin{multline}
+    \text{Re}\left\{S_{1,2}(\omega_k)G_{1,2}^{(2.\,b)}(\omega_k, T)\right\} =\\
+    -\text{Im}\left\{S_{1,2}(\omega_k)\right\}\text{Im}\left\{G_{1,2}^{(2.\,b)}(\omega_k, T)\right\}.
+\end{multline}
+Using these relations, we define the corresponding components of the reconstruction matrices, where $n$ indexes the varying sequence repetitions or scaling parameters:
+\begin{align}
+    U_{n,k}^{\text{R}(1,2)}&=\frac{2M}{T}\text{Re}\Big\{\big[G_{1,2}^{(2.\,a)}(\omega_k, T)\big]_n\Big\},\\
+    U_{n,k}^{\text{I}(1,2)}&=-\frac{2M}{T}\text{Im}\Big\{\big[G_{1,2}^{(2.\,b)}(\omega_k, T)\big]_n\Big\}.
+\end{align}
+The real and imaginary components of the cross-spectra can then be uniquely reconstructed from the experimentally estimated expectation values by inverting these matrices:
+\begin{align}
+    \text{Re}\left\{\hat{S}_{1,2}(\omega_k)\right\} &= \sum_n\left[U^{\text{R}(1,2)}\right]^{-1}_{k,n}\left[\hat{\mathcal{C}}^{(2.\,a)}_{12,12}(MT)\right]_n,\\
+    \text{Im}\left\{\hat{S}_{1,2}(\omega_k)\right\} &= \sum_n\left[U^{\text{I}(1,2)}\right]^{-1}_{k,n}\left[\hat{\mathcal{C}}^{(2.\,b)}_{12,12}(MT)\right]_n.
+\end{align}
+This completes the full characterization of the complex classical cross-spectrum: $\hat{S}_{1,2}(\omega_k)=\text{Re}\{\hat{S}_{1,2}(\omega_k)\}+i\text{Im}\{\hat{S}_{1,2}(\omega_k)\}$.
+
+For the two-body Ising noise term $\beta_{12}(t)$, there are three associated classical spectra to reconstruct: the self-spectrum $S_{12,12}(\omega)$ and the cross-spectra $S_{1,12}(\omega)$ and $S_{2,12}(\omega)$.
+
+Consider first the self-spectrum $S_{12,12}(\omega)$. The observables $\mathcal{C}_{1,0}(MT)$, $\mathcal{C}_{2,0}(MT)$, and $\mathcal{C}_{12,0}(MT)$ depend simultaneously on this spectrum. In the large-repetition limit ($M\gg 1$), we have:
+\begin{align}
+    \mathcal{C}_{1,0}(MT)&\approx\frac{2M}{T}\sum^{k_{\max}}_{k=1} \text{Re}\Big\{S_{1,1}(\omega_k)G_{1,1}(\omega_k, T)\notag\\
+    &\qquad\qquad\quad+S_{12,12}(\omega_k)G_{12,12}(\omega_k, T)\Big\},\\
+    \mathcal{C}_{2,0}(MT)&\approx\frac{2M}{T}\sum^{k_{\max}}_{k=1} \text{Re}\Big\{S_{2,2}(\omega_k)G_{2,2}(\omega_k, T)\notag\\
+    &\qquad\qquad\quad+S_{12,12}(\omega_k)G_{12,12}(\omega_k, T)\Big\},\\
+    \mathcal{C}_{12,0}(MT)&\approx\frac{2M}{T}\sum^{k_{\max}}_{k=1} \text{Re}\Big\{S_{1,1}(\omega_k)G_{1,1}(\omega_k, T)\notag\\
+    &\qquad\qquad\quad+S_{2,2}(\omega_k)G_{2,2}(\omega_k, T)\Big\}.
+\end{align}
+We cannot apply identical pulse sequences locally to both qubits. If $y_1(t) = y_2(t)$, the two-body switching function trivially becomes $y_{12}(t) = 1$, and the associated filter function $G_{12,12}(\omega, T)$ reduces to an unmodulated FID response, failing to generate the required frequency comb regardless of the base cycle time. Thus, we select a $\text{CDD}_3$ sequence on qubit 1 and a CPMG sequence on qubit 2. From linear combinations of the experimentally estimated observables, we obtain:
+\begin{align}
+    &\frac{1}{4}\left[\hat{\mathcal{C}}_{1,0}^{(3.\,a)}(MT)+\hat{\mathcal{C}}_{2,0}^{(3.\,b)}(MT)-\hat{\mathcal{C}}_{12,0}^{(3.\,c)}(MT)\right]=\notag\\
+    &\qquad\qquad\quad\frac{M}{T}\sum^{k_{\max}}_{k=1} \text{Re}\left\{S_{12,12}(\omega_k)G^{(3.\,a)}_{12,12}(\omega_k, T)\right\}.
+\end{align}
+
+To accurately isolate the spectral components, it is critical to leverage the structure of $G_{12,12}(\omega, T)$ generated by $y_{12}(t)=y_1(t)y_2(t)$. When distinct control sequences from the CDD library are applied—for instance, a $\text{CDD}_1$ sequence on qubit 1 with cycle time $T/2n$ and a $\text{CDD}_1$ sequence on qubit 2 with cycle time $T/n$—the product yields the switching function of a CPMG sequence:
+\begin{align}
+    \left[y_1^{(\text{CDD}_1)}(t)\right]_{2n}\left[y_2^{(\text{CDD}_1)}(t)\right]_n&=\left[y_{12}^{(\text{CPMG})}(t)\right]_{n}.
+\end{align}
+Consequently, the filter function efficiently samples the two-body spectrum $S_{12,12}(\omega)$ at harmonic frequencies, given by $G^{(3.\,a)}_{12,12}(\omega_k, T)=\left|\big[F^{(1)}_{\text{CPMG}}(\omega_k, T)\big]_n\right|^2$. The corresponding reconstruction matrix is:
+\begin{align}
+    U_{n,k}^{(12,12)}&=\frac{M}{T}\left|\big[F^{(1)}_{\text{CPMG}}(\omega_k, T)\big]_n\right|^2,
+\end{align}
+which immediately yields the spectrum:
+\begin{align}
+    \hat{S}_{12,12}(\omega_k)&=\frac{1}{4}\sum_n\left[U^{(12,12)}\right]^{-1}_{k,n}\Big\{\left[\hat{\mathcal{C}}_{1,0}^{(3.\,a)}(MT)\right]_n\notag\\
+    &\qquad+\left[\hat{\mathcal{C}}_{2,0}^{(3.\,b)}(MT)\right]_n-\left[\hat{\mathcal{C}}_{12,0}^{(3.\,c)}(MT)\right]_n\Big\}.
+\end{align}
+
+This conceptual framework extends seamlessly to the remaining classical cross-spectra $S_{1,12}(\omega)$ and $S_{2,12}(\omega)$. From Eq.\,\eqref{eq::c1,2}, we identify that $\mathcal{C}_{1,2}(t)$ samples $S_{1,12}(\omega)$. By constructing strictly real and purely imaginary instances of the filter function $G_{1,12}(\omega,T)$ through independent local control, we map the real and imaginary components of the spectrum. Specifically, assigning a CPMG sequence to qubit 1 and no drive (FID) to qubit 2 yields a real $G_{1,12}(\omega,T)$. For $M\gg1$:
+\begin{align}
+    \mathcal{C}_{1,2}(t)&\approx\frac{4M}{T}\sum_{k=1}^{k_{\max}}\text{Re}\left[S_{1,12}(\omega_k)\right]\left|F^{(1)}_{\text{CPMG}}(\omega_k,T)\right|^2.
+\end{align}
+\begin{widetext}
+Conversely, applying a CPMG sequence to qubit 1 and a $\text{CDD}_1$ sequence to qubit 2 generates a purely imaginary filter function $G_{1,12}(\omega, T)=F^{(1)}_{\text{CPMG}}(\omega, T)F^{(1)}_{\text{CDD}_1}(-\omega, T)$, isolating the imaginary component of the cross-spectrum:
+\begin{align}
+    \mathcal{C}_{1,2}(t)&\approx-\frac{4 M}{T}\sum_{k=1}^{k_{\max}}\text{Im}\left[S_{1,12}(\omega_k)\right]F^{(1)}_{\text{CPMG}}(\omega_k, T)F^{(1)}_{\text{CDD}_1}(-\omega_k, T).
+\end{align}
+\end{widetext}
+The associated reconstruction matrices are formed as:
+\begin{align}
+    U^{\text{R}(1,12)}_{n,k}&=\frac{4M}{T}\left|\left[F^{(1)}_{\text{CPMG}}(\omega_k,T)\right]_n\right|^2,\\
+    U^{\text{I}(1,12)}_{n,k}&=-\frac{4M}{T}\left[F^{(1)}_{\text{CPMG}}(\omega_k, T)\right]_n\left[F^{(1)}_{\text{CDD}_1}(-\omega_k, T)\right]_n.
+\end{align}
+These matrices are inverted to reconstruct $\hat{S}_{1,12}(\omega_k)$:
+\begin{align}
+    \text{Re}\left\{\hat{S}_{1,12}(\omega_k)\right\}&=\sum_n\left[U^{\text{R}(1,12)}\right]^{-1}_{k,n}\left[\hat{\mathcal{C}}_{1,2}^{(4.\,a)}(t)\right]_n,\\
+    \text{Im}\left\{\hat{S}_{1,12}(\omega_k)\right\}&=\sum_n\left[U^{\text{I}(1,12)}\right]^{-1}_{k,n}\left[\hat{\mathcal{C}}_{1,2}^{(4.\,b)}(t)\right]_n.
+\end{align}
+A strictly analogous procedure governs the reconstruction of the real and imaginary parts of the final cross-spectrum, $\hat{S}_{2,12}(\omega_k)$.
+
+
+
+\section{Derivation of Idling Gate Fidelity and Filter Functions}
+\label{app::deriv_fidelity}
+%% \qk{[TODO removed: ``Make a connection of this time-domain optimization to the work in the digital frame-based approaches.'' — Address or delete before submission.]}
+\subsection{Filter Function Definitions}
+We define the overlap integral $I_{a,b}(T)$ (for $a,b\in \mathcal{I}_2$ where $\mathcal{I}_2=\{0, 1, 2, 12\}$) as the integrated product of the noise spectra and the generalized filter functions:
+\begin{align}
+    I_{a,b}(T) &= \int_{-\infty}^{\infty} \frac{d\omega}{2\pi} S_{a,b}(\omega) G_{a,b}(\omega,T) \notag\\
+    &= \int_{-\infty}^{\infty} \frac{d\omega}{2\pi} S_{a,b}(\omega) F_a^{(1)}(\omega,T) F_b^{(1)*}(\omega,T),
+\end{align}
+where $F_b^{(1)*}(\omega, T) = F_b^{(1)}(-\omega, T)$.
+
+The first-order filter function is strictly defined by the time-domain control switching function $y_a(t) \in \{\pm 1\}$:
+\begin{align}
+    F_a^{(1)}(\omega\neq 0,T) &= \int_0^T dt \, y_a(t) e^{i\omega t} \nonumber \\
+    &= \sum_{j=0}^{N} \frac{y_a(t_j)}{i\omega} \{ e^{i\omega t_{j+1}} - e^{i\omega t_j} \},\\
+    F_a^{(1)}(\omega = 0,T) &= \sum_{j=0}^{N}y_a(t_j)(t_{j+1}-t_{j}),
+\end{align}
+where the boundary conditions are $t_0 = 0$ and $t_{N+1} = T$.
+
+\subsection{Numerical Evaluation Strategies}
+The optimization algorithms deploy two distinct evaluation strategies for calculating $I_{a,b}(T)$ to maximize numerical efficiency, depending on the sequence repetition scaling $M$.
+
+\subsubsection{Method 1: Folded Time-Domain Correlation ($M \le 10$)}
+For short repetition cycles, computations are executed strictly in the time domain to preclude finite-time spectral leakage. Defining the noise autocorrelation function as the inverse Fourier transform of the noise spectrum, $R_{a,b}(\tau) = \mathcal{F}^{-1}[S_{a,b}(\omega)]$, the overlap integral takes the form:
+\begin{equation}
+    I_{a,b}(T) = \int_{-\infty}^{\infty} d\tau \, C_{y_a, y_b}(\tau) R_{a,b}(\tau),
+\end{equation}
+where $C_{y_a, y_b}(\tau) = \int y_a(t) y_b(t+\tau) dt$ represents the deterministic correlation of the control switching functions. To accommodate repetitions, a ``folded'' noise kernel $R^{\text{folded}}_{a,b}(\tau)$ is precomputed (as detailed in Sec. \ref{app::time_folding}). The numerical integration discretizes the temporal grid with a step size $dt$ bound by the spectral Nyquist limit ($\omega_{\max}$), and the cross-correlations are efficiently evaluated via Fast Fourier Transforms (FFTs):
+\begin{equation}
+    I_{a,b} \approx \sum_{\tau_k} C_{y_a, y_b}[\tau_k] R^{\text{folded}}_{a,b}[\tau_k] dt.
+\end{equation}
+
+\subsubsection{Method 2: Frequency Comb Approximation ($M > 10$)}
+For heavily repeated sequences ($M > 10$), the filter function tightly converges to a Dirac comb at the harmonic frequencies $\omega_k = k \frac{2\pi}{T_{\text{seq}}}$. The integral is systematically approximated as a discrete summation:
+\begin{align}
+    I_{a,b}(MT) &\approx \frac{M}{T_{\text{seq}}} \Big[ I^{\text{DC}}_{a,b} \notag\\
+    &\quad+ 2 \sum_{k=1}^{K_{\max}} \text{Re}\left( \frac{A_a(\omega_k) A_b^*(\omega_k) S_{a,b}(\omega_k)}{\omega_k^2} \right) \Big],
+\end{align}
+where $A_a(\omega_k)$ evaluates the spectral amplitude jumps $\sum_j (-1)^j (e^{i\omega_k t_{j+1}} - e^{i\omega_k t_j})$. Expressing the summation exclusively through real arithmetic fundamentally stabilizes gradient propagation during the numerical optimization loops.
+
+\subsection{Fidelity Calculation}
+The objective fidelity of the decoupled memory (idling) gate\qk{, $F_\mathbb{1}(T)\equiv F_{\text{pro}}(\mathcal{U}_\mathbb{1},\mathcal{E}_\mathbb{1}(T))$,} is determined by tracing over the evolution of the 16 independent Pauli basis elements $P_k$:
+\begin{align}
+    F_\mathbb{1}(T) &= \frac{1}{16} \sum_{k=0}^{15} \text{Tr} \left\{ e^{-C_{P_k}^{(2)}(T)/2!} \right\} \nonumber \\
+    &= \frac{1}{16} \sum_{k=0}^{15} C_\mathbb{1}^{(k)}.
+\end{align}
+The exponent coefficient $C_\mathbb{1}^{(k)}$ is constructed from the Pauli-basis projection terms $\Theta_l^{(k)}$ (for $l \in \{0, 1, 2, 12\}$):
+\begin{equation}
+\Theta^{(k)}_l = -\sum_{j\in\mathcal{I}_2} \lambda^{(k)}_j I_{j,j\oplus l}(T),
+\end{equation}
+where $\lambda^{(k)}_j$ strictly enforce the commutation parity of $P_k$ against the localized noise operators. 
+
+To guarantee numerical stability and prevent floating-point underflow or overflow during automated gradient descent, the algorithm algebraically expands $C_\mathbb{1}^{(k)}$ utilizing direct exponential evaluations:
+\begin{align}
+    E_1 &= \frac{1}{2}(-\Theta_0 - \Theta_1 - \Theta_2 - \Theta_{12}), \nonumber \\
+    E_2 &= \frac{1}{2}(-\Theta_0 - \Theta_1 + \Theta_2 + \Theta_{12}), \nonumber \\
+    E_3 &= \frac{1}{2}(-\Theta_0 + \Theta_1 - \Theta_2 + \Theta_{12}), \nonumber \\
+    E_4 &= \frac{1}{2}(-\Theta_0 + \Theta_1 + \Theta_2 - \Theta_{12}).
+\end{align}
+The normalized trace component fundamentally reduces to the scalar average of these exponentials:
+\begin{equation}
+    C_\mathbb{1}^{(k)} = \frac{1}{4} \left( e^{E_1} + e^{E_2} + e^{E_3} + e^{E_4} \right).
+\end{equation}
+
+\subsection{Base sequence repetition and efficient evaluation}
+\label{app::time_folding}
+
+\subsubsection{Exact Time-Domain Analysis}
+When a base sequence of duration $T$ is repeated $M$ times, the total sequence duration is $MT$. The overlap integral implies a summation over repetition indices $m, n \in \{0, \dots, M-1\}$. To evaluate this efficiently in the time domain, we change variables to the difference $p = m - n$, where $p$ ranges from $-(M-1)$ to $(M-1)$. The weight of each lag $p$ is $(M - |p|)$.
+
+We pre-compute a ``time-folded'' noise correlation function $R^{\text{folded}}_{a,b}(u)$ defined on the base interval domain:
+\begin{equation}
+    R^{\text{folded}}_{a,b}(u) = \sum_{p=-(M-1)}^{M-1} (M - |p|) R_{a,b}(u + pT).
+\end{equation}
+This summation is performed prior to the optimization loop. During optimization, the overlap integral is reduced to a calculation involving only the single-repetition control functions:
+\begin{equation}
+    I_{a,b}(MT) = \int_{0}^{T} C_{y_a, y_b}(u) R^{\text{folded}}_{a,b}(u) \, du.
+\end{equation}
+This reduces the complexity from $\mathcal{O}((MT)^2)$ to $\mathcal{O}(T^2)$, allowing efficient optimization of highly repeated sequences (e.g., $M=10$). For $M > 10$, the frequency comb approximation (Method 2) is preferred.
+
+% [Old appendix material removed — see git history if needed]
+
+\end{document}

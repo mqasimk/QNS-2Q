@@ -161,31 +161,31 @@ def generate_publication_plot():
     fig, ax = plt.subplots()
 
     # Plot No Pulse
-    ax.loglog(x_data, infs_nopulse, 
-              marker='^', linestyle=':', color=colors["black"], 
-              label='No Pulse', clip_on=False,
+    ax.loglog(x_data, infs_nopulse,
+              marker='^', linestyle=':', color=colors["black"],
+              label='FID', clip_on=False,
               linewidth=2.0, markersize=5, zorder=10)
 
     # Plot Known Sequences
-    ax.loglog(x_data, infs_known, 
-              marker='o', linestyle='-', color=colors["blue"], 
-              label='Known Sequences', clip_on=False,
+    ax.loglog(x_data, infs_known,
+              marker='o', linestyle='-', color=colors["blue"],
+              label='CDD', clip_on=False,
               linewidth=2.0, markersize=5, zorder=10)
 
     # Plot Optimized Sequences
-    ax.loglog(x_data, infs_opt, 
-              marker='s', linestyle='--', color=colors["vermillion"], 
-              label='Optimized', clip_on=False,
+    ax.loglog(x_data, infs_opt,
+              marker='s', linestyle='--', color=colors["vermillion"],
+              label='NT', clip_on=False,
               linewidth=2.0, markersize=5, zorder=10)
-              
+
     # Plot Minimum Gate Time if available
     # if min_gate_time_tau is not None:
     #     ax.axvline(x=min_gate_time_tau, color='grey', linestyle='--', linewidth=1.0, zorder=5)
 
     # 4. Axes & Labels
     # ----------------
-    ax.set_xlabel(r"Gate Time ($\tau$)")
-    ax.set_ylabel("Infidelity")
+    ax.set_xlabel(r"$T_G / \tau$")
+    ax.set_ylabel(r"$1 - F_{\rm pro}$")
     
     # Calculate dynamic x-axis limits
     # Include min_gate_time_tau in the range calculation if it exists
@@ -350,9 +350,9 @@ def generate_all_M_plot():
     gate_times_np = results_by_M[first_M]['gate_times'] / tau
     infs_np = results_by_M[first_M]['infs_nopulse']
     
-    ax.loglog(gate_times_np, infs_np, 
-              marker='^', linestyle=':', color=colors["black"], 
-              label='No Pulse', clip_on=False,
+    ax.loglog(gate_times_np, infs_np,
+              marker='^', linestyle=':', color=colors["black"],
+              label='FID', clip_on=False,
               linewidth=2.0, markersize=5, zorder=10)
 
     for i, m in enumerate(M_values):
@@ -360,25 +360,25 @@ def generate_all_M_plot():
         x_data = res['gate_times'] / tau
         infs_k = res['infs_known']
         infs_o = res['infs_opt']
-        
+
         color = cmap(norm(i))
-        
+
         # Plot Known
-        ax.loglog(x_data, infs_k, 
-                  marker='o', linestyle='--', color=color, 
-                  label=f'Known (M={m})', clip_on=False,
+        ax.loglog(x_data, infs_k,
+                  marker='o', linestyle='--', color=color,
+                  label=f'CDD (M={m})', clip_on=False,
                   linewidth=1.0, markersize=3, alpha=0.7)
-        
+
         # Plot Opt
-        ax.loglog(x_data, infs_o, 
-                  marker='s', linestyle='-', color=color, 
-                  label=f'Opt (M={m})', clip_on=False,
+        ax.loglog(x_data, infs_o,
+                  marker='s', linestyle='-', color=color,
+                  label=f'NT (M={m})', clip_on=False,
                   linewidth=1.0, markersize=3)
 
     # 4. Axes & Labels
     # ----------------
-    ax.set_xlabel(r"Gate Time ($\tau$)")
-    ax.set_ylabel("Infidelity")
+    ax.set_xlabel(r"$T_G / \tau$")
+    ax.set_ylabel(r"$1 - F_{\rm pro}$")
     
     # Set limits based on all data
     # ... (similar logic to single plot)
@@ -551,15 +551,15 @@ def generate_best_M_plot():
     x_data = np.array(sorted_gts) / tau
     
     # Plot No Pulse
-    ax.loglog(x_data, nopulse_infs, 
-              marker='^', linestyle=':', color=colors["black"], 
-              label='No Pulse', clip_on=False,
+    ax.loglog(x_data, nopulse_infs,
+              marker='^', linestyle=':', color=colors["black"],
+              label='FID', clip_on=False,
               linewidth=2.0, markersize=5, zorder=10)
 
     # Plot Best Known
-    ax.loglog(x_data, best_known_infs, 
-              marker='o', linestyle='-', color=colors["blue"], 
-              label='Best Known', clip_on=False,
+    ax.loglog(x_data, best_known_infs,
+              marker='o', linestyle='-', color=colors["blue"],
+              label='CDD', clip_on=False,
               linewidth=2.0, markersize=5, zorder=10)
               
     # Annotate Known
@@ -570,9 +570,9 @@ def generate_best_M_plot():
                         ha='center', va='bottom', fontsize=6, color=colors["blue"], rotation=45)
 
     # Plot Best Opt
-    ax.loglog(x_data, best_opt_infs, 
-              marker='s', linestyle='--', color=colors["vermillion"], 
-              label='Best Optimized', clip_on=False,
+    ax.loglog(x_data, best_opt_infs,
+              marker='s', linestyle='--', color=colors["vermillion"],
+              label='NT', clip_on=False,
               linewidth=2.0, markersize=5, zorder=10)
 
     # Annotate Opt
@@ -584,9 +584,9 @@ def generate_best_M_plot():
 
     # 4. Axes & Labels
     # ----------------
-    ax.set_xlabel(r"Gate Time ($\tau$)")
-    ax.set_ylabel("Infidelity")
-    
+    ax.set_xlabel(r"$T_G / \tau$")
+    ax.set_ylabel(r"$1 - F_{\rm pro}$")
+
     # 5. Grid & Legend
     # ----------------
     ax.grid(True, which='major', zorder=0)

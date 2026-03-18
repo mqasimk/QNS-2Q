@@ -241,24 +241,24 @@ class SpectraReconstructor:
         # --- Real-valued spectra: S_11, S_22, S_1212 ---
         real_spectra = [
             ('S_11_k', 'S_11_err', S_11, None,
-             r'$S_{1,1}^+(\omega)$'),
+             r'$S_{1,1}(\omega)$'),
             ('S_22_k', 'S_22_err', S_22, None,
-             r'$S_{2,2}^+(\omega)$'),
+             r'$S_{2,2}(\omega)$'),
             ('S_12_12_k', 'S_12_12_err', S_1212, None,
-             r'$S_{12,12}^+(\omega)$'),
+             r'$S_{12,12}(\omega)$'),
         ]
 
         # --- Complex-valued spectra: S_1_2, S_1_12, S_2_12 ---
         complex_spectra = [
             ('S_1_2_k', 'S_1_2_err',
              lambda w_: S_1_2(w_, self.config.gamma),
-             r'$S_{1,2}^+(\omega)$'),
+             r'$S_{1,2}(\omega)$'),
             ('S_1_12_k', 'S_1_12_err',
              lambda w_: S_1_12(w_, self.config.gamma_12),
-             r'$S_{1,12}^+(\omega)$'),
+             r'$S_{1,12}(\omega)$'),
             ('S_2_12_k', 'S_2_12_err',
              lambda w_: S_2_12(w_, self.config.gamma_12 - self.config.gamma),
-             r'$S_{2,12}^+(\omega)$'),
+             r'$S_{2,12}(\omega)$'),
         ]
 
         fig, axs = plt.subplots(2, 3, figsize=(FIG_WIDTH, FIG_HEIGHT))

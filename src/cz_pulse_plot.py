@@ -139,7 +139,7 @@ def generate_pulse_plot():
 
     # 5. Styling & Labels
     # -------------------
-    row_labels = [r"$y_{1,1}(t)$", r"$y_{2,2}(t)$", r"$y_{12,12}(t)$"]
+    row_labels = [r"$y_1(t)$", r"$y_2(t)$", r"$y_{12}(t)$"]
     
     for row in range(3):
         for col in range(2):
