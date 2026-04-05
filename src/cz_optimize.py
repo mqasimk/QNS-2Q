@@ -872,76 +872,6 @@ def calculate_infidelity(seq, config, M, T_seq, use_ideal=False):
 # Visualization
 # ==============================================================================
 
-def plot_comparison(config, known_seq, opt_seq, T_seq):
-    """Plots the switching functions y(t) for comparison."""
-    has_known = known_seq is not None
-    has_opt = opt_seq is not None
-    
-    cols = 0
-    if has_known: cols += 1
-    if has_opt: cols += 1
-    
-    if cols == 0:
-        return
-
-    fig, axs = plt.subplots(3, cols, figsize=(6 * cols, 10), sharex=True, squeeze=False)
-    
-    def get_switching_function(pulse_times, T, num_points=1000):
-        pulse_times = np.array(pulse_times) # Ensure numpy for plotting
-        t_grid = np.linspace(0, T, num_points)
-        y = np.ones_like(t_grid)
-        if len(pulse_times) > 2:
-            internal_pulses = pulse_times[1:-1]
-            for t_pulse in internal_pulses:
-                y[t_grid >= t_pulse] *= -1
-        return t_grid, y
-
-    def plot_col(col_idx, seq, title_prefix):
-        pt1, pt2 = seq
-        pt12 = make_tk12(pt1, pt2)
-        
-        t, y1 = get_switching_function(pt1, T_seq)
-        _, y2 = get_switching_function(pt2, T_seq)
-        _, y12 = get_switching_function(pt12, T_seq)
-        
-        # Row 0: y1
-        axs[0, col_idx].step(t*1e6, y1, 'k-', where='post')
-        axs[0, col_idx].set_title(f"{title_prefix}\nQubit 1 Switching Function ($y_1$)")
-        axs[0, col_idx].set_ylabel(r"$y_1(t)$")
-        axs[0, col_idx].set_ylim(-1.2, 1.2)
-        axs[0, col_idx].grid(True, alpha=0.3)
-
-        # Row 1: y2
-        axs[1, col_idx].step(t*1e6, y2, 'k-', where='post')
-        axs[1, col_idx].set_title(r"Qubit 2 Switching Function ($y_2$)")
-        axs[1, col_idx].set_ylabel(r"$y_2(t)$")
-        axs[1, col_idx].set_ylim(-1.2, 1.2)
-        axs[1, col_idx].grid(True, alpha=0.3)
-
-        # Row 2: y12
-        axs[2, col_idx].step(t*1e6, y12, 'k-', where='post')
-        axs[2, col_idx].set_title(r"Interaction Switching Function ($y_{12}$)")
-        axs[2, col_idx].set_ylabel(r"$y_{12}(t)$")
-        axs[2, col_idx].set_xlabel(r"Time ($\mu$s)")
-        axs[2, col_idx].set_ylim(-1.2, 1.2)
-        axs[2, col_idx].grid(True, alpha=0.3)
-
-    current_col = 0
-    if has_known:
-        plot_col(current_col, known_seq, "Best Known Sequence")
-        current_col += 1
-    
-    if has_opt:
-        plot_col(current_col, opt_seq, "Best Optimized Sequence")
-        current_col += 1
-
-    plt.tight_layout()
-    
-    save_path = os.path.join(plot_utils.get_figures_dir(config.path), "sequence_comparison_cz.pdf")
-    plt.savefig(save_path)
-    print(f"Saved comparison plot to {save_path}")
-    plt.close(fig)
-
 # ==============================================================================
 # Main Execution
 # ==============================================================================
@@ -1121,18 +1051,37 @@ def run_optimization(config):
     
     # Plot best sequences
     if best_known_seq_overall or best_opt_seq_overall:
-        # Use the T_seq corresponding to the best sequence
-        # If we want to compare them on the same plot, they might have different T_seq.
-        # plot_comparison handles one T_seq.
-        # We will plot them separately if T_seq differs, or just plot the best overall.
-        
+        suffix = "_cz"
+        label_k = "Best Known Sequence (CZ)"
+        label_o = "Best Optimized Sequence (CZ)"
+
         if best_known_seq_overall and best_opt_seq_overall and T_seq_best_known == T_seq_best_opt:
-             plot_utils.plot_comparison(config, best_known_seq_overall, best_opt_seq_overall, T_seq_best_known, filename_suffix="_cz")
+             T_seq = T_seq_best_known
+             plot_utils.plot_comparison(config, best_known_seq_overall, best_opt_seq_overall, T_seq, filename_suffix=suffix)
+             plot_utils.plot_filter_functions(config, best_known_seq_overall, best_opt_seq_overall, T_seq, filename_suffix=suffix)
+             plot_utils.plot_filter_functions_with_spectra(config, best_known_seq_overall, best_opt_seq_overall, T_seq, filename_suffix=suffix)
+             plot_utils.plot_spectra_filter_overlay_6(config, best_known_seq_overall, T_seq, label_k)
+             plot_utils.plot_spectra_filter_overlay_6(config, best_opt_seq_overall, T_seq, label_o)
         else:
              if best_known_seq_overall:
-                 plot_utils.plot_comparison(config, best_known_seq_overall, None, T_seq_best_known, filename_suffix="_cz_known")
+                 plot_utils.plot_comparison(config, best_known_seq_overall, None, T_seq_best_known, filename_suffix=suffix+"_known")
+                 plot_utils.plot_filter_functions(config, best_known_seq_overall, None, T_seq_best_known, filename_suffix=suffix+"_known")
+                 plot_utils.plot_filter_functions_with_spectra(config, best_known_seq_overall, None, T_seq_best_known, filename_suffix=suffix+"_known")
+                 plot_utils.plot_spectra_filter_overlay_6(config, best_known_seq_overall, T_seq_best_known, label_k)
              if best_opt_seq_overall:
-                 plot_utils.plot_comparison(config, None, best_opt_seq_overall, T_seq_best_opt, filename_suffix="_cz_opt")
+                 plot_utils.plot_comparison(config, None, best_opt_seq_overall, T_seq_best_opt, filename_suffix=suffix+"_opt")
+                 plot_utils.plot_filter_functions(config, None, best_opt_seq_overall, T_seq_best_opt, filename_suffix=suffix+"_opt")
+                 plot_utils.plot_filter_functions_with_spectra(config, None, best_opt_seq_overall, T_seq_best_opt, filename_suffix=suffix+"_opt")
+                 plot_utils.plot_spectra_filter_overlay_6(config, best_opt_seq_overall, T_seq_best_opt, label_o)
+
+        plot_utils.plot_noise_correlations(config)
+
+        if best_known_seq_overall:
+            plot_utils.plot_control_correlations(config, best_known_seq_overall, T_seq_best_known, M, label_k)
+            plot_utils.plot_generalized_filter_functions(config, best_known_seq_overall, T_seq_best_known, label_k)
+        if best_opt_seq_overall:
+            plot_utils.plot_control_correlations(config, best_opt_seq_overall, T_seq_best_opt, M, label_o)
+            plot_utils.plot_generalized_filter_functions(config, best_opt_seq_overall, T_seq_best_opt, label_o)
 
 if __name__ == '__main__':
     config = CZOptConfig(use_simulated=True)
