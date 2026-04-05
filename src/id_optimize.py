@@ -1161,8 +1161,8 @@ def run_optimization_pipeline(config):
     np.savez(os.path.join(config.path, config.output_path_known), infs_known=np.array(yaxis_known),
              taxis=np.array(xaxis_known))
 
-    # Plot Infidelity vs Gate Time (Single M) - Not needed if we do aggregate plot later, but kept for per-M record
-    # plot_utils.plot_infidelity_vs_gatetime(xaxis_known, yaxis_known, xaxis_opt, yaxis_opt, yaxis_nopulse, config.tau, os.path.join(config.path, config.plot_filename))
+    # Plot Infidelity vs Gate Time (Single M)
+    plot_utils.plot_infidelity_vs_gatetime(xaxis_known, yaxis_known, xaxis_opt, yaxis_opt, yaxis_nopulse, config.tau, os.path.join(plot_utils.get_figures_dir(config.path), config.plot_filename))
 
     # Final Comparison and Detailed Plots (for best overall sequences)
     print("\n" + "=" * 80)
