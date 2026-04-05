@@ -26,13 +26,10 @@ jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import jax.scipy.integrate
 import jax.scipy.signal
-import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
 import numpy as np
 import scipy.optimize
 
 from spectra_input import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
-import plot_utils
 
 
 # ==============================================================================
@@ -1025,14 +1022,22 @@ def run_optimization(config):
         'infs_opt': np.array(yaxis_opt),
         'infs_nopulse': np.array(yaxis_nopulse),
         'tau': config.tau,
-        'min_gate_time': min_gate_time
+        'min_gate_time': min_gate_time,
+        # Config data needed by standalone plotting script
+        'w': np.array(config.w),
+        'w_max': float(config.w_max),
+        'SMat_real': np.array(np.real(config.SMat)),
+        'SMat_imag': np.array(np.imag(config.SMat)),
+        'M': M,
+        'Tg': T_seq_best_known if T_seq_best_known is not None else T_seq_best_opt,
+        'gate_type': 'cz',
     }
-    
+
     if best_known_seq_overall is not None:
         save_dict['best_known_seq_pt1'] = np.array(best_known_seq_overall[0])
         save_dict['best_known_seq_pt2'] = np.array(best_known_seq_overall[1])
         save_dict['T_seq_best_known'] = T_seq_best_known
-        
+
     if best_opt_seq_overall is not None:
         save_dict['best_opt_seq_pt1'] = np.array(best_opt_seq_overall[0])
         save_dict['best_opt_seq_pt2'] = np.array(best_opt_seq_overall[1])
@@ -1045,43 +1050,8 @@ def run_optimization(config):
              taxis=np.array(xaxis_opt))
     np.savez(os.path.join(config.path, config.output_path_known), infs_known=np.array(yaxis_known),
              taxis=np.array(xaxis_known))
-    
-    # Plot
-    plot_utils.plot_infidelity_vs_gatetime(xaxis_known, yaxis_known, xaxis_opt, yaxis_opt, yaxis_nopulse, config.tau, os.path.join(plot_utils.get_figures_dir(config.path), config.plot_filename), min_gate_time=min_gate_time)
-    
-    # Plot best sequences
-    if best_known_seq_overall or best_opt_seq_overall:
-        suffix = "_cz"
-        label_k = "Best Known Sequence (CZ)"
-        label_o = "Best Optimized Sequence (CZ)"
 
-        if best_known_seq_overall and best_opt_seq_overall and T_seq_best_known == T_seq_best_opt:
-             T_seq = T_seq_best_known
-             plot_utils.plot_comparison(config, best_known_seq_overall, best_opt_seq_overall, T_seq, filename_suffix=suffix)
-             plot_utils.plot_filter_functions(config, best_known_seq_overall, best_opt_seq_overall, T_seq, filename_suffix=suffix)
-             plot_utils.plot_filter_functions_with_spectra(config, best_known_seq_overall, best_opt_seq_overall, T_seq, filename_suffix=suffix)
-             plot_utils.plot_spectra_filter_overlay_6(config, best_known_seq_overall, T_seq, label_k)
-             plot_utils.plot_spectra_filter_overlay_6(config, best_opt_seq_overall, T_seq, label_o)
-        else:
-             if best_known_seq_overall:
-                 plot_utils.plot_comparison(config, best_known_seq_overall, None, T_seq_best_known, filename_suffix=suffix+"_known")
-                 plot_utils.plot_filter_functions(config, best_known_seq_overall, None, T_seq_best_known, filename_suffix=suffix+"_known")
-                 plot_utils.plot_filter_functions_with_spectra(config, best_known_seq_overall, None, T_seq_best_known, filename_suffix=suffix+"_known")
-                 plot_utils.plot_spectra_filter_overlay_6(config, best_known_seq_overall, T_seq_best_known, label_k)
-             if best_opt_seq_overall:
-                 plot_utils.plot_comparison(config, None, best_opt_seq_overall, T_seq_best_opt, filename_suffix=suffix+"_opt")
-                 plot_utils.plot_filter_functions(config, None, best_opt_seq_overall, T_seq_best_opt, filename_suffix=suffix+"_opt")
-                 plot_utils.plot_filter_functions_with_spectra(config, None, best_opt_seq_overall, T_seq_best_opt, filename_suffix=suffix+"_opt")
-                 plot_utils.plot_spectra_filter_overlay_6(config, best_opt_seq_overall, T_seq_best_opt, label_o)
-
-        plot_utils.plot_noise_correlations(config)
-
-        if best_known_seq_overall:
-            plot_utils.plot_control_correlations(config, best_known_seq_overall, T_seq_best_known, M, label_k)
-            plot_utils.plot_generalized_filter_functions(config, best_known_seq_overall, T_seq_best_known, label_k)
-        if best_opt_seq_overall:
-            plot_utils.plot_control_correlations(config, best_opt_seq_overall, T_seq_best_opt, M, label_o)
-            plot_utils.plot_generalized_filter_functions(config, best_opt_seq_overall, T_seq_best_opt, label_o)
+    print(f"\nTo generate plots, run:\n  python plot_optimization.py --data-dir {config.path} --gate-type cz")
 
 if __name__ == '__main__':
     config = CZOptConfig(use_simulated=True)

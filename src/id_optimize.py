@@ -23,13 +23,10 @@ import jax.numpy as jnp
 import jax.scipy.integrate
 jax.config.update("jax_enable_x64", True)
 import jax.scipy.signal
-import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
 import numpy as np
 import scipy.optimize
 
 from spectra_input import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
-import plot_utils
 
 # ==============================================================================
 # Configuration
@@ -1140,14 +1137,22 @@ def run_optimization_pipeline(config):
         'infs_opt': np.array(yaxis_opt),
         'infs_nopulse': np.array(yaxis_nopulse),
         'tau': config.tau,
-        'min_gate_time': min_gate_time
+        'min_gate_time': min_gate_time,
+        # Config data needed by standalone plotting script
+        'w': np.array(config.w),
+        'w_max': float(config.w_max),
+        'SMat_real': np.array(np.real(config.SMat)),
+        'SMat_imag': np.array(np.imag(config.SMat)),
+        'M': int(config.M),
+        'Tg': float(config.Tg),
+        'gate_type': 'id',
     }
-    
+
     if best_known_seq_overall is not None:
         save_dict['best_known_seq_pt1'] = np.array(best_known_seq_overall[0])
         save_dict['best_known_seq_pt2'] = np.array(best_known_seq_overall[1])
         save_dict['T_seq_best_known'] = T_seq_best_known
-        
+
     if best_opt_seq_overall is not None:
         save_dict['best_opt_seq_pt1'] = np.array(best_opt_seq_overall[0])
         save_dict['best_opt_seq_pt2'] = np.array(best_opt_seq_overall[1])
@@ -1155,16 +1160,13 @@ def run_optimization_pipeline(config):
 
     np.savez(os.path.join(plotting_dir, "plotting_data_id_v4.npz"), **save_dict)
     print(f"Saved all plotting data to {os.path.join(plotting_dir, 'plotting_data_id_v4.npz')}")
-    
+
     np.savez(os.path.join(config.path, config.output_path_opt), infs_opt=np.array(yaxis_opt),
              taxis=np.array(xaxis_opt))
     np.savez(os.path.join(config.path, config.output_path_known), infs_known=np.array(yaxis_known),
              taxis=np.array(xaxis_known))
 
-    # Plot Infidelity vs Gate Time (Single M)
-    plot_utils.plot_infidelity_vs_gatetime(xaxis_known, yaxis_known, xaxis_opt, yaxis_opt, yaxis_nopulse, config.tau, os.path.join(plot_utils.get_figures_dir(config.path), config.plot_filename))
-
-    # Final Comparison and Detailed Plots (for best overall sequences)
+    # Final Comparison summary
     print("\n" + "=" * 80)
     print(f"{'FINAL COMPARISON (Best Overall)':^80}")
     print("=" * 80)
@@ -1176,48 +1178,7 @@ def run_optimization_pipeline(config):
     print(f"{'Sequence':<25} | {best_known_label_overall:<25} | {best_opt_label_overall:<25}")
     print("=" * 80)
 
-    # 3. Plotting Detailed Characteristics
-    # We plot for the best sequences found across all gate times.
-    # If T_seq differs, we might need separate plots or just plot them separately.
-
-    if best_known_seq_overall or best_opt_seq_overall:
-        suffix = f"_M{config.M}"
-        label_k = f"Best Known Sequence (M={config.M})"
-        label_o = f"Best Optimized Sequence (M={config.M})"
-
-        # If both exist and have same T_seq, plot together
-        if best_known_seq_overall and best_opt_seq_overall and T_seq_best_known == T_seq_best_opt:
-             T_seq = T_seq_best_known
-             plot_utils.plot_comparison(config, best_known_seq_overall, best_opt_seq_overall, T_seq, filename_suffix=suffix+"_id")
-             plot_utils.plot_filter_functions(config, best_known_seq_overall, best_opt_seq_overall, T_seq, filename_suffix=suffix)
-             plot_utils.plot_filter_functions_with_spectra(config, best_known_seq_overall, best_opt_seq_overall, T_seq, filename_suffix=suffix)
-
-             # New 6-panel plot for both
-             plot_utils.plot_spectra_filter_overlay_6(config, best_known_seq_overall, T_seq, label_k)
-             plot_utils.plot_spectra_filter_overlay_6(config, best_opt_seq_overall, T_seq, label_o)
-
-        else:
-             # Plot separately if T_seq differs or one is missing
-             if best_known_seq_overall:
-                 plot_utils.plot_comparison(config, best_known_seq_overall, None, T_seq_best_known, filename_suffix=suffix+"_id_known")
-                 plot_utils.plot_filter_functions(config, best_known_seq_overall, None, T_seq_best_known, filename_suffix=suffix+"_known")
-                 plot_utils.plot_filter_functions_with_spectra(config, best_known_seq_overall, None, T_seq_best_known, filename_suffix=suffix+"_known")
-                 plot_utils.plot_spectra_filter_overlay_6(config, best_known_seq_overall, T_seq_best_known, label_k)
-
-             if best_opt_seq_overall:
-                 plot_utils.plot_comparison(config, None, best_opt_seq_overall, T_seq_best_opt, filename_suffix=suffix+"_id_opt")
-                 plot_utils.plot_filter_functions(config, None, best_opt_seq_overall, T_seq_best_opt, filename_suffix=suffix+"_opt")
-                 plot_utils.plot_filter_functions_with_spectra(config, None, best_opt_seq_overall, T_seq_best_opt, filename_suffix=suffix+"_opt")
-                 plot_utils.plot_spectra_filter_overlay_6(config, best_opt_seq_overall, T_seq_best_opt, label_o)
-
-        plot_utils.plot_noise_correlations(config)
-
-        if best_known_seq_overall:
-            plot_utils.plot_control_correlations(config, best_known_seq_overall, T_seq_best_known, config.M, label_k)
-            plot_utils.plot_generalized_filter_functions(config, best_known_seq_overall, T_seq_best_known, label_k)
-        if best_opt_seq_overall:
-            plot_utils.plot_control_correlations(config, best_opt_seq_overall, T_seq_best_opt, config.M, label_o)
-            plot_utils.plot_generalized_filter_functions(config, best_opt_seq_overall, T_seq_best_opt, label_o)
+    print(f"\nTo generate plots, run:\n  python plot_optimization.py --data-dir {config.path} --gate-type id")
 
     # Return data for aggregate plotting
     return {
@@ -1301,6 +1262,12 @@ if __name__ == "__main__":
             save_all_path = os.path.join(last_config.path, "optimization_data_all_M.npz")
             data_to_save = {}
             data_to_save['M_values'] = np.array(M_values)
+            # Config data needed by standalone plotting script
+            data_to_save['tau'] = float(last_config.tau)
+            data_to_save['w'] = np.array(last_config.w)
+            data_to_save['w_max'] = float(last_config.w_max)
+            data_to_save['SMat_real'] = np.array(np.real(last_config.SMat))
+            data_to_save['SMat_imag'] = np.array(np.imag(last_config.SMat))
 
             def to_numpy_seq(seq):
                 if seq is None: return None
@@ -1309,37 +1276,28 @@ if __name__ == "__main__":
             for m, res in results_by_M.items():
                 prefix = f"M{m}_"
                 data_to_save[prefix + 'gate_times'] = np.array(res['gate_times'])
-                
+
                 infs_known, labels_known = zip(*res['known']) if res['known'] else ([], [])
                 data_to_save[prefix + 'infs_known'] = np.array(infs_known)
                 data_to_save[prefix + 'labels_known'] = np.array(labels_known)
-                
+
                 infs_opt, labels_opt = zip(*res['opt']) if res['opt'] else ([], [])
                 data_to_save[prefix + 'infs_opt'] = np.array(infs_opt)
                 data_to_save[prefix + 'labels_opt'] = np.array(labels_opt)
-                
+
                 data_to_save[prefix + 'infs_nopulse'] = np.array(res['nopulse'])
-                
+
                 seqs_known_np = [to_numpy_seq(s) for s in res['sequences_known']]
                 seqs_opt_np = [to_numpy_seq(s) for s in res['sequences_opt']]
-                
+
                 data_to_save[prefix + 'sequences_known'] = np.array(seqs_known_np, dtype=object)
                 data_to_save[prefix + 'sequences_opt'] = np.array(seqs_opt_np, dtype=object)
 
             np.savez(save_all_path, **data_to_save)
             print(f"Saved all optimization data to {save_all_path}")
 
-            # Plot Infidelity vs M for longest gate time
-            plot_utils.plot_infidelity_vs_M_labeled(
-                M_values, known_infs, known_labels, opt_infs, opt_labels, nopulse_infs,
-                os.path.join(plot_utils.get_figures_dir(last_config.path), "infs_vs_M_id_v4.pdf")
-            )
-
-            # Plot Infidelity vs Gate Time for all M
-            plot_utils.plot_infidelity_vs_gatetime_all_M(
-                results_by_M, last_config.tau,
-                os.path.join(plot_utils.get_figures_dir(last_config.path), "infs_GateTime_id_v4_all_M.pdf")
-            )
+            print(f"\nTo generate plots, run:")
+            print(f"  python plot_optimization.py --data-dir {last_config.path} --gate-type id --all-m")
         
     except Exception as e:
         print(f"Error: {e}")
