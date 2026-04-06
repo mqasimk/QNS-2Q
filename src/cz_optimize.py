@@ -26,13 +26,10 @@ jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import jax.scipy.integrate
 import jax.scipy.signal
-import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
 import numpy as np
 import scipy.optimize
 
 from spectra_input import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
-import plot_utils
 
 
 # ==============================================================================
@@ -872,76 +869,6 @@ def calculate_infidelity(seq, config, M, T_seq, use_ideal=False):
 # Visualization
 # ==============================================================================
 
-def plot_comparison(config, known_seq, opt_seq, T_seq):
-    """Plots the switching functions y(t) for comparison."""
-    has_known = known_seq is not None
-    has_opt = opt_seq is not None
-    
-    cols = 0
-    if has_known: cols += 1
-    if has_opt: cols += 1
-    
-    if cols == 0:
-        return
-
-    fig, axs = plt.subplots(3, cols, figsize=(6 * cols, 10), sharex=True, squeeze=False)
-    
-    def get_switching_function(pulse_times, T, num_points=1000):
-        pulse_times = np.array(pulse_times) # Ensure numpy for plotting
-        t_grid = np.linspace(0, T, num_points)
-        y = np.ones_like(t_grid)
-        if len(pulse_times) > 2:
-            internal_pulses = pulse_times[1:-1]
-            for t_pulse in internal_pulses:
-                y[t_grid >= t_pulse] *= -1
-        return t_grid, y
-
-    def plot_col(col_idx, seq, title_prefix):
-        pt1, pt2 = seq
-        pt12 = make_tk12(pt1, pt2)
-        
-        t, y1 = get_switching_function(pt1, T_seq)
-        _, y2 = get_switching_function(pt2, T_seq)
-        _, y12 = get_switching_function(pt12, T_seq)
-        
-        # Row 0: y1
-        axs[0, col_idx].step(t*1e6, y1, 'k-', where='post')
-        axs[0, col_idx].set_title(f"{title_prefix}\nQubit 1 Switching Function ($y_1$)")
-        axs[0, col_idx].set_ylabel(r"$y_1(t)$")
-        axs[0, col_idx].set_ylim(-1.2, 1.2)
-        axs[0, col_idx].grid(True, alpha=0.3)
-
-        # Row 1: y2
-        axs[1, col_idx].step(t*1e6, y2, 'k-', where='post')
-        axs[1, col_idx].set_title(r"Qubit 2 Switching Function ($y_2$)")
-        axs[1, col_idx].set_ylabel(r"$y_2(t)$")
-        axs[1, col_idx].set_ylim(-1.2, 1.2)
-        axs[1, col_idx].grid(True, alpha=0.3)
-
-        # Row 2: y12
-        axs[2, col_idx].step(t*1e6, y12, 'k-', where='post')
-        axs[2, col_idx].set_title(r"Interaction Switching Function ($y_{12}$)")
-        axs[2, col_idx].set_ylabel(r"$y_{12}(t)$")
-        axs[2, col_idx].set_xlabel(r"Time ($\mu$s)")
-        axs[2, col_idx].set_ylim(-1.2, 1.2)
-        axs[2, col_idx].grid(True, alpha=0.3)
-
-    current_col = 0
-    if has_known:
-        plot_col(current_col, known_seq, "Best Known Sequence")
-        current_col += 1
-    
-    if has_opt:
-        plot_col(current_col, opt_seq, "Best Optimized Sequence")
-        current_col += 1
-
-    plt.tight_layout()
-    
-    save_path = os.path.join(plot_utils.get_figures_dir(config.path), "sequence_comparison_cz.pdf")
-    plt.savefig(save_path)
-    print(f"Saved comparison plot to {save_path}")
-    plt.close(fig)
-
 # ==============================================================================
 # Main Execution
 # ==============================================================================
@@ -1095,14 +1022,22 @@ def run_optimization(config):
         'infs_opt': np.array(yaxis_opt),
         'infs_nopulse': np.array(yaxis_nopulse),
         'tau': config.tau,
-        'min_gate_time': min_gate_time
+        'min_gate_time': min_gate_time,
+        # Config data needed by standalone plotting script
+        'w': np.array(config.w),
+        'w_max': float(config.w_max),
+        'SMat_real': np.array(np.real(config.SMat)),
+        'SMat_imag': np.array(np.imag(config.SMat)),
+        'M': M,
+        'Tg': T_seq_best_known if T_seq_best_known is not None else T_seq_best_opt,
+        'gate_type': 'cz',
     }
-    
+
     if best_known_seq_overall is not None:
         save_dict['best_known_seq_pt1'] = np.array(best_known_seq_overall[0])
         save_dict['best_known_seq_pt2'] = np.array(best_known_seq_overall[1])
         save_dict['T_seq_best_known'] = T_seq_best_known
-        
+
     if best_opt_seq_overall is not None:
         save_dict['best_opt_seq_pt1'] = np.array(best_opt_seq_overall[0])
         save_dict['best_opt_seq_pt2'] = np.array(best_opt_seq_overall[1])
@@ -1115,24 +1050,8 @@ def run_optimization(config):
              taxis=np.array(xaxis_opt))
     np.savez(os.path.join(config.path, config.output_path_known), infs_known=np.array(yaxis_known),
              taxis=np.array(xaxis_known))
-    
-    # Plot
-    plot_utils.plot_infidelity_vs_gatetime(xaxis_known, yaxis_known, xaxis_opt, yaxis_opt, yaxis_nopulse, config.tau, os.path.join(plot_utils.get_figures_dir(config.path), config.plot_filename), min_gate_time=min_gate_time)
-    
-    # Plot best sequences
-    if best_known_seq_overall or best_opt_seq_overall:
-        # Use the T_seq corresponding to the best sequence
-        # If we want to compare them on the same plot, they might have different T_seq.
-        # plot_comparison handles one T_seq.
-        # We will plot them separately if T_seq differs, or just plot the best overall.
-        
-        if best_known_seq_overall and best_opt_seq_overall and T_seq_best_known == T_seq_best_opt:
-             plot_utils.plot_comparison(config, best_known_seq_overall, best_opt_seq_overall, T_seq_best_known, filename_suffix="_cz")
-        else:
-             if best_known_seq_overall:
-                 plot_utils.plot_comparison(config, best_known_seq_overall, None, T_seq_best_known, filename_suffix="_cz_known")
-             if best_opt_seq_overall:
-                 plot_utils.plot_comparison(config, None, best_opt_seq_overall, T_seq_best_opt, filename_suffix="_cz_opt")
+
+    print(f"\nTo generate plots, run:\n  python plot_optimization.py --data-dir {config.path} --gate-type cz")
 
 if __name__ == '__main__':
     config = CZOptConfig(use_simulated=True)
