@@ -17,7 +17,7 @@ pra,
 %rmp,
 %prstab,
 %prstper,
-%floatfix,
+floatfix,
 ]{revtex4-2}
 
 \usepackage{booktabs}
@@ -44,14 +44,21 @@ pra,
 \usepackage{bbold}
 \usepackage{appendix}
 \usepackage{comment}
+\usepackage[justification=justified,singlelinecheck=false]{caption}
 \usepackage{subcaption}
-\captionsetup{justification=raggedright,singlelinecheck=false}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning}
 
 \newcommand{\lv}[1]{{\color{TealBlue}#1}}
 \newcommand{\vl}[1]{{\color{RubineRed} #1}}
 \newcommand{\qk}[1]{{\color{OliveGreen}#1}}
 
 \begin{document}
+
+\makeatletter
+\@namedef{@makecaption}#1#2{%
+  \caption@make{#1}{#2}}
+\makeatother
 
 \title{Noise-tailored two-qubit gates 
 %Generating two-qubit noise-tailored control using 
@@ -83,12 +90,36 @@ High-fidelity two-qubit entangling gates in the presence of spatiotemporally cor
                               %display desired
 \maketitle
 
-\tableofcontents
+%\tableofcontents
 
-%% \qk{[FIGURE SUGGESTION — HIGH PRIORITY: Add an end-to-end pipeline schematic figure showing:
-%% Noise environment $\to$ SPAM-robust/mitigated QNS $\to$ Reconstructed spectra $\to$ PTM-based cost function $\to$
-%% Gradient-descent optimization $\to$ Noise-tailored pulse sequence. This is standard for methods papers
-%% of this scope and would dramatically improve accessibility.]}
+\begin{figure*}[t]
+\centering
+\begin{tikzpicture}[
+    node distance=1.5cm and 1.5cm,
+    block/.style={rectangle, draw, fill=blue!5, text width=3.5cm, text centered, rounded corners, minimum height=1.5cm, font=\small},
+    line/.style={draw, -Latex, thick}
+]
+
+% Nodes
+\node [block, fill=red!5] (noise) {1. Physical Noise Environment \\ \scriptsize{(Spatiotemporal Dephasing)}};
+\node [block, right=of noise] (qns) {2. QNS Protocols \\ \scriptsize{(SPAM-Robust / Mitigated)}};
+\node [block, right=of qns] (spectra) {3. Unbiased Spectra \\ \scriptsize{($S_{a,b}(\omega)$ Reconstruction)}};
+\node [block, below=of spectra] (ptm) {4. Noisy Gate Model \\ \scriptsize{(PTM \& Cumulant Expansion)}};
+\node [block, left=of ptm] (opt) {5. Numerical Optimization \\ \scriptsize{(Constrained Gradient Descent)}};
+\node [block, fill=green!5, left=of opt] (pulse) {6. Noise-Tailored Control \\ \scriptsize{(Optimized Pulse Sequence)}};
+
+% Paths
+\path [line] (noise) -- (qns);
+\path [line] (qns) -- (spectra);
+\path [line] (spectra) -- (ptm);
+\path [line] (ptm) -- (opt);
+\path [line] (opt) -- (pulse);
+\path [line, dashed] (pulse) -- node[left, font=\scriptsize] {Applied to} (noise);
+
+\end{tikzpicture}
+\caption{\qk{End-to-end pipeline for generating noise-tailored two-qubit operations. Environmental noise is characterized using SPAM-robust or SPAM-mitigated quantum noise spectroscopy (QNS) to extract unbiased classical spectra. These spectra parameterize an exact Pauli Transfer Matrix (PTM) model of the gate dynamics. Gradient descent minimizes the process infidelity cost function to yield optimized, noise-tailored pulse sequences.}}
+\label{fig:pipeline_schematic}
+\end{figure*}
 
 \section{Introduction}
 
@@ -100,7 +131,7 @@ To implement any noise-tailored protocol, one must first obtain an accurate, qua
 
 A critical vulnerability of standard QNS protocols, however, is their high sensitivity to state preparation and measurement (SPAM) errors \cite{PhysRevApplied.22.024074}. Realistic SPAM error rates can significantly bias spectral reconstructions, often masking important noise features or causing spectra to be overestimated. This challenge has motivated the development of SPAM-robust QNS protocols that can successfully separate and estimate noise spectra even in the presence of implementation nonidealities. Furthermore, standard SPAM mitigation techniques often fail to separately characterize the distinct contributions from state preparation (SP) and measurement (M) errors, which can lead to biased and overestimated observable expectation values \cite{khan2025}. Accurate, high-fidelity characterization thus requires protocols that can disambiguate all three error sources: SP, M, and environmental noise.
 
-In this work, we establish a comprehensive framework for designing noise-tailored two-qubit entangling and idling gates that rigorously accounts for spatiotemporally correlated dephasing noise. By integrating SPAM-robust and SPAM-mitigated frequency-comb quantum noise spectroscopy (QNS), we demonstrate the reconstruction of unbiased noise spectra even in the presence of significant implementation nonidealities. We utilize these characterized spectra to construct a non-perturbative model of the noisy gate dynamics based on the corresponding Pauli Transfer Matrix (PTM), which serves as the cost function for gradient-based pulse optimization. We show that for complex, multi-peaked spectral landscapes, our noise-tailored sequences significantly outperform standard dynamical decoupling families, achieving error suppression by up to two orders of magnitude in the optimal gate-time regime.
+In this work, we establish a comprehensive framework for designing noise-tailored two-qubit entangling and idling gates that rigorously accounts for spatiotemporally correlated dephasing noise. \qk{We present two distinct approaches for this task: a SPAM-robust protocol that requires no prior knowledge of SPAM parameters at the cost of experimental overhead, and a SPAM-mitigated protocol that utilizes parameter inversion for a complete spectral characterization. Together, they enable the reconstruction of unbiased noise spectra even in the presence of significant implementation nonidealities.} We utilize these characterized spectra to construct a non-perturbative model of the noisy gate dynamics based on the corresponding Pauli Transfer Matrix (PTM), which serves as the cost function for gradient-based pulse optimization. We show that for complex, multi-peaked spectral landscapes, our noise-tailored sequences significantly outperform standard dynamical decoupling families, achieving error suppression by up to two orders of magnitude in the optimal gate-time regime.
 
 This paper is organized as follows. In Sec. \ref{sec::background}, we review the necessary theoretical background, starting with the formalism for noise spectra and dephasing-preserving control. We then detail the established two-qubit frequency-comb QNS protocol, our model of SPAM errors, and the Pauli Transfer Matrix (PTM) formalism. In Sec. \ref{sec::metrics}, we define the noisy gate performance metrics that form the basis of our optimization, including direct PTM reconstruction and analytical model of high-fidelity gates under dephasing. We also introduce our protocols for handling implementation nonidealities; Sec. \ref{sec::SRQNS} develops a SPAM-robust QNS protocol for both single- and two-qubit systems, while Sec. \ref{sec::SMQNS} presents a more general SPAM-mitigated QNS framework. In Sec. \ref{sec::optGates}, we present our main results on gate optimization. We define the optimization window and sampling rates, describe our gradient-descent methods, and apply this framework to design and analyze noise-tailored idle (memory) gates and entangling gates, presenting numerical results for varying spectral landscapes. Sec. \ref{sec::conclusion} provides our concluding remarks.
 
@@ -409,7 +440,6 @@ This expression provides the objective function for our optimization: to realize
 
 \qk{The fidelity expressions derived above assume access to the true noise spectra $S_{a,b}(\omega)$. In practice, however, spectral estimates obtained from standard QNS protocols are corrupted by SPAM errors, which can significantly bias the reconstructed spectra and, consequently, the optimized gate performance. This motivates the SPAM-robust and SPAM-mitigated protocols developed in the following two sections.}
 
-% [Old version of Sec. III removed — see git history if needed]
 
 \section{SPAM-Robust frequency-comb QNS}
 \label{sec::SRQNS}
@@ -429,9 +459,7 @@ We first consider the single-qubit case, subsequently extending the discussion t
 
 \smallskip
 
-\subsection{Single-qubit SPAM-robust 
-%frequency-comb 
-QNS}
+\subsection{Single-qubit SPAM-robust QNS}
 
 Single-qubit QNS of dephasing noise is a special case of the $N$-qubit Hamiltonian under discussion and deserves specific focus in our discussion for SPAM robust estimators for frequency-comb QNS. For $N=1$, the absence of Ising interactions leads to a simplified toggling-frame Hamiltonian, $\tilde{H}_1(t)$, given by:
 \begin{align}
@@ -526,7 +554,7 @@ from which it follows that,
 \end{align}
 As before, the coefficient scales linearly in the number of repetitions of the base-sequence; therefore, it is possible to characterize all but the $S_{1,12}(\omega),\,S_{2,12}(\omega)$ classical spectra through a protocol that is inherently robust to SPAM errors.
 
-%% \qk{[FIGURE SUGGESTION — MEDIUM: Add a validation figure for the SPAM-mitigated QNS protocol, analogous to
+%% \qk{[FIGURE: Add a validation figure for the SPAM-mitigated QNS protocol, analogous to
 %% Fig.~1 for the SPAM-robust case, showing reconstructed spectra vs.\ true spectra under SPAM-mitigated QNS,
 %% possibly with error bars from finite shot noise.]}
 
@@ -638,9 +666,19 @@ This expression demonstrates explicitly how the parameterized control resources 
 By using the delay parameters instead of absolute times, the search space bounds remain fixed and stable during gradient-descent optimization.
 To keep the optimization search space tenable and ensure we are considering sequences that optimally suppress multi-qubit dephasing noise, we constrain our comparisons to the established family of CDD sequences introduced in the previous section.
 
-%% \qk{[FIGURE SUGGESTION — HIGH PRIORITY: Add a figure (or subfigure panel) showing all input spectra
+%% \qk{[FIGURE: Add a figure (or subfigure panel) showing all input spectra
 %% $S_{a,b}(\omega)$ used in the numerical experiments — both the ``featured'' (multi-peaked) and
 %% ``monotonically decreasing'' ($1/f^\alpha$) cases. Readers need to see what these terms mean concretely.]}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\linewidth]{figures/spectral_reconstruction_self_pub.pdf}
+    \caption{\qk{Reconstructed self-spectra of the two-qubit dephasing noise. From top to bottom: the single-qubit power spectral densities $S_{1,1}(\omega)$ and $S_{2,2}(\omega)$, and
+   the joint spectrum $S_{12,12}(\omega)$. Dashed lines show the theoretical (input) spectra and shaded regions indicate the area under the theory curves. Triangular    
+  markers denote the values obtained from QNS spectral inversion. All three spectra are faithfully recovered over the sampled bandwidth, spanning roughly two decades in 
+  magnitude.}}
+    \label{fig::QNSboringself}
+\end{figure}
 
 \subsection{Monotonically decreasing spectra}
 
@@ -695,7 +733,7 @@ We consider a bipartite qubit system featuring local, individually addressable o
     & \quad +\left[J_0(t)+\beta_{12}(t)\right]Z_1Z_2\nonumber\\
     & \qquad +\frac{\Omega_1^x(t)}{2}X_1+\frac{\Omega_2^x(t)}{2}X_2.
 \end{align}
-The target operation is the maximally entangling Controlled-Z (CZ) gate, generated by the ideal unitary $U_{\text{CZ}} = \exp\{-i\frac{\pi}{4}(Z_1Z_2 - Z_1 - Z_2)\}e^{-i\frac{\pi}{4}}$. Assuming the local $Z$-rotations are executed virtually via instantaneous phase-tracking, the entangling objective reduces to generating a noise-protected $\exp\{-i\frac{\pi}{4}Z_1Z_2\}$ rotation.
+The target operation is the maximally entangling Controlled-Z (CZ) gate, generated by the ideal unitary $U_{\text{CZ}} = \exp\{-i\frac{\pi}{4}(Z_1Z_2 - Z_1 - Z_2)\}e^{-i\frac{\pi}{4}}$. \qk{Assuming the local $Z$-rotations are executed virtually via instantaneous phase-tracking—implying they incur strictly zero time cost and expose the system to no additional environmental decoherence—the entangling objective reduces to generating a noise-protected $\exp\{-i\frac{\pi}{4}Z_1Z_2\}$ rotation.}
 
 Moving to the toggling frame defined by the local dephasing-preserving control, the Hamiltonian bifurcates into commuting deterministic control and stochastic noise components. Utilizing the generalized filter functions $G_{a,b}(\omega,t)$ established in Sec.~\ref{sec::background}, the noisy gate evolution is fully characterized by the operator-dependent cumulant expansion:
 \begin{align}
@@ -713,13 +751,29 @@ While $\tau$ inherently restricts the achievable decoupling order by bounding th
 
 Consequently, the optimization landscape is strictly bounded. The minimum operational time is constrained by the coupling amplitude, while the maximum allowable time is constrained by the exponential accumulation of unmitigated environmental decoherence.
 
-%% \qk{[FIGURE SUGGESTION — MEDIUM: Add a spectral overlap panel for the CZ entangling gate, analogous to
+%% \qk{[FIGURE: Add a spectral overlap panel for the CZ entangling gate, analogous to
 %% Figs.~3/5 for the idling gate, comparing CDD vs.\ NT filter functions against the featured spectra.
 %% This would visually explain the headline two-orders-of-magnitude result.]}
 
 \subsection{Performance analysis}
 
-To quantitatively evaluate the efficacy of the noise-tailored (NT) control relative to established dynamical decoupling (DD) protocols, we analyze the scaling of the process infidelity, $1 - F_{\text{pro}}$, as a function of the total gate time, $T_G$. The numerical optimization results, illustrated in Fig.\,\ref{fig:infidelity_vs_time}, establish a substantial performance advantage for the NT sequences in realizing high-fidelity entangling operations. The gradient-descent pipeline systematically identifies optimal pulse configurations that suppress the process infidelity by up to two orders of magnitude relative to the highest-performing sequences within the CDD family.
+\begin{table}[!h]
+    \centering
+    \caption{\qk{Summary of best achievable process infidelities for unmodulated (FID), standard (CDD), and noise-tailored (NT) control under featured spectral noise, sampled at key operational sweet spots ($T_G$).}}
+    \label{tab:fidelity_summary}
+    \renewcommand{\arraystretch}{1.3}
+    \begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}lccc@{}}
+        \toprule
+        \textbf{Operation} & \textbf{FID} & \textbf{Best CDD} & \textbf{Best NT} \\
+        \midrule
+        Idling ($T_G = 640\tau$) & $5.13 \times 10^{-2}$ & $\mathbf{3.67 \times 10^{-5}}$ & $7.06 \times 10^{-5}$ \\
+        Idling ($T_G = 2560\tau$) & $1.91 \times 10^{-1}$ & $2.55 \times 10^{-3}$ & $\mathbf{5.81 \times 10^{-4}}$ \\
+        Entangling ($T_G = 320\tau$) & $4.75 \times 10^{-1}$ & $1.43 \times 10^{-1}$ & $\mathbf{4.40 \times 10^{-4}}$ \\
+        \bottomrule
+    \end{tabular*}
+\end{table}
+
+To quantitatively evaluate the efficacy of the noise-tailored (NT) control relative to established dynamical decoupling (DD) protocols, we analyze the scaling of the process infidelity, $1 - F_{\text{pro}}$, as a function of the total gate time, $T_G$. The numerical optimization results, illustrated in Fig.\,\ref{fig:infidelity_vs_time} and summarized in Table~\ref{tab:fidelity_summary}, establish a substantial performance advantage for the NT sequences in realizing high-fidelity entangling operations. The gradient-descent pipeline systematically identifies optimal pulse configurations that suppress the process infidelity by up to two orders of magnitude relative to the highest-performing sequences within the CDD family.
 
 This comparative advantage is maximized in the intermediate gate-duration regime, centered approximately at $T_G = 320\tau$. At this specific evolution time, the numerically optimized NT sequence achieves a global minimum infidelity of $4.40 \times 10^{-4}$. By contrast, for identical operational durations, the standard CDD sequence fidelity is bounded at $1.43 \times 10^{-1}$, while the unmodulated free-induction decay (FID) baseline yields $4.75 \times 10^{-1}$. 
 
@@ -922,6 +976,15 @@ These matrices are inverted to reconstruct $\hat{S}_{1,12}(\omega_k)$:
 \end{align}
 A strictly analogous procedure governs the reconstruction of the real and imaginary parts of the final cross-spectrum, $\hat{S}_{2,12}(\omega_k)$.
 
+\section{Reconstruction of cross-spectra}
+\begin{figure}
+    \centering
+    \includegraphics[width=\linewidth]{figures/spectral_reconstruction_cross_pub.pdf}
+    \caption{\qk{Reconstructed cross-spectra of the two-qubit dephasing noise. From top to bottom: $S_{1,2}(\omega)$, $S_{1,12}(\omega)$, and $S_{2,12}(\omega)$. Real (triangles) and
+  imaginary (squares) parts of the reconstructed values are compared against the corresponding theoretical curves (dashed lines). The reconstruction captures both the   
+  sign structure and the relative magnitude of the real and imaginary components across the full sampled bandwidth.}}
+    \label{fig::QNScrossboring}
+\end{figure}
 
 
 \section{Derivation of Idling Gate Fidelity and Filter Functions}
@@ -1003,7 +1066,5 @@ This summation is performed prior to the optimization loop. During optimization,
     I_{a,b}(MT) = \int_{0}^{T} C_{y_a, y_b}(u) R^{\text{folded}}_{a,b}(u) \, du.
 \end{equation}
 This reduces the complexity from $\mathcal{O}((MT)^2)$ to $\mathcal{O}(T^2)$, allowing efficient optimization of highly repeated sequences (e.g., $M=10$). For $M > 10$, the frequency comb approximation (Method 2) is preferred.
-
-% [Old appendix material removed — see git history if needed]
 
 \end{document}
