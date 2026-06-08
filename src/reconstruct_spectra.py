@@ -15,6 +15,7 @@ from typing import Dict, Any
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 
 from spectral_inversion import (recon_S_11, recon_S_22, recon_S_1_2, recon_S_12_12, recon_S_1_12, recon_S_2_12,
                                 recon_S_11_dc, recon_S_22_dc, recon_S_1212_dc,
@@ -25,7 +26,10 @@ from spectra_input import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
 # --- Publication figure constants ---
 
 FIG_WIDTH = 7.0    # Two-column width (inches)
-FIG_HEIGHT = 4.5   # 2-row panel height
+FIG_HEIGHT = 4.5   # 2-row panel height (legacy, kept for reference)
+FIG_HEIGHT_1ROW = 2.5  # Single-row panel height
+FIG_HEIGHT_3ROW = 7.0  # Three-row panel height
+FIG_HEIGHT_3x2 = 5.5  # Three-row, two-column panel height
 
 COLORS = {
     "blue": "#0072B2",
@@ -41,18 +45,25 @@ FIGURES_SUBDIR = "figures"
 RECONSTRUCTION_SUBDIR = os.path.join(FIGURES_SUBDIR, "reconstruction")
 
 
-def setup_pub_rcparams():
-    """Configure matplotlib rcParams for publication-quality figures."""
-    plt.rcParams.update({
+def setup_pub_rcparams(font_scale='compact'):
+    """Configure matplotlib rcParams for publication-quality figures.
+
+    Parameters
+    ----------
+    font_scale : str
+        'large' for standalone single-panel figures,
+        'compact' for multi-panel combined figures (APS style).
+    """
+    sizes = {
+        'large': {"font.size": 18, "axes.labelsize": 16, "axes.titlesize": 16,
+                  "legend.fontsize": 16, "xtick.labelsize": 16, "ytick.labelsize": 16},
+        'compact': {"font.size": 10, "axes.labelsize": 10, "axes.titlesize": 10,
+                    "legend.fontsize": 8, "xtick.labelsize": 8, "ytick.labelsize": 8},
+    }
+    base = {
         "text.usetex": True,
         "font.family": "serif",
         "font.serif": ["Computer Modern"],
-        "font.size": 10,
-        "axes.labelsize": 10,
-        "axes.titlesize": 10,
-        "legend.fontsize": 7,
-        "xtick.labelsize": 8,
-        "ytick.labelsize": 8,
         "xtick.direction": "in",
         "ytick.direction": "in",
         "xtick.top": True,
@@ -63,7 +74,9 @@ def setup_pub_rcparams():
         "grid.linewidth": 0.5,
         "grid.alpha": 0.2,
         "grid.color": "grey",
-    })
+    }
+    base.update(sizes[font_scale])
+    plt.rcParams.update(base)
 
 
 @dataclass
@@ -221,34 +234,39 @@ class SpectraReconstructor:
         os.makedirs(path, exist_ok=True)
         return path
 
-    def plot_reconstruction(self):
-        """Plots publication-quality reconstructed spectra against analytical curves."""
-        setup_pub_rcparams()
+    def plot_all_spectra(self):
+        """Plots all 6 spectra in a single 3x2 publication-quality figure.
+
+        Left column: real-valued self-spectra (S_11, S_22, S_1212).
+        Right column: complex-valued cross-spectra (S_1_2, S_1_12, S_2_12).
+        """
+        setup_pub_rcparams('compact')
 
         w = np.linspace(0, self.config.wmax, self.config.w_grain)
         xunits = 1e6
 
-        # Marker/line styling (Okabe-Ito palette)
+        # --- Style definitions ---
+        eb_self = dict(fmt='^', color=COLORS["vermillion"],
+                       markersize=3.5, linewidth=0.8, zorder=10, label='Reconstructed')
+        theory_self_kw = dict(color=COLORS["vermillion"], linestyle='--', linewidth=1.2,
+                              alpha=0.7, zorder=5, label='Theory')
+
         eb_re = dict(fmt='^', color=COLORS["vermillion"],
-                     markersize=3.5, linewidth=0.8, zorder=10, label='Reconstructed')
+                     markersize=3.5, linewidth=0.8, zorder=10, label=r'Re (recon.)')
         eb_im = dict(fmt='s', color=COLORS["blue"],
-                     markersize=3.0, linewidth=0.8, zorder=10, label='Reconstructed (Im)')
+                     markersize=3.0, linewidth=0.8, zorder=10, label=r'Im (recon.)')
         theory_re_kw = dict(color=COLORS["vermillion"], linestyle='--', linewidth=1.2,
-                            alpha=0.7, zorder=5, label='Theory')
+                            alpha=0.7, zorder=5, label='Theory (Re)')
         theory_im_kw = dict(color=COLORS["blue"], linestyle='--', linewidth=1.2,
                             alpha=0.7, zorder=5, label='Theory (Im)')
 
-        # --- Real-valued spectra: S_11, S_22, S_1212 ---
+        # --- Data definitions ---
         real_spectra = [
-            ('S_11_k', 'S_11_err', S_11, None,
-             r'$S_{1,1}(\omega)$'),
-            ('S_22_k', 'S_22_err', S_22, None,
-             r'$S_{2,2}(\omega)$'),
-            ('S_12_12_k', 'S_12_12_err', S_1212, None,
-             r'$S_{12,12}(\omega)$'),
+            ('S_11_k', 'S_11_err', S_11, r'$S_{1,1}(\omega)$'),
+            ('S_22_k', 'S_22_err', S_22, r'$S_{2,2}(\omega)$'),
+            ('S_12_12_k', 'S_12_12_err', S_1212, r'$S_{12,12}(\omega)$'),
         ]
 
-        # --- Complex-valued spectra: S_1_2, S_1_12, S_2_12 ---
         complex_spectra = [
             ('S_1_2_k', 'S_1_2_err',
              lambda w_: S_1_2(w_, self.config.gamma),
@@ -261,29 +279,42 @@ class SpectraReconstructor:
              r'$S_{2,12}(\omega)$'),
         ]
 
-        fig, axs = plt.subplots(2, 3, figsize=(FIG_WIDTH, FIG_HEIGHT))
+        panel_labels = [['(a)', '(d)'], ['(b)', '(e)'], ['(c)', '(f)']]
 
-        # Top row: real-valued self-spectra
-        for col, (s_key, err_key, theory_fn, _, ylabel) in enumerate(real_spectra):
-            ax = axs[0, col]
+        fig, axs = plt.subplots(3, 2, figsize=(FIG_WIDTH, FIG_HEIGHT_3x2))
+
+        # --- Left column: self-spectra ---
+        for row, (s_key, err_key, theory_fn, ylabel) in enumerate(real_spectra):
+            ax = axs[row, 0]
             ax.fill_between(w / xunits, 0, theory_fn(w),
                             color=COLORS["grey_fill"], alpha=1.0, zorder=0)
-            ax.plot(w / xunits, theory_fn(w), **theory_re_kw)
-            
+            ax.plot(w / xunits, theory_fn(w), **theory_self_kw)
+
             yerr = None
             if hasattr(self, 'reconstructed_spectra_err') and err_key in self.reconstructed_spectra_err:
                 yerr = self.reconstructed_spectra_err[err_key]
-                
+
             ax.errorbar(self.wk / xunits, self.reconstructed_spectra[s_key],
-                        yerr=yerr, **eb_re)
+                        yerr=yerr, **eb_self)
             ax.set_ylabel(ylabel)
 
-        # Bottom row: complex-valued cross-spectra
-        for col, (s_key, err_key, theory_fn, ylabel) in enumerate(complex_spectra):
-            ax = axs[1, col]
+            all_y = np.concatenate([theory_fn(w), self.reconstructed_spectra[s_key]])
+            scale = np.median(np.abs(all_y[all_y != 0])) if np.any(all_y != 0) else 1.0
+            ax.set_yscale('asinh', linear_width=scale)
+            linthresh = 10 ** np.ceil(np.log10(scale))
+            ax.yaxis.set_major_locator(ticker.SymmetricalLogLocator(linthresh=linthresh, base=10))
+            ax.yaxis.set_minor_locator(ticker.NullLocator())
+            ax.grid(True, which='major', zorder=0)
+            ax.grid(False, which='minor')
+            ax.text(0.03, 0.92, panel_labels[row][0], transform=ax.transAxes,
+                    fontsize=10, fontweight='bold', va='top', ha='left',
+                    bbox=dict(facecolor='white', edgecolor='none', alpha=0.8, pad=1.5))
+
+        # --- Right column: cross-spectra ---
+        for row, (s_key, err_key, theory_fn, ylabel) in enumerate(complex_spectra):
+            ax = axs[row, 1]
             S_theory = theory_fn(w)
 
-            # Get errors if available
             yerr_re = None
             yerr_im = None
             if hasattr(self, 'reconstructed_spectra_err') and err_key in self.reconstructed_spectra_err:
@@ -291,39 +322,138 @@ class SpectraReconstructor:
                 yerr_re = np.real(err_complex)
                 yerr_im = np.imag(err_complex)
 
-            # Real part
             ax.plot(w / xunits, np.real(S_theory), **theory_re_kw)
             ax.errorbar(self.wk / xunits, np.real(self.reconstructed_spectra[s_key]),
-                        yerr=yerr_re, **{**eb_re, 'label': r'Re (recon.)'})
+                        yerr=yerr_re, **eb_re)
 
-            # Imaginary part
             ax.plot(w / xunits, np.imag(S_theory), **theory_im_kw)
             ax.errorbar(self.wk / xunits, np.imag(self.reconstructed_spectra[s_key]),
-                        yerr=yerr_im, **{**eb_im, 'label': r'Im (recon.)'})
+                        yerr=yerr_im, **eb_im)
+
             ax.set_ylabel(ylabel)
 
-        # Common formatting
-        for ax_row in axs:
-            for ax in ax_row:
-                ax.set_yscale('asinh')
-                ax.grid(True, which='major', zorder=0)
-                ax.grid(False, which='minor')
+            all_y = np.concatenate([np.real(S_theory), np.imag(S_theory),
+                                    np.real(self.reconstructed_spectra[s_key]),
+                                    np.imag(self.reconstructed_spectra[s_key])])
+            scale = np.median(np.abs(all_y[all_y != 0])) if np.any(all_y != 0) else 1.0
+            ax.set_yscale('asinh', linear_width=scale)
+            linthresh = 10 ** np.ceil(np.log10(scale))
+            ax.yaxis.set_major_locator(ticker.SymmetricalLogLocator(linthresh=linthresh, base=10))
+            ax.yaxis.set_minor_locator(ticker.NullLocator())
+            ax.grid(True, which='major', zorder=0)
+            ax.grid(False, which='minor')
+            ax.text(0.03, 0.92, panel_labels[row][1], transform=ax.transAxes,
+                    fontsize=10, fontweight='bold', va='top', ha='left',
+                    bbox=dict(facecolor='white', edgecolor='none', alpha=0.8, pad=1.5))
 
-        # X-labels only on bottom row
-        for ax in axs[1, :]:
-            ax.set_xlabel(r'$\omega$ (MHz)')
+        # --- Axis labels (bottom row only) ---
+        for row in range(3):
+            for col in range(2):
+                if row == 2:
+                    axs[row, col].set_xlabel(r'$\omega$ (MHz)')
+                else:
+                    axs[row, col].tick_params(labelbottom=False)
 
-        # Legends
-        for ax in axs[0, :]:
-            ax.legend(frameon=False, loc='upper right')
-        for ax in axs[1, :]:
-            ax.legend(frameon=False, loc='upper right', ncol=2)
+        # --- Per-column legends in top panels ---
+        axs[0, 0].legend(frameon=False, loc='upper right')
+        axs[0, 1].legend(frameon=False, loc='upper right', ncol=2)
 
         plt.tight_layout(pad=0.3)
         output_dir = self._get_output_dir(RECONSTRUCTION_SUBDIR)
-        output_path = os.path.join(output_dir, "spectral_reconstruction_pub.pdf")
-        plt.savefig(output_path, format='pdf', dpi=300)
-        print(f"Saved reconstruction plot to {output_path}")
+        output_path = os.path.join(output_dir, "spectral_reconstruction_all_pub.pdf")
+        plt.savefig(output_path, format='pdf', dpi=300, bbox_inches='tight')
+        print(f"Saved combined spectra plot to {output_path}")
+        plt.close(fig)
+
+    def plot_cross_spectra(self):
+        """Plots the three complex cross-spectra as a standalone single-column
+        3x1 figure for the appendix (S_1_2, S_1_12, S_2_12).
+
+        Companion to plot_all_spectra(): identical data and styling, laid out as
+        a narrow single-column figure with a single compact in-panel legend. The
+        asinh y-scale with a SymmetricalLogLocator keeps the y-ticks legible at
+        column width, and the legend sits inside the top panel rather than
+        underneath the figure.
+        """
+        setup_pub_rcparams('compact')
+
+        w = np.linspace(0, self.config.wmax, self.config.w_grain)
+        xunits = 1e6
+
+        eb_re = dict(fmt='^', color=COLORS["vermillion"],
+                     markersize=3.5, linewidth=0.8, zorder=10, label=r'Re (recon.)')
+        eb_im = dict(fmt='s', color=COLORS["blue"],
+                     markersize=3.0, linewidth=0.8, zorder=10, label=r'Im (recon.)')
+        theory_re_kw = dict(color=COLORS["vermillion"], linestyle='--', linewidth=1.2,
+                            alpha=0.7, zorder=5, label='Theory (Re)')
+        theory_im_kw = dict(color=COLORS["blue"], linestyle='--', linewidth=1.2,
+                            alpha=0.7, zorder=5, label='Theory (Im)')
+
+        complex_spectra = [
+            ('S_1_2_k', 'S_1_2_err',
+             lambda w_: S_1_2(w_, self.config.gamma),
+             r'$S_{1,2}(\omega)$'),
+            ('S_1_12_k', 'S_1_12_err',
+             lambda w_: S_1_12(w_, self.config.gamma_12),
+             r'$S_{1,12}(\omega)$'),
+            ('S_2_12_k', 'S_2_12_err',
+             lambda w_: S_2_12(w_, self.config.gamma_12 - self.config.gamma),
+             r'$S_{2,12}(\omega)$'),
+        ]
+
+        panel_labels = ['(a)', '(b)', '(c)']
+
+        fig, axs = plt.subplots(3, 1, figsize=(3.4, 5.4))
+
+        for row, (s_key, err_key, theory_fn, ylabel) in enumerate(complex_spectra):
+            ax = axs[row]
+            S_theory = theory_fn(w)
+
+            yerr_re = None
+            yerr_im = None
+            if hasattr(self, 'reconstructed_spectra_err') and err_key in self.reconstructed_spectra_err:
+                err_complex = self.reconstructed_spectra_err[err_key]
+                yerr_re = np.real(err_complex)
+                yerr_im = np.imag(err_complex)
+
+            ax.plot(w / xunits, np.real(S_theory), **theory_re_kw)
+            ax.errorbar(self.wk / xunits, np.real(self.reconstructed_spectra[s_key]),
+                        yerr=yerr_re, **eb_re)
+
+            ax.plot(w / xunits, np.imag(S_theory), **theory_im_kw)
+            ax.errorbar(self.wk / xunits, np.imag(self.reconstructed_spectra[s_key]),
+                        yerr=yerr_im, **eb_im)
+
+            ax.set_ylabel(ylabel)
+
+            all_y = np.concatenate([np.real(S_theory), np.imag(S_theory),
+                                    np.real(self.reconstructed_spectra[s_key]),
+                                    np.imag(self.reconstructed_spectra[s_key])])
+            scale = np.median(np.abs(all_y[all_y != 0])) if np.any(all_y != 0) else 1.0
+            ax.set_yscale('asinh', linear_width=scale)
+            linthresh = 10 ** np.ceil(np.log10(scale))
+            ax.yaxis.set_major_locator(ticker.SymmetricalLogLocator(linthresh=linthresh, base=10))
+            ax.yaxis.set_minor_locator(ticker.NullLocator())
+            ax.grid(True, which='major', zorder=0)
+            ax.grid(False, which='minor')
+            ax.text(0.03, 0.92, panel_labels[row], transform=ax.transAxes,
+                    fontsize=10, fontweight='bold', va='top', ha='left',
+                    bbox=dict(facecolor='white', edgecolor='none', alpha=0.8, pad=1.5))
+
+            if row == 2:
+                ax.set_xlabel(r'$\omega$ (MHz)')
+            else:
+                ax.tick_params(labelbottom=False)
+
+        # Single compact legend inside the top panel (not underneath the figure)
+        axs[0].legend(frameon=False, loc='upper right', ncol=2, fontsize=7,
+                      handlelength=1.5, columnspacing=1.0, handletextpad=0.4)
+
+        plt.tight_layout(pad=0.3)
+        output_dir = self._get_output_dir(RECONSTRUCTION_SUBDIR)
+        output_path = os.path.join(output_dir, "spectral_reconstruction_cross_pub.pdf")
+        plt.savefig(output_path, format='pdf', dpi=300, bbox_inches='tight')
+        print(f"Saved cross-spectra plot to {output_path}")
         plt.close(fig)
 
     def save_reconstructed_spectra(self):
@@ -351,14 +481,15 @@ class SpectraReconstructor:
         """Runs the full reconstruction pipeline."""
         self.load_observables()
         self.reconstruct()
-        self.plot_reconstruction()
+        self.plot_all_spectra()
+        self.plot_cross_spectra()
         self.save_reconstructed_spectra()
 
 
 def main():
     """Main function to run the spectra reconstruction."""
     # --- User Configuration ---
-    data_folder = "DraftRun_NoSPAM_Featureless"
+    data_folder = "DraftRun_NoSPAM_FeatureFull"
     # ------------------------
 
     try:
