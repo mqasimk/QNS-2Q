@@ -28,6 +28,7 @@ from observables import (make_c_12_0_mt, make_c_12_12_mt, make_c_a_0_mt,
                          make_c_a_b_mt)
 from spectra_input import S_11, S_22, S_1212
 from trajectories import make_noise_mat_arr, solver_prop
+from run_paths import run_folder
 
 
 @dataclass
@@ -72,7 +73,7 @@ class QNSExperimentConfig:
     gamma: jnp.float64 = T / 14
     gamma_12: jnp.float64 = T / 28
     n_shots: jnp.int64 = 10000
-    fname: str = "DraftRun_NoSPAM_Featureless"
+    fname: str = field(default_factory=run_folder)
     parent_dir: str = os.pardir
 
     def __post_init__(self):

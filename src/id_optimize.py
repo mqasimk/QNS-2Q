@@ -30,6 +30,7 @@ import scipy.optimize
 
 from spectra_input import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
 import plot_utils
+from run_paths import run_folder
 
 # ==============================================================================
 # Configuration
@@ -46,7 +47,7 @@ class Config:
     Parameters
     ----------
     fname : str, optional
-        Data folder name containing results from Stage 1 & 2. Default is "DraftRun_NoSPAM_Boring".
+        Data folder name with results from Stage 1 & 2. Defaults to the active regime's run folder (run_paths.run_folder()).
     include_cross_spectra : bool, optional
         Whether to include cross-correlated noise terms ($S_{12}, S_{1,12}$, etc.). Default is True.
     Tg : float, optional
@@ -73,7 +74,7 @@ class Config:
         Powers of 2 to scale the gate time relative to $T_{qns}$.
     """
     def __init__(self, 
-                 fname="DraftRun_NoSPAM_Boring",
+                 fname=None,
                  include_cross_spectra=True,
                  Tg=4 * 14 * 1e-6,
                  tau_divisor=160,
@@ -81,9 +82,9 @@ class Config:
                  max_pulses=100,
                  num_random_trials=10,
                  use_known_as_seed=False,
-                 output_path_known="infs_known_id_v4.npz",
-                 output_path_opt="infs_opt_id_v4.npz",
-                 plot_filename="infs_GateTime_id_v4.pdf",
+                 output_path_known="infs_known_id.npz",
+                 output_path_opt="infs_opt_id.npz",
+                 plot_filename="infs_GateTime_id.pdf",
                  reps_known=None, 
                  reps_opt=None,
                  use_simulated=False,
@@ -94,6 +95,8 @@ class Config:
         Initialize configuration.
         """
         # Paths
+        if fname is None:
+            fname = run_folder()
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         self.path = os.path.join(project_root, fname)
         
@@ -161,7 +164,7 @@ class Config:
         self.w = jnp.linspace(0, self.w_max, self.N_w)
         self.w_ideal = jnp.linspace(0, 2 * self.w_max, 2 * self.N_w)
         
-        if use_simulated and 'wk' in self.specs:
+        if 'wk' in self.specs:
             self.wkqns = jnp.array(self.specs['wk'])
         else:
             self.wkqns = jnp.array([2 * jnp.pi * (n + 1) / self.Tqns for n in range(self.mc)])
@@ -1256,11 +1259,11 @@ if __name__ == "__main__":
                 max_pulses=1000,
                 num_random_trials=20,
                 tau_divisor=160,
-                use_simulated=True, # Enable simulated spectra by default for testing
+                use_simulated=False, # Enable simulated spectra by default for testing
                 gate_time_factors=[-5, -4, -3, -2, -1, 0], # Range of gate times
-                output_path_known=f"infs_known_id_v4_M{m}.npz",
-                output_path_opt=f"infs_opt_id_v4_M{m}.npz",
-                plot_filename=f"infs_GateTime_id_v4_M{m}.pdf"
+                output_path_known=f"infs_known_id_M{m}.npz",
+                output_path_opt=f"infs_opt_id_M{m}.npz",
+                plot_filename=f"infs_GateTime_id_M{m}.pdf"
             )
             last_config = config
             print(f"Configuration loaded for M={m}.")
