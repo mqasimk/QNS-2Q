@@ -2,66 +2,98 @@
 
 Maps each publication figure used by the paper
 (`~/Noise_Tailored_2Q_Gates/figures/*.pdf`, referenced from `main_v9.tex`) to the
-exact **(noise model, run data, config, script)** used to generate it.
+exact **(noise model, run data, config, script)** that produced it.
 
-**Why this file exists.** A figure here generally *cannot* be reproduced by just
-running a script at `HEAD`, because:
-1. `DraftRun_*/` output dirs are **gitignored** — run data (`results.npz`, `specs.npz`)
-   and figures were never tracked.
-2. The noise model in `spectra_input.py` was **changed mid-project** — commit
-   `77e516a` (2026-04-05), *"Replace bland noise spectra with featured multi-peak
-   PSDs."* The reconstruction figures currently in the paper predate this and use the
-   **bland** model, which now lives only in git history.
-3. The `*_plots.py` / `reconstruct_spectra.py` mains carry **stale data-folder
-   defaults** (e.g. `DraftRun_NoSPAM_Feature`, which does not exist).
+**Status of this file (2026-06-08):** all nine referenced figures are now traced and
+confirmed (previously four idling rows were "best guess" and the CvsM row was a TODO).
+The remaining unknowns are *data* (the featured-idling and CZ runs were gitignored and
+lost), not *provenance*.
 
-So each figure needs its `(model, run, config)` triple recorded explicitly.
+**Why a figure generally can't be reproduced by just running a script at `HEAD`:**
+1. `DraftRun_*/` output dirs are **gitignored** (`.gitignore: DraftRun_*/`) — run data
+   and figures were never tracked, so several runs are gone.
+2. The noise model in `spectra_input.py` was **changed mid-project** — commit `77e516a`
+   (2026-04-05), *"Replace bland noise spectra with featured multi-peak PSDs."* Switching
+   back to bland currently requires `git show 77e516a^:src/spectra_input.py`.
+3. The plot/optimize scripts carry **stale data-folder defaults** (see the "Stale
+   defaults" table) — running them as-committed reads the wrong (or an empty/nonexistent)
+   folder.
+4. The runtime config **differs from the committed dataclass defaults** (see "Shared
+   config") — so "just run `main()`" does not reproduce the paper numbers.
+
+A repo restructure to make regime-switching painless is planned; paths/names below
+describe the **current** state and will be updated when that lands.
 
 ---
 
 ## Noise models
 
-| Tag | Where | Self-spectra |
+| Tag | Where | Self-spectra (S_11, S_22, S_1212) |
 |---|---|---|
-| **BLAND** (monotonic) | `git show 77e516a^:src/spectra_input.py` | `S_11=2.5e5·L(w,0,1e-6)`, `S_22=1e5·L(w,0,1.5e-6)`, `S_1212=1e6/(1+2·1e-5·|w|)` |
-| **FEATURED** (multi-peak) | `spectra_input.py` at `HEAD` (since `77e516a`) | `S_11`=3 peaks; `S_22`=plateau+peak+bump; `S_1212`=resonance+hump; small DC backgrounds |
+| **BLAND** (monotonic) | `git show 77e516a^:src/spectra_input.py` | `S_11=2.5e5·L(w,0,1e-6)`, `S_22=1e5·L(w,0,1.5e-6)`, `S_1212=1e6/(1+2·1e-5·|w|)` — monotonic, no peaks |
+| **FEATURED** (multi-peak) | `src/spectra_input.py` at `HEAD` (since `77e516a`) | `S_11`=peak@5MHz+plateau@16MHz+peak@27MHz+DC; `S_22`=plateau@8MHz+peak@20MHz+bump@28MHz+DC; `S_1212`=peak@12MHz+hump@23MHz+DC |
 
-Cross-spectra (both models): `S_a,b = sqrt(S_aa·S_bb)·exp(-i·w·γ)`, helpers `L` (Lorentzian),
-`Gauss` (Gaussian) — unchanged across the switch.
+Empirically verified from the stored spectra: `Featureless/specs.npz` S_11 has **0 interior
+peaks** (bland); `FeatureFull/specs.npz` S_11 has **5 peaks** (featured).
+
+Cross-spectra (both models, unchanged across the switch):
+`S_a,b = sqrt(S_aa·S_bb)·exp(-i·w·γ)`, helpers `L` (Lorentzian), `Gauss` (Gaussian).
 
 ## Run folders (all gitignored, under repo root)
 
-| Folder | Model | Holds | Used for |
+⚠️ The folder names are **misleading**: `Featureless` holds the **bland** run,
+`FeatureFull` holds the **featured** run.
+
+| Folder | Model | Holds | Feeds paper figures |
 |---|---|---|---|
-| `DraftRun_NoSPAM_Featureless` | **BLAND** | QNS `results/specs.npz` + idling-opt `infs_*_id_M*.npz` | reconstruction figs in paper; bland/idling results |
-| `DraftRun_NoSPAM_FeatureFull` | **FEATURED** | QNS `results/specs.npz` | featured QNS reconstruction (new model) |
-| `DraftRun_NoSPAM_Boring` | — | empty (only `figures/`) | ignore |
+| `DraftRun_NoSPAM_Featureless` | **BLAND** | QNS `results/specs.npz` + idling-opt (`optimization_data_all_M.npz`, `plotting_data/plotting_data_id_v4.npz`, `infs_*_id_M{1..128}.npz`, `params.npz`) | both reconstruction figs + both *boring* idling figs |
+| `DraftRun_NoSPAM_FeatureFull` | **FEATURED** | QNS `results/specs.npz` only (no idling/CZ opt) | none directly (featured QNS recon exists but isn't the in-paper version) |
+| `DraftRun_NoSPAM_Boring` | — | empty (only a stray `figures/`) | none — delete |
+| `DraftRun_NoSPAM_Feature` | — | **does not exist** | the CZ scripts default here → they fail |
 
-## Shared QNS experiment config
+## Shared QNS / reconstruction config
 
-Committed `QNSExperimentConfig` defaults (unchanged since the bland era; verified that
-the only uncommitted edit is the `fname` output-folder line):
+These are the **runtime values stored in `params.npz`** (identical in both `Featureless`
+and `FeatureFull`). ⚠️ They are **NOT** the committed `QNSExperimentConfig` dataclass
+defaults — the committed defaults are `M=18, t_grain=1500, truncate=5, w_grain=1000,
+n_shots=2000, SPAM ON (a_sp=[0.99,0.98], c=[0.01j,-0.02j], a1=0.99…)`, `fname=DraftRun_MScaling`.
+Reproduction must use the `params.npz` values (or apply these as explicit overrides):
 
 ```
 tau=2.5e-8 s   M=10   t_grain=3000   truncate=20   w_grain=500
-T=160*tau=4.0e-6 s    gamma=T/14     gamma_12=T/28  n_shots=10000
-SPAM off: a_sp=[1,1], c=[0,0], spMit=False
-=> wmax = 2*pi*truncate/T  (≈ 31.4 MHz on the ω/2π axis)
+T=160*tau=4.0e-6 s    gamma=T/14     gamma_12=T/28   n_shots=10000
+SPAM OFF: a_sp=[1,1], c=[0,0], a1=b1=a2=b2=1, spMit=False
+=> wmax = 2*pi*truncate/T = 3.14e7 rad/s  (= 5 MHz on the omega/2pi axis)
    comb harmonics wk = 2*pi*(k+1)/T,  k=0..truncate-1
 ```
 
+## Stale defaults to override before reproducing
+
+| Script | Hardcoded default | Problem | Fix when reproducing |
+|---|---|---|---|
+| `id_plots.py` `get_data_paths()` | `base_dir = DraftRun_NoSPAM_Boring` | empty folder → no data | repoint to `Featureless` (bland) or the featured idling run |
+| `id_optimize.py` `Config(fname=...)` | `DraftRun_NoSPAM_Featureless` | always the bland folder | set a featured folder + switch model to make featured idling data |
+| `cz_optimize.py` / `cz_plots.py` / `cz_pulse_plot.py` | `DraftRun_NoSPAM_Feature` | folder doesn't exist | point at a real CZ run folder |
+
+## When the figures were generated
+
+Git last-commit date of every paper figure is **2026-05-21** (commit `544b43f`, the v8
+freeze) — except `spectral_reconstruction_cross_pub.pdf` (`7676f45`, 2026-06-08, the
+LV0606-XFIG cleanup). The uniform `2026-06-08 07:28` filesystem mtimes are a bulk
+`git checkout` artifact, **not** a regeneration — use the commit dates as the anchor.
+
 ---
 
-## Figure map
+## Figure map (all confirmed)
 
-### QNS reconstruction (validation) — ✅ CONFIRMED reproduced 2026-06-08
+### QNS reconstruction (validation) — ✅ reproducible from disk
 
 | Paper file | LaTeX label | Script :: function | Model | Run |
 |---|---|---|---|---|
 | `spectral_reconstruction_all_pub.pdf` | `fig::QNSboringself` (§IV) | `reconstruct_spectra.py :: plot_all_spectra` | **BLAND** | `Featureless` |
 | `spectral_reconstruction_cross_pub.pdf` | `fig::QNScrossboring` (App.) | `reconstruct_spectra.py :: plot_cross_spectra` | **BLAND** | `Featureless` |
 
-Reproduce (regenerates both files into `Featureless/figures/reconstruction/`):
+Reproduce (regenerates both into `Featureless/figures/reconstruction/`):
 ```bash
 cd src/
 cp spectra_input.py /tmp/featured_backup.py            # safety
@@ -70,40 +102,94 @@ git show 77e516a^:src/spectra_input.py > spectra_input.py   # restore BLAND mode
   r.SpectraReconstructor(r.SpectraReconConfig('DraftRun_NoSPAM_Featureless')).run()"
 git checkout -- spectra_input.py                       # restore FEATURED model
 ```
-- `plot_cross_spectra` (added 2026-06-08) resolves L. Viola's note: in-panel legend
-  (top panel) + asinh `SymmetricalLogLocator` y-ticks, replacing the legend-underneath /
-  overlapping-ticks of the prior version.
-- The FEATURED counterparts come from the same commands with the BLAND-restore lines
-  omitted and `'DraftRun_NoSPAM_FeatureFull'` as the folder.
 - `spectral_reconstruction_self_pub.pdf` exists in the paper repo but is an **orphan**
   (not referenced by `main_v9.tex`).
 
-### SPAM-robust illustration
+### SPAM-robust illustration — ⚠️ code-only (no saved data)
 
-| Paper file | LaTeX label | Script | Status |
-|---|---|---|---|
-| `C_1_0_MT_vs_M.pdf` | `fig::CvsM` | (unverified) | ⚠️ TODO — trace generator + run |
+| Paper file | LaTeX label | Generator | Model | Status |
+|---|---|---|---|---|
+| `C_1_0_MT_vs_M.pdf` | `fig::CvsM` | `single_qubit_qns.py :: main()` | unrecorded | re-run from code |
 
-### Idling gate — ⚠️ UNVERIFIED (best guess; trace before relying)
+- `main()` sweeps `m_values = range(5, 20)` (M=5..19), single qubit `l=1`, experiment
+  `C_1_0_MT_1` with sequences `['CDD1', 'CDD1-1/2']`, `exp_type='C_a_0'`.
+- Uses the **committed `QNSExperimentConfig` dataclass DEFAULTS** (only `M` is overridden):
+  so `truncate=5`, `t_grain=1500`, `w_grain=1000`, `n_shots=2000`, **SPAM ON**
+  (`a_sp=[0.99,0.98]`, `c=[0.01j,-0.02j]`). This is the **only** paper figure run with SPAM
+  on — plausibly intentional (it illustrates the SPAM-robust estimator), but **confirm
+  before regenerating**.
+- `save_results()` is commented out (`single_qubit_qns.py:227`) → **no `params.npz`, no run
+  folder** was ever saved. The only record is the code.
+- Output filename is `C_1_0_MT_1_vs_M_formal.pdf` (`single_qubit_qns.py:253`); the paper file
+  `C_1_0_MT_vs_M.pdf` is a **manual rename**.
+- Model (bland vs featured) is unrecorded; committed 2026-05-21 (post featured-switch) so
+  the live `spectra_input.py` would have been **featured** at run time, but unconfirmed.
 
-| Paper file | LaTeX label | Likely script | Likely run |
-|---|---|---|---|
-| `infidelity_vs_gatetime_id_best_M_boring_pub.pdf` | `fig:idling_fidelity_boring` | `id_plots.py` | `Featureless` (bland) |
-| `infidelity_vs_gatetime_id_best_M_pub.pdf` | `fig:idling_infidelity` | `id_plots.py` | featured run (location unconfirmed) |
-| `spectra_overlay_S1212_pub.pdf` | `fig:S1212overlapboring` | `id_plots.py`/`plot_utils.py` | `Featureless` (bland) |
-| `spectra_overlay_S22_pub.pdf` | `fig:S22overlap` | `id_plots.py`/`plot_utils.py` | featured run (location unconfirmed) |
+### Idling gate — split: bland reproducible, featured data lost
 
-### Entangling gate — ⚠️ DATA MISSING (re-run required)
+| Paper file | LaTeX label | Generator | Model | Run / status |
+|---|---|---|---|---|
+| `infidelity_vs_gatetime_id_best_M_boring_pub.pdf` | `fig:idling_fidelity_boring` | `id_plots.py` best-M | **BLAND** | `Featureless` — ✅ on disk |
+| `spectra_overlay_S1212_pub.pdf` | `fig:S1212overlapboring` | `id_plots.py :: generate_spectra_overlay_plot` (`suffix='S1212'`) | **BLAND** | `Featureless` seqs + bland `spectra_input` — ✅ on disk |
+| `infidelity_vs_gatetime_id_best_M_pub.pdf` | `fig:idling_infidelity` | `id_plots.py` best-M | **FEATURED** | ❌ **data gone** — re-run `id_optimize.py` (featured) |
+| `spectra_overlay_S22_pub.pdf` | `fig:S22overlap` | `id_plots.py :: generate_spectra_overlay_plot` (`suffix='S22'`) | **FEATURED** | ❌ **data gone** — needs the featured idling run |
 
-| Paper file | LaTeX label | Script | Note |
-|---|---|---|---|
-| `infidelity_vs_gatetime_pub.pdf` | `fig:infidelity_vs_time` | `cz_plots.py` | no CZ run data on disk; `cz_optimize.py` re-run needed |
-| `pulse_sequence_comparison_pub.pdf` | `fig:seq_comparison` | `cz_pulse_plot.py` | same — CZ run data missing |
+Confirmation (visual + data): the `_boring` figure shows NT (optimized) lying exactly on
+top of CDD (no optimization advantage; plain `CDD` labels), matching `Featureless`
+(`plotting_data_id_v4.npz`: median NT/CDD ≈ 1.26, NT beats CDD at only 50% of gate times).
+The non-`boring` figure shows NT clearly beating CDD and contains `mqCDD` sequences in its
+labels — a different (featured) run with no surviving data.
+
+Idling-run config (from `Featureless` data + `id_optimize.py`):
+- `M_values = [2**i for i in range(8)]` = `{1,2,4,8,16,32,64,128}`
+- gate-time grid = `320 * 2^k * tau` for `k=0..5` → `{320, 640, 1280, 2560, 5120, 10240} τ`
+  (the `best-M` plot picks the best sequence at each gate time across all M)
+- `min_gate_time = π/(4·Jmax) = 15.708 τ` with hardcoded `Jmax=2e6`
+  (`id_optimize.py:1131`) — this is the paper caption's `T_{G,min}≈15.71τ`; sweet spot
+  `T_G=320τ` is the grid start. **(Resolves tracker item LV0606-NUM-ANCHOR.)**
+- `id_optimize.py` random-restart knobs: `reps_known=range(100,401,10)`,
+  `reps_opt=range(100,401,20)`, SLSQP `maxiter=1000`.
+
+Reproduce the **bland** idling figures (after repointing `id_plots.py` `base_dir` →
+`Featureless`):
+```bash
+cd src/
+git show 77e516a^:src/spectra_input.py > spectra_input.py   # bland (for the overlay spectrum)
+../venv/bin/python id_plots.py
+git checkout -- spectra_input.py
+```
+
+### Entangling gate (CZ) — ❌ data missing (re-run required)
+
+| Paper file | LaTeX label | Generator | Model | Status |
+|---|---|---|---|---|
+| `infidelity_vs_gatetime_pub.pdf` | `fig:infidelity_vs_time` | `cz_plots.py` | featured¹ | no CZ run on disk; folder `DraftRun_NoSPAM_Feature` absent |
+| `pulse_sequence_comparison_pub.pdf` | `fig:seq_comparison` | `cz_pulse_plot.py` | featured¹ | same — re-run `cz_optimize.py` |
+
+¹ Inferred from the `…_Feature` folder name; unconfirmed. `cz_optimize.py` `main()` uses
+`CZOptConfig(use_simulated=True)` → it consumes a reconstructed `specs.npz` (a featured one
+exists in `FeatureFull`); `gate_time_factors=[-3..3]` (7 gate times), SLSQP `maxiter=2000`,
+`min_gate_time = π/(4·Jmax)`.
 
 ### Pending (no figure file yet — `[FIGURE:]` stubs in `main_v9.tex`)
-- `main_v9.tex:649` — SPAM-mitigated QNS validation (needs a SPAM-injected run, none on disk).
-- `main_v9.tex:855` — CZ entangling spectral-overlap panel (needs CZ run data).
+- SPAM-mitigated QNS validation — needs a SPAM-injected run (none on disk).
+- CZ entangling spectral-overlap panel — needs the CZ run data.
 
 ---
 
-_Last updated 2026-06-08. Extend the UNVERIFIED/TODO rows as each figure is traced._
+## Reproducibility summary
+
+| Figures | Count | Status |
+|---|---|---|
+| recon (×2) + boring idling (×2) | 4 | ✅ reproducible from on-disk `Featureless` (bland) |
+| featured idling (×2) | 2 | ❌ re-run `id_optimize.py` with featured model |
+| CZ (×2) | 2 | ❌ re-run `cz_optimize.py` |
+| CvsM (×1) | 1 | ⚠️ re-run `single_qubit_qns.py` (confirm SPAM/model first) |
+
+Figure-feeding data is **small** (`specs.npz` 8K, `optimization_data_all_M.npz` 220K,
+`plotting_data_id_v4.npz` 4K, `params.npz` 268K) — committing per-regime summaries to git
+would cost <0.5 MB/regime and prevent future loss.
+
+---
+
+_Last updated 2026-06-08. All nine referenced figures traced and confirmed._
