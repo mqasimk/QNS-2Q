@@ -24,7 +24,7 @@ Python 3.12 with the following dependencies:
 pip install numpy scipy matplotlib jax jaxlib qutip qutip-qip joblib
 ```
 
-> **Note:** The code enables JAX 64-bit mode (`jax_enable_x64`) in every script for numerical precision. Ensure your JAX installation supports this configuration.
+> **Note:** The code enables JAX 64-bit mode (`jax_enable_x64`) in every script for numerical precision. Ensure your JAX installation supports this configuration. A preconfigured virtual environment with JAX+CUDA and all dependencies is provided at `./venv` (activate with `source venv/bin/activate`).
 
 ## Project Structure
 
@@ -32,7 +32,8 @@ pip install numpy scipy matplotlib jax jaxlib qutip qutip-qip joblib
 QNS-2Q/
 ├── README.md
 └── src/
-    ├── spectra_input.py          # Noise spectrum definitions (Lorentzian + Gaussian)
+    ├── run_paths.py              # Regime selection (QNS2Q_REGIME) + canonical run-folder paths
+    ├── spectra_input.py          # Noise spectra (bland | featured regime), selected by QNS2Q_REGIME
     ├── trajectories.py           # Pulse sequences, noise trajectories, Hamiltonian, propagators
     ├── observables.py            # POVM operators, expectation values, correlation functions
     │
@@ -59,25 +60,32 @@ QNS-2Q/
 
 ## Workflow
 
-The pipeline has four stages. All scripts are standalone and run from the project root. Configuration is done by editing dataclass instances in each script's `main()` function.
+The pipeline has four stages. **All scripts must be run from inside `src/`** — Stages 1–2 locate the repo-root run folders via a relative `..` path, so running from elsewhere will not find them. Configuration is done by editing the config object in each script's `main()` function.
+
+The active noise model *and* output folder are selected by the `QNS2Q_REGIME` environment variable (`bland` or `featured`, default `featured`), resolved centrally in `run_paths.py`. A whole pipeline switches with one variable — no source edits:
+
+```bash
+cd src/
+export QNS2Q_REGIME=featured   # or: bland
+```
 
 ### Stage 1: Generate QNS Experiment Data
 
 Simulates QNS experiments using configurable pulse sequences (CPMG, CDD) and computes observables (overlap integrals, correlation functions).
 
 ```bash
-python src/qns_experiments.py
+python qns_experiments.py
 ```
 
 - **Config**: `QNSExperimentConfig` — total time, number of blocks, input spectra
-- **Output**: `DraftRun_NoSPAM_Feature/{results,params}.npz`
+- **Output**: `DraftRun_NoSPAM_<regime>/{results,params}.npz`
 
 ### Stage 2: Reconstruct Noise Spectra
 
 Loads observables from Stage 1 and solves the inverse problem via least-squares to reconstruct the noise power spectral densities.
 
 ```bash
-python src/reconstruct_spectra.py
+python reconstruct_spectra.py
 ```
 
 - **Config**: `SpectraReconConfig` — set `data_folder` to the Stage 1 output directory
@@ -85,29 +93,30 @@ python src/reconstruct_spectra.py
 
 ### Stage 3: Optimize Gate Sequences
 
-Loads reconstructed spectra and optimizes pulse timings to minimize gate infidelity. Two independent optimizations are available:
+Loads the noise spectra (the reconstructed `specs.npz`, or the ground-truth `simulated_spectra.npz`) and optimizes pulse timings to minimize gate infidelity. Two independent optimizations are available:
 
-**CZ Gate Optimization** — Builds sequence libraries, computes overlap integrals, and optimizes coupling strength $J$ via `scipy.optimize`.
+**CZ Gate Optimization** — Builds sequence libraries, computes overlap integrals, and optimizes coupling strength $J$ via `scipy.optimize`. As shipped, `main()` runs against the ground-truth spectra, so generate them first with `python spectra_input.py` (writes `simulated_spectra.npz`); set `use_simulated=False` in the config to use the reconstructed `specs.npz` from Stage 2 instead.
 
 ```bash
-python src/cz_optimize.py
+python spectra_input.py   # writes simulated_spectra.npz (needed only for the default CZ config)
+python cz_optimize.py
 ```
 
 **Identity Gate (DD) Optimization** — Time-domain infidelity minimization with parametric pulse timing optimization across M-repetition values.
 
 ```bash
-python src/id_optimize.py
+python id_optimize.py
 ```
 
 - **Config**: `CZOptConfig` / `Config` — data folder, max pulses, gate time factors
-- **Output**: `infs_{known,opt}_*.npz` + PDF plots
+- **Output**: `infs_{known,opt}_*.npz`, `plotting_data/*.npz` + PDF plots
 
 ### Stage 4: Generate Publication Figures
 
 ```bash
-python src/id_plots.py
-python src/cz_plots.py
-python src/cz_pulse_plot.py
+python id_plots.py
+python cz_plots.py
+python cz_pulse_plot.py
 ```
 
 ## Citation

@@ -1,8 +1,19 @@
 # Claude Code
 CLAUDE.md
 
-# Generated output directories
-DraftRun_*/
+# Generated output directories: ignore the bulk run data, but KEEP the small
+# figure-feeding summaries so the published figures can always be regenerated.
+# (See FIGURE_PROVENANCE.md.) Bulk = per-M infs_*.npz, raw trajectories, figures/.
+DraftRun_*/*
+!DraftRun_*/specs.npz
+!DraftRun_*/results.npz
+!DraftRun_*/params.npz
+!DraftRun_*/optimization_data_all_M.npz
+!DraftRun_*/simulated_spectra.npz
+!DraftRun_*/plotting_data/
+DraftRun_*/plotting_data/*
+!DraftRun_*/plotting_data/plotting_data_id_v4.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2.npz
 
 # Python
 __pycache__/
