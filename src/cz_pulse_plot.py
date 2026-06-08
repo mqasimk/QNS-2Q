@@ -3,6 +3,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+from run_paths import run_path
 
 def make_tk12(tk1, tk2):
     """
@@ -66,9 +67,7 @@ def generate_pulse_plot():
     
     # 2. Load Data
     # ------------
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(script_dir)
-    data_file = os.path.join(project_root, "DraftRun_NoSPAM_Feature", "plotting_data_cz_v2.npz")
+    data_file = os.path.join(run_path(), "plotting_data", "plotting_data_cz_v2.npz")
     
     if not os.path.exists(data_file):
         print(f"Error: Data file not found at {data_file}")

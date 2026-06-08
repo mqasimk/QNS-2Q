@@ -33,6 +33,7 @@ import scipy.optimize
 
 from spectra_input import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
 import plot_utils
+from run_paths import run_folder
 
 
 # ==============================================================================
@@ -42,11 +43,11 @@ import plot_utils
 @dataclass
 class CZOptConfig:
     """Configuration for the CZ gate optimization."""
-    fname: str = "DraftRun_NoSPAM_Feature"
+    fname: str = field(default_factory=run_folder)
     parent_dir: str = os.pardir
     Jmax: float = 2e6
     # Extended gate time factors to include larger gate times (-1, 0)
-    gate_time_factors: list = field(default_factory=lambda: [-3, -2, -1, 0, 1, 2, 3])
+    gate_time_factors: list = field(default_factory=lambda: [3, 2, 1, 0, -1, -2, -3])
     output_path_known: str = "infs_known_cz_v2.npz"
     output_path_opt: str = "infs_opt_cz_v2.npz"
     plot_filename: str = "infs_GateTime_cz_v2.pdf"
@@ -54,7 +55,7 @@ class CZOptConfig:
     include_cross_spectra: bool = True
     tau_divisor: int = 160
     use_simulated: bool = False
-    max_pulses: int = 800
+    max_pulses: int = 150
     
     # These will be loaded from the run files
     Tqns: float = field(init=False)
@@ -118,7 +119,10 @@ class CZOptConfig:
         self.w = jnp.linspace(0, self.w_max, self.N_w)
         self.w_ideal = jnp.linspace(0, 2 * self.w_max, 2 * self.N_w)
         
-        if self.use_simulated and 'wk' in self.specs:
+        if 'wk' in self.specs:
+            # Both simulated_spectra.npz and reconstructed specs.npz carry their own
+            # frequency grid (the latter includes a DC point, so it is one longer than
+            # `mc` harmonics); use it so interpolation xp/fp lengths always match.
             self.wkqns = jnp.array(self.specs['wk'])
         else:
             self.wkqns = jnp.array([2 * jnp.pi * (n + 1) / self.Tqns for n in range(self.mc)])
@@ -710,7 +714,7 @@ def optimize_sequence(config, M, T_seq, n1, n2, seed_seq=None):
     try:
         res = scipy.optimize.minimize(fun_wrapper, np.array(initial_params), method='SLSQP',
                                       bounds=bounds, constraints=linear_cons, jac=True,
-                                      tol=1e-10, options={'maxiter': 2000, 'disp': False})
+                                      tol=1e-10, options={'maxiter': 1000, 'disp': False})
         
         d1_opt = jnp.array(res.x[:n1])
         d2_opt = jnp.array(res.x[n1:])

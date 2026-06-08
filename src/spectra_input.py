@@ -1,183 +1,121 @@
 """
 Analytical definitions of noise power spectral densities (PSDs).
 
-This module provides various functions to generate common noise spectra used in
-quantum noise spectroscopy simulations, including Lorentzian and Gaussian
-models. It also defines specific spectra for two-qubit systems, including
-self-spectra for individual qubits and the Ising interaction, as well as
-cross-correlated spectra.
+Two noise models are provided and selected at import time by the ``QNS2Q_REGIME``
+environment variable (see ``run_paths.current_regime``):
+
+* ``featured`` (default) -- multi-peak self-spectra; used for the noise-tailoring
+  advantage demonstrations.
+* ``bland`` -- monotonic Lorentzian self-spectra; the original model used for the
+  in-paper QNS reconstruction figures (recovered from commit ``77e516a^``).
+
+Switching is global for the run, e.g. ``QNS2Q_REGIME=bland python id_optimize.py``.
+The public API (``S_11``, ``S_22``, ``S_1212`` self-spectra and ``S_1_2``, ``S_1_12``,
+``S_2_12`` cross-spectra) is identical in both regimes, so importing code needs no
+changes. Cross-spectra are derived from the selected self-spectra.
 """
 
 import jax.numpy as jnp
 import jax
 
+from run_paths import current_regime, run_folder
+
 
 @jax.jit
 def L(w, w0, tc):
-    """
-    Generate a symmetric Lorentzian function.
-
-    Parameters
-    ----------
-    w : jax.Array
-        Frequencies at which to evaluate the Lorentzian.
-    w0 : float
-        Location of the peak in frequency space.
-    tc : float
-        Correlation time for the noise process (determines the width).
-
-    Returns
-    -------
-    jax.Array
-        Value of the symmetric Lorentzian at frequencies `w`.
-    """
+    """Symmetric Lorentzian: peak at +/-w0, width set by correlation time tc."""
     return 0.5*(1/(1+(tc**2)*(w-w0)**2)+1/(1+(tc**2)*(w+w0)**2))
 
 
 @jax.jit
 def Gauss(w, w0, sig):
-    """
-    A non-normalized Gaussian function.
-
-    Parameters
-    ----------
-    w : jax.Array
-        Frequencies at which to evaluate the Gaussian.
-    w0 : float
-        Peak frequency of the Gaussian.
-    sig : float
-        Standard deviation (width) of the Gaussian.
-
-    Returns
-    -------
-    jax.Array
-        Value of the Gaussian at frequencies `w`.
-    """
+    """Symmetric (non-normalized) Gaussian: peak at +/-w0, std dev sig."""
     return 0.5*(jnp.exp(-(w-w0)**2/(2*sig**2))+jnp.exp(-(w+w0)**2/(2*sig**2)))
 
 
-@jax.jit
-def S_11(w):
-    """
-    Self spectrum for qubit 1.
+# --- Self-spectra: selected by regime -------------------------------------------
+# Both branches define S_11/S_22/S_1212 with identical signatures and __name__, so
+# downstream code (and the spec_vec_names stored in params.npz) is regime-agnostic.
 
-    Parameters
-    ----------
-    w : jax.Array
-        Frequencies at which to evaluate the spectrum.
+_REGIME = current_regime()
 
-    Returns
-    -------
-    jax.Array
-        PSD value for qubit 1.
-    """
-    peak1 = 5e4 * L(w, 5e6, 3e-7)
-    plateau = 4e4 * Gauss(w, 1.6e7, 3e6)
-    peak2 = 3e4 * Gauss(w, 2.7e7, 2e6)
-    dc = 5e3 * L(w, 0, 1e-6)
-    return peak1 + plateau + peak2 + dc
+if _REGIME == "bland":
+    # Monotonic Lorentzian model -- verbatim from 77e516a^:src/spectra_input.py.
+    @jax.jit
+    def S_11(w):
+        """Self spectrum for qubit 1 (bland)."""
+        tc = 1e-6
+        S0 = 0*3e4
+        St2 = 2.5e5
+        w0 = 1.4e7
+        return (S0*(0*Gauss(w, 1.75*w0, 10/tc)+L(w, w0, 1*tc))
+                +St2*L(w, 0, tc))
+
+    @jax.jit
+    def S_22(w):
+        """Self spectrum for qubit 2 (bland)."""
+        tc=1.5e-6
+        S0 = 0*2.5e4
+        St2 = 1e5
+        w0=0.8e7
+        return (S0*(Gauss(w, 1.8*w0, 10/tc)+Gauss(w, 2.5*w0, 20/tc))
+                +St2*L(w, 0, tc))
+
+    @jax.jit
+    def S_1212(w):
+        """Self spectrum for the ZZ (Ising) interaction (bland)."""
+        tc = 1e-5
+        S0 = 0*1e3
+        St2 = 1e6
+        w0 = 1.5*10**7
+        return St2/(1+(2*tc*jnp.abs(w)))
+
+else:  # "featured"
+    # Multi-peak model -- current HEAD definitions.
+    @jax.jit
+    def S_11(w):
+        """Self spectrum for qubit 1 (featured: peak@5MHz + plateau + peak + DC)."""
+        peak1 = 5e4 * L(w, 5e6, 3e-7)
+        plateau = 4e4 * Gauss(w, 1.6e7, 3e6)
+        peak2 = 3e4 * Gauss(w, 2.7e7, 2e6)
+        dc = 5e3 * L(w, 0, 1e-6)
+        return peak1 + plateau + peak2 + dc
+
+    @jax.jit
+    def S_22(w):
+        """Self spectrum for qubit 2 (featured: plateau + peak@20MHz + bump + DC)."""
+        plateau = 3e4 * Gauss(w, 8e6, 6e6)
+        peak = 6e4 * L(w, 2e7, 2.5e-7)
+        bump = 2e4 * Gauss(w, 2.8e7, 1.5e6)
+        dc = 8e3 * L(w, 0, 1.5e-6)
+        return plateau + peak + bump + dc
+
+    @jax.jit
+    def S_1212(w):
+        """Self spectrum for the ZZ (Ising) interaction (featured: peak + hump + DC)."""
+        peak1 = 4e4 * L(w, 1.2e7, 4e-7)
+        hump = 2e4 * Gauss(w, 2.3e7, 4e6)
+        dc = 1e4 * L(w, 0, 2e-6)
+        return peak1 + hump + dc
 
 
-@jax.jit
-def S_22(w):
-    """
-    Self spectrum for qubit 2.
-
-    Parameters
-    ----------
-    w : jax.Array
-        Frequencies at which to evaluate the spectrum.
-
-    Returns
-    -------
-    jax.Array
-        PSD value for qubit 2.
-    """
-    plateau = 3e4 * Gauss(w, 8e6, 6e6)
-    peak = 6e4 * L(w, 2e7, 2.5e-7)
-    bump = 2e4 * Gauss(w, 2.8e7, 1.5e6)
-    dc = 8e3 * L(w, 0, 1.5e-6)
-    return plateau + peak + bump + dc
-
-
-@jax.jit
-def S_1212(w):
-    """
-    Self spectrum for the ZZ (Ising) interaction.
-
-    Parameters
-    ----------
-    w : jax.Array
-        Frequencies at which to evaluate the spectrum.
-
-    Returns
-    -------
-    jax.Array
-        PSD value for the Ising interaction.
-    """
-    peak1 = 4e4 * L(w, 1.2e7, 4e-7)
-    hump = 2e4 * Gauss(w, 2.3e7, 4e6)
-    dc = 1e4 * L(w, 0, 2e-6)
-    return peak1 + hump + dc
-
+# --- Cross-spectra: derived from the selected self-spectra (regime-agnostic) -----
 
 @jax.jit
 def S_1_2(w, gamma):
-    """
-    Cross spectrum for qubits 1 and 2.
-
-    Parameters
-    ----------
-    w : jax.Array
-        Frequencies at which to evaluate the spectrum.
-    gamma : float
-        Phase offset (time delay) for the cross-correlation.
-
-    Returns
-    -------
-    jax.Array
-        Complex-valued cross-spectrum.
-    """
+    """Cross spectrum for qubits 1 and 2 (phase offset gamma)."""
     return jnp.sqrt(S_11(w)*S_22(w))*jnp.exp(-1j*w*gamma)
 
 
 @jax.jit
 def S_1_12(w, gamma12):
-    """
-    Cross spectrum between qubit 1 and the Ising interaction.
-
-    Parameters
-    ----------
-    w : jax.Array
-        Frequencies at which to evaluate the spectrum.
-    gamma12 : float
-        Phase offset (time delay) for the cross-correlation.
-
-    Returns
-    -------
-    jax.Array
-        Complex-valued cross-spectrum.
-    """
+    """Cross spectrum between qubit 1 and the Ising interaction."""
     return jnp.sqrt(S_11(w)*S_1212(w))*jnp.exp(-1j*w*gamma12)
 
 
 @jax.jit
 def S_2_12(w, gamma12):
-    """
-    Cross spectrum between qubit 2 and the Ising interaction.
-
-    Parameters
-    ----------
-    w : jax.Array
-        Frequencies at which to evaluate the spectrum.
-    gamma12 : float
-        Phase offset (time delay) for the cross-correlation.
-
-    Returns
-    -------
-    jax.Array
-        Complex-valued cross-spectrum.
-    """
+    """Cross spectrum between qubit 2 and the Ising interaction."""
     return jnp.sqrt(S_22(w)*S_1212(w))*jnp.exp(-1j*w*gamma12)
 
 
@@ -279,8 +217,8 @@ if __name__ == "__main__":
 
     plt.tight_layout()
 
-    # Save the simulated spectra
-    fname = "DraftRun_NoSPAM_Boring"
+    # Save the simulated spectra into the active regime's run folder
+    fname = run_folder()
     parent_dir = os.pardir
     path = os.path.join(parent_dir, fname)
     if not os.path.exists(path):
@@ -298,7 +236,7 @@ if __name__ == "__main__":
 
     save_data = {key_map[k]: np.array(v) for k, v in spectra_k.items()}
     save_data['wk'] = np.array(wk)
-    
+
     # Save parameters as well
     save_data['T'] = T
     save_data['truncate'] = truncate

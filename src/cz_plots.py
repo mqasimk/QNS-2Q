@@ -3,6 +3,7 @@ matplotlib.use('Agg') # Use non-interactive backend
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+from run_paths import run_path
 
 def generate_publication_plot():
     """
@@ -63,9 +64,7 @@ def generate_publication_plot():
     #     plotting_data/
     #       plotting_data_cz_v2.npz
     
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(script_dir)
-    data_file = os.path.join(project_root, "DraftRun_NoSPAM_Feature", "plotting_data", "plotting_data_cz_v2.npz")
+    data_file = os.path.join(run_path(), "plotting_data", "plotting_data_cz_v2.npz")
     
     if not os.path.exists(data_file):
         print(f"Error: Data file not found at {data_file}")

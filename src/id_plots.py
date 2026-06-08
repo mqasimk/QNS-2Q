@@ -6,6 +6,7 @@ import os
 import re
 import jax.numpy as jnp
 from spectra_input import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
+from run_paths import run_path
 
 def format_label_for_latex(label):
     """Formats a label string for LaTeX rendering."""
@@ -55,8 +56,8 @@ def get_data_paths():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
     
-    # Base directory for this run
-    base_dir = os.path.join(project_root, "DraftRun_NoSPAM_Boring")
+    # Base directory for this run (active regime; override with QNS2Q_REGIME)
+    base_dir = run_path()
     
     paths = {
         "plotting_data": os.path.join(base_dir, "plotting_data", "plotting_data_id_v4.npz"),

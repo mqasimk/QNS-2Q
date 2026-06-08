@@ -21,6 +21,7 @@ from spectral_inversion import (recon_S_11, recon_S_22, recon_S_1_2, recon_S_12_
                                 recon_S_11_dc, recon_S_22_dc, recon_S_1212_dc,
                                 recon_S_1_2_dc, recon_S_1_12_dc, recon_S_2_12_dc)
 from spectra_input import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
+from run_paths import run_folder
 
 
 # --- Publication figure constants ---
@@ -489,7 +490,7 @@ class SpectraReconstructor:
 def main():
     """Main function to run the spectra reconstruction."""
     # --- User Configuration ---
-    data_folder = "DraftRun_NoSPAM_FeatureFull"
+    data_folder = run_folder()
     # ------------------------
 
     try:
