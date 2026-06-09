@@ -25,6 +25,10 @@ from observables import (make_c_12_0_mt, make_c_12_12_mt, make_c_a_0_mt,
 from spectra_input import S_11, S_22, S_1212
 from trajectories import make_noise_mat_arr, solver_prop
 
+# Fixed RNG seed. solver_prop() draws its per-shot noise keys from np.random,
+# so seeding makes the published C_1_0_MT_vs_M figure reproducible.
+RANDOM_SEED = 20260608
+
 
 @dataclass
 class QNSExperimentConfig:
@@ -207,10 +211,22 @@ class ExperimentRunner:
 def main():
     """
     Main function to run the QNS experiments.
+
+    Produces C_1_0_MT_vs_M.pdf: for a fixed measured qubit (``l_index``), the
+    reconstruction observable C_{1,0}(MT) is evaluated at each of the
+    ``truncate`` control-time harmonics (c_times = T/k, k = 1..truncate) and
+    plotted against M. The plotted curves are indexed by that harmonic index --
+    the superscript "(l)" in C_{1,0}^{(l)} -- which is distinct from
+    ``l_index`` (the measured qubit) and from the CDD order; the symbol
+    collision is noted in the figure caption.
     """
-    m_values = range(5, 20)
+    # Pin the RNG: solver_prop draws its per-shot noise keys from np.random,
+    # so seeding here makes the published figure reproducible.
+    np.random.seed(RANDOM_SEED)
+
+    m_values = list(range(5, 20))
     c_1_0_mt_1_results = []
-    l_index = 1
+    l_index = 1  # measured qubit (subscript in C_{1,0}); NOT the harmonic index
 
     for m in m_values:
         print(f"Running experiment for M = {m}")
@@ -238,20 +254,33 @@ def main():
 
     fig, ax = plt.subplots(figsize=(6, 4)) # Standard size for a single-column figure
 
-    ax.plot(m_values, c_1_0_mt_1_results, linestyle='-', marker='o', label=f'l = {l_index}')
+    # One curve per control-time harmonic l = 1..truncate (the columns of the
+    # results array, one per c_times entry). Build the legend from the actual
+    # number of curves rather than a hardcoded 5-entry list, so it stays correct
+    # if `truncate` changes.
+    n_harmonics = c_1_0_mt_1_results.shape[1]
+    for l in range(n_harmonics):
+        ax.plot(m_values, c_1_0_mt_1_results[:, l], linestyle='-', marker='o',
+                label=fr'$l={l + 1}$')
 
     ax.set_xlabel(r'$M$')
     ax.set_ylabel(fr'$C_{{1,0}}^{{(l)}}(MT)$')
-    #ax.set_title(r'Evolution of $C_{1,0}(MT)$ with Number of repetitions $M$')
     ax.grid(True, linestyle='--', alpha=0.6)
-    ax.legend(['l = 1', 'l = 2', 'l = 3', 'l = 4', 'l = 5'])
+    ax.legend()
 
     # Adjust layout to prevent labels from being cut off
     plt.tight_layout()
 
-    # Save in a high-quality format
-    plt.savefig("C_1_0_MT_1_vs_M_formal.pdf", format='pdf', bbox_inches='tight')
-    print("Plot saved to C_1_0_MT_1_vs_M_formal.pdf")
+    # Persist the exact figure-source data for reproducibility, and save under
+    # the filename the manuscript references (FILENAME-CVSM).
+    np.savez("C_1_0_MT_vs_M.npz",
+             M_values=np.array(m_values),
+             c_1_0_mt=c_1_0_mt_1_results,
+             c_times=np.array(config.c_times),
+             l_qubit=l_index,
+             seed=RANDOM_SEED)
+    plt.savefig("C_1_0_MT_vs_M.pdf", format='pdf', bbox_inches='tight')
+    print("Plot saved to C_1_0_MT_vs_M.pdf")
     plt.show()
 
 

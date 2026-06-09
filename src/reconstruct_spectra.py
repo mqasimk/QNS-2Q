@@ -244,7 +244,10 @@ class SpectraReconstructor:
         setup_pub_rcparams('compact')
 
         w = np.linspace(0, self.config.wmax, self.config.w_grain)
-        xunits = 1e6
+        # w is an angular frequency (rad/s); dividing by 2*pi*1e6 puts the axis
+        # in MHz (ordinary frequency), matching plot_utils.py and the "(MHz)"
+        # label. The previous 1e6 divisor plotted Mrad/s under an MHz label.
+        xunits = 2 * np.pi * 1e6
 
         # --- Style definitions ---
         eb_self = dict(fmt='^', color=COLORS["vermillion"],
@@ -379,7 +382,10 @@ class SpectraReconstructor:
         setup_pub_rcparams('compact')
 
         w = np.linspace(0, self.config.wmax, self.config.w_grain)
-        xunits = 1e6
+        # w is an angular frequency (rad/s); dividing by 2*pi*1e6 puts the axis
+        # in MHz (ordinary frequency), matching plot_utils.py and the "(MHz)"
+        # label. The previous 1e6 divisor plotted Mrad/s under an MHz label.
+        xunits = 2 * np.pi * 1e6
 
         eb_re = dict(fmt='^', color=COLORS["vermillion"],
                      markersize=3.5, linewidth=0.8, zorder=10, label=r'Re (recon.)')
