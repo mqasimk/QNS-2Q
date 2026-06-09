@@ -22,7 +22,7 @@ from qns2q.characterize.inversion import (recon_S_11, recon_S_22, recon_S_1_2, r
                                 recon_S_1_2_dc, recon_S_1_12_dc, recon_S_2_12_dc,
                                 truncation_bias_estimate)
 from qns2q.characterize.systematics import (forward_model_systematic, analytic_spectra,
-                                            dc_systematic)
+                                            dc_fit_systematic)
 from qns2q.noise.spectra import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
 from qns2q.paths import run_folder, project_root
 
@@ -245,28 +245,46 @@ class SpectraReconstructor:
                 print(f"    [diag] {name}: spectral weight above comb cutoff "
                       f"omega_kmax = {100*frac:.2f}% (truncation bias)")
 
-        # Reconstruct DC (w=0) values from FID experiments
-        # For DC, if has_errors, result is (val, err), else val.
-        def call_recon_dc(func, keys, **kwargs):
-            res = func([obs[k] for k in keys], obs_err=get_errs(keys), **kwargs)
-            if has_errors:
-                return res
-            return res, 0.0
+        # Reconstruct DC (w=0) values from the multi-time FID decay sweep.
+        # Each recon_*_dc fits S(0) from the slope of C(t) over the adaptively-selected
+        # measurable+linear window (inversion._ramsey_fit_dc); returns (val, err,
+        # reliable). reliable=False flags quasi-static / sub-comb-cusp noise whose DC is
+        # only a lower bound -- the figure then quotes an inflated (honest) bar.
+        t_sweep = obs['dc_t_sweep']
+        self.dc_t_sweep = t_sweep
+        self.dc_reliable = {}
 
-        # Self-spectra DC: partner-decoupled single-qubit FID Ramsey slope
-        # S_aa(0) = 2<C_{a,0}>/(MT) (see spectral_inversion.recon_S_11_dc).
-        S_11_dc, S_11_dc_err = call_recon_dc(recon_S_11_dc, ['C_1_0_FIDCDD3'], m=c.M, T=c.T)
-        S_22_dc, S_22_dc_err = call_recon_dc(recon_S_22_dc, ['C_2_0_CDD3FID'], m=c.M, T=c.T)
-        S_1212_dc, S_1212_dc_err = call_recon_dc(recon_S_1212_dc, ['C_12_0_FID_FID'], m=c.M, T=c.T,
-                                    S_11_dc=S_11_dc, S_22_dc=S_22_dc, 
-                                    S_11_dc_err=S_11_dc_err, S_22_dc_err=S_22_dc_err)
-        S_1_2_dc, S_1_2_dc_err = call_recon_dc(recon_S_1_2_dc, ['C_12_12_FID'], m=c.M, T=c.T)
-        S_1_12_dc, S_1_12_dc_err = call_recon_dc(recon_S_1_12_dc, ['C_1_12_FID'], m=c.M, T=c.T)
-        S_2_12_dc, S_2_12_dc_err = call_recon_dc(recon_S_2_12_dc, ['C_2_12_FID'], m=c.M, T=c.T)
+        def call_recon_dc(func, keys, sk, **kwargs):
+            val, err, reliable = func([obs[k] for k in keys], obs_err=get_errs(keys),
+                                      t_sweep=t_sweep, **kwargs)
+            self.dc_reliable[sk] = reliable
+            return val, err
 
-        print(f"DC values: S_11(0)={S_11_dc:.4f} +/- {S_11_dc_err:.4f}, "
-              f"S_22(0)={S_22_dc:.4f} +/- {S_22_dc_err:.4f}, "
-              f"S_1212(0)={S_1212_dc:.4f} +/- {S_1212_dc_err:.4f}")
+        S_11_dc, S_11_dc_err = call_recon_dc(recon_S_11_dc, ['C_1_0_FIDCDD3'], 'S11')
+        S_22_dc, S_22_dc_err = call_recon_dc(recon_S_22_dc, ['C_2_0_CDD3FID'], 'S22')
+        S_1212_dc, S_1212_dc_err = call_recon_dc(recon_S_1212_dc,
+                                    ['C_1_0_FIDFID', 'C_2_0_FIDFID', 'C_12_0_FID_FID'], 'S1212')
+        S_1_2_dc, S_1_2_dc_err = call_recon_dc(recon_S_1_2_dc, ['C_12_12_FID'], 'S12')
+        S_1_12_dc, S_1_12_dc_err = call_recon_dc(recon_S_1_12_dc, ['C_1_12_FID'], 'S112')
+        S_2_12_dc, S_2_12_dc_err = call_recon_dc(recon_S_2_12_dc, ['C_2_12_FID'], 'S212')
+
+        # Flagged (not-determined) DC points can fit to an unphysical negative S(0) when
+        # the signal is swamped; clamp to a non-negative floor (the first harmonic value)
+        # so downstream consumers see a sane spectrum. The dc_reliable flag + inflated bar
+        # carry the (large) uncertainty.
+        def _floor_dc(val, reliable, harm0):
+            val, harm0 = float(np.real(val)), float(np.real(harm0))
+            return val if (reliable or val >= harm0) else harm0
+        S_11_dc = _floor_dc(S_11_dc, self.dc_reliable['S11'], S_11_k[0])
+        S_22_dc = _floor_dc(S_22_dc, self.dc_reliable['S22'], S_22_k[0])
+        S_1212_dc = _floor_dc(S_1212_dc, self.dc_reliable['S1212'], S_12_12_k[0])
+        S_1_2_dc = _floor_dc(S_1_2_dc, self.dc_reliable['S12'], S_1_2_k[0])
+        S_1_12_dc = _floor_dc(S_1_12_dc, self.dc_reliable['S112'], S_1_12_k[0])
+        S_2_12_dc = _floor_dc(S_2_12_dc, self.dc_reliable['S212'], S_2_12_k[0])
+
+        print(f"DC values (reliable?): S_11(0)={S_11_dc:.1f}({self.dc_reliable['S11']}), "
+              f"S_22(0)={S_22_dc:.1f}({self.dc_reliable['S22']}), "
+              f"S_1212(0)={S_1212_dc:.1f}({self.dc_reliable['S1212']})")
 
         # Prepend the DC (w=0) point so wk[0] = 0. Each recon_*_dc already returns
         # the full one-sided S(0) on the same footing as the harmonic samples
@@ -319,9 +337,10 @@ class SpectraReconstructor:
                                            c.gamma, c.gamma_12, c.w_grain, c.wmax,
                                            inv_opts=inv_opts)
 
-            # DC (w=0) point: its own Ramsey-slope bias (FID short-time tail + residual
-            # S_1212 leak through the CDD3 partner), computed deterministically.
-            dc_bias = dc_systematic(spectra, c.M, c.T)
+            # DC (w=0) point: deterministic bias of the multi-time slope fit (tiny where
+            # the noise reaches motional narrowing; large = honest inflated bar where it
+            # is quasi-static / sub-comb-cusp and only a lower bound -- see dc_reliable).
+            dc_bias = dc_fit_systematic(spectra, self.dc_t_sweep, c.gamma, c.gamma_12)
 
             print("[systematic] folded sigma_sys per spectrum (forward-model comb bias; "
                   "RMS over harmonics, |DC bias|):")
@@ -329,11 +348,18 @@ class SpectraReconstructor:
                 ek = _SYS_TO_ERR[sk]
                 sysk = np.concatenate(([0.0], sys[sk]))   # complex for cross, real for self
                 sysk[0] = abs(dc_bias[sk])                # DC bias is real for every spectrum
+                if not getattr(self, 'dc_reliable', {}).get(sk, True):
+                    # DC not determined from the data (strong-noise cross channel whose
+                    # self-decay swamps the signal, or quasi-static / sub-comb-cusp noise):
+                    # quote an honest bar at the spectrum's own scale and flag it.
+                    harm_scale = float(np.max(np.abs(self.reconstructed_spectra[rk][1:])))
+                    sysk[0] = max(abs(dc_bias[sk]), harm_scale)
                 self.reconstructed_spectra_sys[ek] = sysk
                 self.reconstructed_spectra_err_total[ek] = _quad_combine(
                     self.reconstructed_spectra_err[ek], sysk)
                 rms_a = np.sqrt(np.mean(np.abs(sys[sk]) ** 2))
-                print(f"    {sk:>6}: harmonic RMS = {rms_a:8.1f}  |DC bias| = {abs(dc_bias[sk]):8.1f}")
+                flag = '' if getattr(self, 'dc_reliable', {}).get(sk, True) else '  [DC flagged: not determined]'
+                print(f"    {sk:>6}: harmonic RMS = {rms_a:8.1f}  |DC bias| = {abs(dc_bias[sk]):8.1f}{flag}")
         except Exception as e:
             print(f"[systematic] WARNING: systematic-error computation failed ({e}); "
                   f"falling back to statistical-only bars.")

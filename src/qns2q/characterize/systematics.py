@@ -371,6 +371,77 @@ def forward_model_systematic(spectra, c_times, M, T, t_vec, gamma, gamma_12,
     return sys
 
 
+def dc_fit_systematic(spectra, t_sweep, gamma, gamma_12, n_w=400001, wmax=5e8):
+    """Deterministic bias of the multi-time DC slope fit, per spectrum.
+
+    Mirrors ``inversion._ramsey_fit_dc``: builds the EXACT forward FID-decay curves
+    C(t_k) over the sweep for the analytic spectra, runs them through the same DC
+    reconstructors, and returns ``recon_dc(C_fwd) - S(0)`` per spectrum. For the
+    self/cross spectra whose noise reaches the motional-narrowing regime this bias is
+    tiny (~0.1%); for quasi-static / sub-comb-cusp noise (e.g. a 1/|w| Ising spectrum)
+    the linear regime is never reached and the bias is large -- exactly the inflated
+    bar the flagged DC point should carry. (FID filter |F(w,t)|^2 = sin^2(wt/2)/(w/2)^2;
+    self C(t)=(1/2pi)int S|F|^2, cross C(t)=(1/pi)int sqrt(Sa Sb)cos(w*dgamma)|F|^2.)
+    """
+    from qns2q.characterize.inversion import (recon_S_11_dc, recon_S_22_dc, recon_S_1212_dc,
+                                              recon_S_1_2_dc, recon_S_1_12_dc, recon_S_2_12_dc)
+    t = np.asarray(t_sweep, dtype=float)
+    w = np.linspace(wmax / n_w, wmax, n_w)
+    F2 = np.sin(w[None, :] * t[:, None] / 2) ** 2 / (w[None, :] / 2) ** 2   # (n_t, n_w)
+
+    def Sr(key):
+        return np.real(np.asarray(spectra[key](w)))
+    S = {k: Sr(k) for k in ('S11', 'S22', 'S1212')}
+
+    def c_self(key):
+        return (1 / (2 * np.pi)) * np.trapezoid(S[key][None, :] * F2, w, axis=1)
+
+    def c_cross(ka, kb, dgamma):
+        g = np.sqrt(S[ka] * S[kb])
+        return (1 / np.pi) * np.trapezoid((g * np.cos(w * dgamma))[None, :] * F2, w, axis=1)
+
+    # Residual Ising leak through the CDD3 partner of the self-DC observables: the high-
+    # order CDD3 nulls most of S_1212 but not all, biasing C_1_0_FIDCDD3 = Cself(S11) +
+    # 1/2 Var(Phi_12 through CDD3). Built from the actual CDD3 toggle over each t_k.
+    from qns2q.model.trajectories import make_y
+    Tper = float(t[0])                                   # sweep starts at m=1 -> t = T
+    dc_ct = Tper / 8.0
+    wl = np.linspace(wmax / 40001, wmax, 40001)
+    S1212_l = np.real(np.asarray(spectra['S1212'](wl)))
+
+    def leak(tk):
+        tb = np.linspace(0.0, float(tk), 4000)
+        y = make_y(tb, ['FID', 'CDD3'], ctime=dc_ct, m=1)
+        FI = _ff_grid(np.asarray(y[2, 2]), jnp.asarray(tb), wl, +1)
+        return (1 / (2 * np.pi)) * np.trapezoid(S1212_l * np.abs(FI) ** 2, wl)
+
+    leak_arr = np.array([leak(tk) for tk in t])
+
+    # forward DC observables over the sweep (match experiments.py recipes)
+    cs11, cs22, cs1212 = c_self('S11'), c_self('S22'), c_self('S1212')
+    C_10 = cs11 + leak_arr                               # C_1_0_FIDCDD3 (+ residual Ising leak)
+    C_20 = cs22 + leak_arr                               # C_2_0_CDD3FID
+    C_10ff = cs11 + cs1212                               # C_1_0_FIDFID = Cself11 + Cself1212
+    C_20ff = cs22 + cs1212                               # C_2_0_FIDFID
+    C_120 = cs11 + cs22                                  # C_12_0_FID_FID = Cself11 + Cself22
+    C_1212 = c_cross('S11', 'S22', gamma)                # C_12_12_FID
+    C_112 = c_cross('S11', 'S1212', gamma_12)            # C_1_12_FID
+    C_212 = c_cross('S22', 'S1212', gamma_12 - gamma)    # C_2_12_FID
+
+    s11, _, _ = recon_S_11_dc([C_10], t_sweep=t)
+    s22, _, _ = recon_S_22_dc([C_20], t_sweep=t)
+    s1212, _, _ = recon_S_1212_dc([C_10ff, C_20ff, C_120], t_sweep=t)
+    s12, _, _ = recon_S_1_2_dc([C_1212], t_sweep=t)
+    s112, _, _ = recon_S_1_12_dc([C_112], t_sweep=t)
+    s212, _, _ = recon_S_2_12_dc([C_212], t_sweep=t)
+
+    def truth(key):
+        return float(np.real(spectra[key](np.array([0.0]))[0]))
+    return {'S11': s11 - truth('S11'), 'S22': s22 - truth('S22'),
+            'S1212': s1212 - truth('S1212'), 'S12': s12 - truth('S12'),
+            'S112': s112 - truth('S112'), 'S212': s212 - truth('S212')}
+
+
 def analytic_spectra(gamma, gamma_12):
     """Ground-truth spectrum callables S(w) for the active regime (exact systematic)."""
     from qns2q.noise.spectra import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
