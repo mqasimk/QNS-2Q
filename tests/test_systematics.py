@@ -12,7 +12,9 @@ import pytest
 
 from qns2q.characterize.systematics import (comb_inversion_systematic, analytic_spectra,
                                             selfconsistent_spectra, dc_systematic, SPEC_KERNELS,
-                                            forward_model_systematic, forward_observables, _FWD_OBS)
+                                            forward_model_systematic, forward_observables, _FWD_OBS,
+                                            dc_fit_systematic)
+from qns2q.characterize.inversion import _ramsey_fit_dc
 
 # Small but representative config (keep the grids light so the test stays fast).
 TAU = 2.5e-8
@@ -172,3 +174,42 @@ def test_forward_systematic_antisym_channel_dominates(forward_systematic_result)
         im_rms = np.sqrt(np.mean(np.imag(sys[key]) ** 2))
         assert im_rms > 2.0 * re_rms, (
             f"{key}: Im systematic {im_rms:.0f} should dominate Re {re_rms:.0f}")
+
+
+# --- Adaptive multi-time DC slope fit (strong-noise robust) -------------------
+
+def test_ramsey_fit_dc_recovers_linear_slope():
+    """In the motional-narrowing regime C(t) = a + (S0/factor) t; the fit recovers S0
+    and marks it reliable (self factor 2; cross factor 1)."""
+    t = np.linspace(1e-6, 1e-5, 8)
+    for factor, S0 in [(2.0, 2.5e5), (1.0, 1.5e5)]:
+        C = 0.05 + (S0 / factor) * t
+        s0, err, reliable = _ramsey_fit_dc(C, t, factor=factor)
+        assert abs(s0 - S0) / S0 < 0.02 and reliable
+
+
+def test_ramsey_fit_dc_flags_quasistatic():
+    """A purely quadratic decay C(t) ~ t^2 never reaches the linear regime -> the fit
+    flags it unreliable (the DC value is then only a lower bound)."""
+    t = np.linspace(1e-6, 1e-5, 8)
+    C = 5e9 * t ** 2
+    _, _, reliable = _ramsey_fit_dc(C, t, factor=2.0)
+    assert not reliable
+
+
+def test_dc_fit_systematic_recovers_self_and_qq_cross():
+    """The deterministic DC bias is finite for all six. The qubit-qubit cross S12 (no
+    partner-CDD3 leak) is recovered tightly; the self DCs S11/S22 carry the residual
+    Ising leak through the CDD3 partner (a modest, correctly-quoted systematic), so a
+    looser bound applies. (The Ising-coupled DCs may be flagged/large for a quasi-static
+    regime; only finiteness is asserted there for regime-robustness.)"""
+    spectra = analytic_spectra(GAMMA, GAMMA12)
+    t_sweep = np.arange(1, 11) * T
+    bias = dc_fit_systematic(spectra, t_sweep, GAMMA, GAMMA12)
+    for key in ALL_KEYS:
+        assert np.isfinite(bias[key])
+    truth12 = float(np.real(spectra['S12'](np.array([0.0]))[0]))
+    assert abs(bias['S12']) < 0.1 * abs(truth12), "S12 DC not recovered"
+    for key in ('S11', 'S22'):                       # self DC: motional narrowing + CDD3 leak
+        truth = float(np.real(spectra[key](np.array([0.0]))[0]))
+        assert abs(bias[key]) < 0.2 * abs(truth), f"{key} DC bias unexpectedly large"

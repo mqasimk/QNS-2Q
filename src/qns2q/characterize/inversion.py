@@ -578,218 +578,153 @@ def recon_S_2_12(coefs, **kwargs):
 
 # --- DC reconstruction functions from FID experiments ---
 
-def _ramsey_slope_dc(C, m, T, obs_err=None):
-    """Shared motional-narrowing DC estimator: S(0) = 2 <C_{a,0}> / (M T).
+def _ramsey_fit_dc(C, t, factor, obs_err=None, c_max=3.0, c_min=0.05, curv_tol=0.30):
+    """Strong-noise-robust zero-frequency S(0) from the FID/Ramsey decay slope.
 
-    The partner-decoupled single-qubit FID coefficient C_{a,0}(MT) grows as
-    (S_aa(0)/2) MT in the motional-narrowing regime, so 2*<C>/(MT) recovers the
-    zero-frequency self-spectrum. (Slope-from-origin at the production M; a small
-    ~few-% positive offset from the quasi-static short-time tail is acceptable and
-    far below the comb-subtraction error it replaces.)
+    The decay exponent ``C(t)`` of the partner-decoupled FID (self) or the cross
+    FID/FID coefficient (cross), measured over a sweep of total evolution times
+    ``t_k``, grows in the motional-narrowing (linear) regime as
+
+        C(t)  ->  a + (S(0)/factor) * t ,   factor = 2 (self, C=Var/2), 1 (cross, C=Cov),
+
+    so ``S(0) = factor * slope``. The legacy single-point estimator ``2<C(MT)>/(MT)``
+    fails for strong noise because the coherence at the full record MT is fully decayed
+    (C >> 1, below the shot-noise floor). Here the slope is fit over the window where
+    ``C(t)`` is both MEASURABLE (``c_min < C < c_max``) and LINEAR, selected
+    ADAPTIVELY -- so the effective measurement time tracks the noise strength with no
+    per-spectrum tuning (change the spectra and the window moves itself).
+
+    Parameters
+    ----------
+    C, t : array_like
+        Decay exponent ``C(t_k)`` over the sweep of total evolution times ``t_k``.
+    factor : float
+        2 for self-spectra, 1 for cross-spectra.
+    obs_err : array_like, optional
+        Per-time standard error of ``C(t_k)``; propagated to the slope error.
+
+    Returns
+    -------
+    (S0, S0_err, reliable)
+        ``reliable=False`` when the decay has not reached the linear regime within the
+        measurable window (quasi-static / sub-comb-cusp noise -- detected as significant
+        curvature) or the sweep does not bracket the window: ``S0`` is then only a lower
+        bound and should be quoted with an inflated systematic bar.
     """
     C = np.asarray(C, dtype=float)
-    val = 2.0 * np.mean(C) / (m * T)
-    if obs_err is not None:
-        errs = np.asarray(obs_err[0], dtype=float)
-        err = 2.0 * np.sqrt(np.sum(errs ** 2)) / (len(errs) * m * T)
-        return val, err
-    return val
+    t = np.asarray(t, dtype=float)
+    order = np.argsort(t)
+    C, t = C[order], t[order]
+    e = None if obs_err is None else np.asarray(obs_err, dtype=float)[order]
+
+    meas = (C > c_min) & (C < c_max)
+    # Sweep brackets the window only if it is neither all-decayed nor all-tiny.
+    covered = bool(meas.sum() >= 2 and C[0] < c_max and C[-1] > c_min)
+    if meas.sum() < 2:                       # degrade gracefully: use the un-saturated tail
+        meas = C < c_max
+        if meas.sum() < 2:
+            return float(factor * np.mean(C) / t[-1]), 0.0, False
+
+    tm, Cm = t[meas], C[meas]
+    em = None if e is None else e[meas]
+    lin = tm >= 0.4 * tm.max()               # linear regime = upper part of measurable window
+    if lin.sum() < 2:
+        lin = np.ones(tm.size, dtype=bool)
+
+    x, y = tm[lin], Cm[lin]
+    w = np.ones_like(x) if em is None else 1.0 / np.maximum(em[lin], 1e-12) ** 2
+    xb = np.sum(w * x) / np.sum(w)
+    Sxx = np.sum(w * (x - xb) ** 2)
+    slope = np.sum(w * (x - xb) * y) / Sxx
+    S0 = factor * slope
+    S0_err = float(factor * np.sqrt(1.0 / Sxx)) if em is not None else 0.0
+
+    reliable = covered
+    if meas.sum() >= 3:                      # curvature -> not yet linear (quasi-static)
+        c2, c1, _ = np.polyfit(tm, Cm, 2)
+        if abs(c2 * tm.max() ** 2) > curv_tol * abs(c1 * tm.max()):
+            reliable = False
+    # An unphysical (negative) or statistically-insignificant slope means the signal is
+    # swamped (e.g. a strong-noise cross channel whose self-decay dwarfs the cross term):
+    # not determined -> flag so the figure quotes an inflated bar.
+    if S0 <= 0 or (S0_err > 0 and S0 < 2.0 * S0_err):
+        reliable = False
+    return float(S0), S0_err, bool(reliable)
+
+
+def _dc_obs_err(kwargs):
+    """Per-time obs error for the DC sweep (kwargs['obs_err'] is a list of one array)."""
+    oe = kwargs.get('obs_err')
+    return None if oe is None else oe[0]
 
 
 def recon_S_11_dc(coefs, **kwargs):
-    """Reconstruct S_11(0) from the partner-decoupled FID/CDD3 Ramsey slope.
+    """Reconstruct S_11(0) from the partner-decoupled FID/CDD3 decay-slope fit.
 
-    Under ['FID','CDD3'] (qubit 1 free, qubit 2 CDD3-decoupled) the single-qubit
-    coefficient C_{1,0} measures the qubit-1 free-induction-decay exponent governed
-    by S_11 alone -- the partner's high-order CDD3 nulls the Ising (S_1212)
-    contribution. So S_11(0) = 2 <C_{1,0}> / (M T) (averaged over the fast partner
-    control times). This replaces the former comb-subtraction estimator, which
-    inherited the S_22/S_1212 harmonic-reconstruction errors and was unreliable
-    (off by several-fold) at DC.
+    Under ['FID','CDD3'] (qubit 1 free, qubit 2 CDD3-decoupled) the coefficient
+    C_{1,0}(t) is the qubit-1 free-induction-decay exponent governed by S_11 alone
+    (the partner CDD3 nulls the Ising term). S_11(0) = 2 * slope of C_{1,0}(t),
+    fit over the adaptively-selected measurable+linear window (strong-noise robust;
+    see ``_ramsey_fit_dc``).
 
-    coefs : [C_1_0_FIDCDD3]    kwargs : m, T, obs_err (optional)
+    coefs : [C_1_0_FIDCDD3 over the time sweep]   kwargs : t_sweep, obs_err (optional)
+    Returns (S0, S0_err, reliable).
     """
-    return _ramsey_slope_dc(coefs[0], kwargs['m'], kwargs['T'], kwargs.get('obs_err'))
+    return _ramsey_fit_dc(coefs[0], kwargs['t_sweep'], 2.0, _dc_obs_err(kwargs))
 
 
 def recon_S_22_dc(coefs, **kwargs):
-    """Reconstruct S_22(0) from the partner-decoupled FID/CDD3 Ramsey slope.
-
-    Symmetric counterpart of ``recon_S_11_dc`` using ['CDD3','FID'] (qubit 2 free,
-    qubit 1 decoupled): S_22(0) = 2 <C_{2,0}> / (M T).
-
-    coefs : [C_2_0_CDD3FID]    kwargs : m, T, obs_err (optional)
-    """
-    return _ramsey_slope_dc(coefs[0], kwargs['m'], kwargs['T'], kwargs.get('obs_err'))
-
-
-def recon_S_1212_dc(coefs, **kwargs):
-    """
-    Reconstruct S_1212(0) from C_12_0 with ['FID','FID'] pulse sequence.
-
-    Uses already-reconstructed S_11(0) and S_22(0) to isolate S_1212(0).
-
-    Parameters
-    ----------
-    coefs : list of array_like
-        Observables (C_12_0_FID_FID).
-    **kwargs
-        m : int
-            Number of repetitions.
-        T : float
-            Time per repetition.
-        S_11_dc : float
-            Reconstructed S_11(0).
-        S_22_dc : float
-            Reconstructed S_22(0).
-        obs_err : list of array_like, optional
-            Standard errors for the observables.
-        S_11_dc_err : float, optional
-            Error of S_11(0).
-        S_22_dc_err : float, optional
-            Error of S_22(0).
-
-    Returns
-    -------
-    float or (float, float)
-        Reconstructed DC value S_1212(0).
-        If obs_err is provided, returns (S_1212_dc, S_1212_dc_err).
-    """
-    m = kwargs['m']
-    T = kwargs['T']
-    S_11_dc = kwargs['S_11_dc']
-    S_22_dc = kwargs['S_22_dc']
-    C_12_0_FID_FID = coefs[0]
-    # ['FID','FID'] C_12_0 is c_time-independent; average for noise reduction
-    meas = np.mean(C_12_0_FID_FID)
-    val = -(meas / (m*T) - S_11_dc - S_22_dc) / 2
-    
-    if 'obs_err' in kwargs and kwargs['obs_err'] is not None:
-        errs = kwargs['obs_err'][0]
-        # err_meas = sqrt(sum(errs^2)) / N
-        err_meas = np.sqrt(np.sum(np.array(errs)**2)) / len(errs)
-        
-        s11_err = kwargs.get('S_11_dc_err', 0.0)
-        s22_err = kwargs.get('S_22_dc_err', 0.0)
-        
-        # err = 0.5 * sqrt( (err_meas/(m*T))^2 + s11_err^2 + s22_err^2 )
-        total_err = 0.5 * np.sqrt((err_meas / (m*T))**2 + s11_err**2 + s22_err**2)
-        return val, total_err
-
-    return val
+    """Reconstruct S_22(0): symmetric counterpart of ``recon_S_11_dc`` using
+    ['CDD3','FID']. S_22(0) = 2 * slope of C_{2,0}(t). Returns (S0, S0_err, reliable)."""
+    return _ramsey_fit_dc(coefs[0], kwargs['t_sweep'], 2.0, _dc_obs_err(kwargs))
 
 
 def recon_S_1_2_dc(coefs, **kwargs):
+    """Reconstruct S_1_2(0) from the cross FID/FID coefficient C_12_12(t).
+
+    C_12_12(t) = Cov(Phi_1, Phi_2) -> a + S_1_2(0) * t in the linear regime, so the
+    cross-spectrum carries NO factor of 2: S_1_2(0) = slope of C_12_12(t).
+    Returns (S0, S0_err, reliable).
+
+    coefs : [C_12_12_FID over the time sweep]    kwargs : t_sweep, obs_err (optional)
     """
-    Reconstruct S_1_2(0) from C_12_12 with ['FID','FID'] pulse sequence.
-
-    Parameters
-    ----------
-    coefs : list of array_like
-        Observables (C_12_12_FID).
-    **kwargs
-        m : int
-            Number of repetitions.
-        T : float
-            Time per repetition.
-        obs_err : list of array_like, optional
-            Standard errors for the observables.
-
-    Returns
-    -------
-    float or (float, float)
-        Reconstructed DC value S_1_2(0).
-        If obs_err is provided, returns (S_1_2_dc, S_1_2_dc_err).
-    """
-    m = kwargs['m']
-    T = kwargs['T']
-    C_12_12_FID = coefs[0]
-    # ['FID','FID'] C_12_12 is c_time-independent; average for noise reduction.
-    # Returns the full one-sided DC value S_1_2(0) = <C>/(MT). Cross-spectra carry
-    # no factor of 2 (unlike the self-spectra Ramsey slope S_aa(0) = 2<C>/(MT)).
-    val = np.mean(C_12_12_FID) / (m*T)
-    
-    if 'obs_err' in kwargs and kwargs['obs_err'] is not None:
-        errs = kwargs['obs_err'][0]
-        err_meas = np.sqrt(np.sum(np.array(errs)**2)) / len(errs)
-        return val, err_meas / (m*T)
-
-    return val
+    return _ramsey_fit_dc(coefs[0], kwargs['t_sweep'], 1.0, _dc_obs_err(kwargs))
 
 
 def recon_S_1_12_dc(coefs, **kwargs):
-    """
-    Reconstruct S_1_12(0) from C_a_b(l=1) with ['FID','FID'] pulse sequence.
-
-    Parameters
-    ----------
-    coefs : list of array_like
-        Observables (C_1_12_FID).
-    **kwargs
-        m : int
-            Number of repetitions.
-        T : float
-            Time per repetition.
-        obs_err : list of array_like, optional
-            Standard errors for the observables.
-
-    Returns
-    -------
-    float or (float, float)
-        Reconstructed DC value S_1_12(0).
-        If obs_err is provided, returns (S_1_12_dc, S_1_12_dc_err).
-    """
-    m = kwargs['m']
-    T = kwargs['T']
-    C_1_12_FID = coefs[0]
-    # ['FID','FID'] C_a_b is c_time-independent; average for noise reduction.
-    # Returns the full one-sided DC value S_1_12(0) = <C>/(MT).
-    val = np.mean(C_1_12_FID) / (m*T)
-    
-    if 'obs_err' in kwargs and kwargs['obs_err'] is not None:
-        errs = kwargs['obs_err'][0]
-        err_meas = np.sqrt(np.sum(np.array(errs)**2)) / len(errs)
-        return val, err_meas / (m*T)
-
-    return val
+    """Reconstruct S_1_12(0) from C_a_b(l=1) FID/FID: S_1_12(0) = slope of C_1_12(t).
+    Returns (S0, S0_err, reliable). (For quasi-static Ising noise the linear regime is
+    not reached and ``reliable`` is False -- the value is then a lower bound.)"""
+    return _ramsey_fit_dc(coefs[0], kwargs['t_sweep'], 1.0, _dc_obs_err(kwargs))
 
 
 def recon_S_2_12_dc(coefs, **kwargs):
+    """Reconstruct S_2_12(0) from C_a_b(l=2) FID/FID: S_2_12(0) = slope of C_2_12(t).
+    Returns (S0, S0_err, reliable)."""
+    return _ramsey_fit_dc(coefs[0], kwargs['t_sweep'], 1.0, _dc_obs_err(kwargs))
+
+
+def recon_S_1212_dc(coefs, **kwargs):
+    """Reconstruct the Ising self-DC S_1212(0) from the FID/FID single-qubit + ZZ combo.
+
+    The Ising phase cancels in the two-qubit (ZZ) coherences, so C_12_0 alone holds no
+    S_1212. The single-qubit FID/FID coefficients DO retain it:
+        C_1_0_FF = 1/2 (Var Phi_1 + Var Phi_12),  C_2_0_FF = 1/2 (Var Phi_2 + Var Phi_12),
+        C_12_0_FF = 1/2 (Var Phi_1 + Var Phi_2),
+    so  Var Phi_12(t) = C_1_0_FF + C_2_0_FF - C_12_0_FF  ->  S_1212(0) * t  (factor 1).
+    This mirrors the harmonic recon_S_12_12 combination at DC, and -- like the others --
+    is fit over the adaptive measurable+linear window (reliable=False for quasi-static
+    Ising noise whose DC cusp never reaches the linear regime).
+
+    coefs : [C_1_0_FIDFID, C_2_0_FIDFID, C_12_0_FID_FID] over the time sweep.
+    kwargs : t_sweep, obs_err (optional).  Returns (S0, S0_err, reliable).
     """
-    Reconstruct S_2_12(0) from C_a_b(l=2) with ['FID','FID'] pulse sequence.
-
-    Parameters
-    ----------
-    coefs : list of array_like
-        Observables (C_2_12_FID).
-    **kwargs
-        m : int
-            Number of repetitions.
-        T : float
-            Time per repetition.
-        obs_err : list of array_like, optional
-            Standard errors for the observables.
-
-    Returns
-    -------
-    float or (float, float)
-        Reconstructed DC value S_2_12(0).
-        If obs_err is provided, returns (S_2_12_dc, S_2_12_dc_err).
-    """
-    m = kwargs['m']
-    T = kwargs['T']
-    C_2_12_FID = coefs[0]
-    # ['FID','FID'] C_a_b is c_time-independent; average for noise reduction.
-    # Returns the full one-sided DC value S_2_12(0) = <C>/(MT). Same +sign as
-    # S_1_2/S_1_12: the C_a_b(l=2) FID/FID coefficient is positive here, matching
-    # the harmonic recon_S_2_12 (no sign flip). The earlier leading minus drove the
-    # DC point negative, contradicting both truth and the harmonic points.
-    val = np.mean(C_2_12_FID) / (m*T)
-    
-    if 'obs_err' in kwargs and kwargs['obs_err'] is not None:
-        errs = kwargs['obs_err'][0]
-        err_meas = np.sqrt(np.sum(np.array(errs)**2)) / len(errs)
-        return val, err_meas / (m*T)
-
-    return val
+    c10, c20, c120 = (np.asarray(x, dtype=float) for x in coefs)
+    V12 = c10 + c20 - c120
+    oe = kwargs.get('obs_err')
+    err = None
+    if oe is not None:
+        e10, e20, e120 = (np.asarray(oe[i], dtype=float) for i in range(3))
+        err = np.sqrt(e10 ** 2 + e20 ** 2 + e120 ** 2)
+    return _ramsey_fit_dc(V12, kwargs['t_sweep'], 1.0, err)
 

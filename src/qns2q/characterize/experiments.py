@@ -36,6 +36,15 @@ from qns2q.paths import run_folder, project_root
 # which all use the same constant.
 RANDOM_SEED = 20260608
 
+# Correlation-function builders keyed by experiment type (shared by run_experiment
+# and the DC time sweep).
+_EXP_MAP = {
+    'C_12_0': make_c_12_0_mt,
+    'C_12_12': make_c_12_12_mt,
+    'C_a_0': make_c_a_0_mt,
+    'C_a_b': make_c_a_b_mt,
+}
+
 
 @dataclass
 class QNSExperimentConfig:
@@ -173,17 +182,11 @@ class ExperimentRunner:
         print(f"Running experiment: {exp_name}")
         start_time = time.time()
 
-        exp_map = {
-            'C_12_0': make_c_12_0_mt,
-            'C_12_12': make_c_12_12_mt,
-            'C_a_0': make_c_a_0_mt,
-            'C_a_b': make_c_a_b_mt,
-        }
-        if exp_type not in exp_map:
+        if exp_type not in _EXP_MAP:
             raise ValueError(f"Invalid experiment type: {exp_type}")
 
         ctimes = self.config.c_times if c_times is None else c_times
-        exp_func = exp_map[exp_type]
+        exp_func = _EXP_MAP[exp_type]
         means, stderrs = exp_func(
             solver_prop,
             pulse_sequence,
@@ -206,6 +209,40 @@ class ExperimentRunner:
         print(
             f"--- {exp_name} completed in {time.time() - start_time:.2f}s ---")
 
+    def run_dc_sweep(self, exp_name: str, pulse_sequence: list, exp_type: str,
+                     m_sweep, dc_ct: float, **kwargs):
+        """Measure a FID DC observable over a sweep of total evolution times t = m*T.
+
+        Evolves m periods (t_vec[:m*t_grain]) for each m in ``m_sweep`` and records the
+        decay exponent C(t) and its error as length-len(m_sweep) arrays. The adaptive
+        DC slope fit (``inversion._ramsey_fit_dc``) then picks the measurable+linear
+        window, so the effective measurement time auto-tracks the noise strength -- no
+        per-spectrum tuning. ``dc_ct`` is the (fast) partner control time used by the
+        FID/CDD3 self observables (irrelevant for the pulse-free FID/FID cross ones).
+        """
+        print(f"Running DC sweep: {exp_name} over m={list(int(m) for m in m_sweep)}")
+        start_time = time.time()
+        if exp_type not in _EXP_MAP:
+            raise ValueError(f"Invalid experiment type: {exp_type}")
+        exp_func = _EXP_MAP[exp_type]
+        c_vals, c_errs = [], []
+        for m in m_sweep:
+            m = int(m)
+            tvec_m = self.config.t_vec[:m * self.config.t_grain]
+            means, stderrs = exp_func(
+                solver_prop, pulse_sequence, tvec_m, [dc_ct], self.config.CM,
+                self.config.spMit, n_shots=self.config.n_shots, m=m,
+                t_b=self.config.t_b, a_m=self.config.a_m, delta=self.config.delta,
+                a_sp=self.config.a_sp, c=self.config.c, noise_mats=self.noise_mats,
+                **kwargs)
+            c_vals.append(means[0])
+            c_errs.append(stderrs[0])
+        self.results[exp_name] = np.array(c_vals)
+        self.results[exp_name + '_err'] = np.array(c_errs)
+        # Total evolution times for the sweep (shared by all DC observables).
+        self.results['dc_t_sweep'] = np.array([int(m) for m in m_sweep]) * self.config.T
+        print(f"--- {exp_name} sweep done in {time.time() - start_time:.2f}s ---")
+
     def save_results(self):
         """
         Saves the parameters and results to .npz files.
@@ -224,19 +261,24 @@ class ExperimentRunner:
         print(f"Results saved to {self.path}")
 
 
-def main():
+def main(config=None):
     """
     Main function to run the QNS experiments.
+
+    Parameters
+    ----------
+    config : QNSExperimentConfig, optional
+        Experiment configuration. Defaults to ``QNSExperimentConfig()``; pass a custom
+        instance (e.g. a reduced t_grain/n_shots) to regenerate a run without editing
+        this module.
     """
     np.random.seed(RANDOM_SEED)
     print(f"Running QNS experiments [seed={RANDOM_SEED}]...")
-    config = QNSExperimentConfig()
+    config = QNSExperimentConfig() if config is None else config
     runner = ExperimentRunner(config)
 
-    # Fast partner-CDD3 control times for the (light) DC characterization block.
-    dc_cts = jnp.array([config.T / 8, config.T / 10, config.T / 12])
-
-    experiments = [
+    # Harmonic (comb) experiments -- reconstruct S(omega_k), k=1..truncate.
+    harmonic_experiments = [
         ('C_12_0_MT_1', ['CPMG', 'CPMG'], 'C_12_0', {'state': 'pp'}),
         ('C_12_0_MT_2', ['CDD3', 'CPMG'], 'C_12_0', {'state': 'pp'}),
         ('C_12_0_MT_3', ['CPMG', 'CDD3'], 'C_12_0', {'state': 'pp'}),
@@ -249,24 +291,36 @@ def main():
         ('C_1_2_MT_2', ['CPMG', 'CDD1-1/4'], 'C_a_b', {'l': 1}),
         ('C_2_1_MT_1', ['FID', 'CPMG'], 'C_a_b', {'l': 2}),
         ('C_2_1_MT_2', ['CDD1-1/4', 'CPMG'], 'C_a_b', {'l': 2}),
-        # --- DC (zero-frequency) characterization: light, slope-based ----------------
-        # Self-spectra DC come from the partner-decoupled single-qubit FID Ramsey slope
-        # S_aa(0) = 2*<C_{a,0}>/(MT): CDD3 on the *partner* nulls the Ising term so the
-        # measured qubit's free-induction decay is governed by S_aa alone. Run over a few
-        # FAST partner-CDD3 control times (dc_cts) so it stays cheap and well-decoupled.
-        ('C_1_0_FIDCDD3', ['FID', 'CDD3'], 'C_a_0', {'l': 1, 'c_times': dc_cts}),
-        ('C_2_0_CDD3FID', ['CDD3', 'FID'], 'C_a_0', {'l': 2, 'c_times': dc_cts}),
-        # Ising self-DC and the cross-spectra DC come from FID/FID (control-time
-        # independent; dc_cts entries act as cheap repeats for noise averaging).
-        ('C_12_0_FID_FID', ['FID', 'FID'], 'C_12_0',  {'state': 'pp', 'c_times': dc_cts}),
-        ('C_12_12_FID',    ['FID', 'FID'], 'C_12_12', {'state': 'pp', 'c_times': dc_cts}),
-        ('C_1_12_FID',     ['FID', 'FID'], 'C_a_b',   {'l': 1, 'c_times': dc_cts}),
-        ('C_2_12_FID',     ['FID', 'FID'], 'C_a_b',   {'l': 2, 'c_times': dc_cts}),
     ]
+    for exp_name, pulse_sequence, exp_type, kwargs in harmonic_experiments:
+        runner.run_experiment(exp_name, pulse_sequence, exp_type, **kwargs)
 
-    for exp_name, pulse_sequence, exp_type, kwargs in experiments:
-        c_times = kwargs.pop('c_times', None)
-        runner.run_experiment(exp_name, pulse_sequence, exp_type, c_times=c_times, **kwargs)
+    # --- DC (zero-frequency) characterization: multi-time FID decay-slope fit --------
+    # Each FID observable is measured over a sweep of total evolution times t = m*T so
+    # the adaptive estimator (inversion._ramsey_fit_dc) fits the slope in the window
+    # where the decay is measurable AND linear. This recovers S(0) for strong noise
+    # (the old single full-MT point is fully decayed there) and auto-adapts the
+    # measurement time if the spectra change -- no per-spectrum tuning. The self
+    # observables decouple the Ising with a fast partner CDD3 (dc_ct); for the
+    # pulse-free FID/FID cross observables dc_ct is immaterial.
+    dc_ct = config.T / 8
+    dc_m_sweep = range(1, config.M + 1)
+    dc_experiments = [
+        # Self-DC: partner CDD3 nulls the Ising -> qubit-a FID governed by S_aa alone.
+        ('C_1_0_FIDCDD3', ['FID', 'CDD3'], 'C_a_0',  {'l': 1}),
+        ('C_2_0_CDD3FID', ['CDD3', 'FID'], 'C_a_0',  {'l': 2}),
+        # Ising self-DC: C_1_0_FF + C_2_0_FF - C_12_0_FF = Var(Phi_12) (partner FID keeps
+        # the Ising in the single-qubit coefficients; the ZZ one subtracts the selfs).
+        ('C_1_0_FIDFID',  ['FID', 'FID'], 'C_a_0',  {'l': 1}),
+        ('C_2_0_FIDFID',  ['FID', 'FID'], 'C_a_0',  {'l': 2}),
+        ('C_12_0_FID_FID', ['FID', 'FID'], 'C_12_0',  {'state': 'pp'}),
+        # Cross-spectra DC from the FID/FID cross coefficients (slope = S_xy(0)).
+        ('C_12_12_FID',    ['FID', 'FID'], 'C_12_12', {'state': 'pp'}),
+        ('C_1_12_FID',     ['FID', 'FID'], 'C_a_b',   {'l': 1}),
+        ('C_2_12_FID',     ['FID', 'FID'], 'C_a_b',   {'l': 2}),
+    ]
+    for exp_name, pulse_sequence, exp_type, kwargs in dc_experiments:
+        runner.run_dc_sweep(exp_name, pulse_sequence, exp_type, dc_m_sweep, dc_ct, **kwargs)
 
     runner.save_results()
 
