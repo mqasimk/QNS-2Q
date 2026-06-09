@@ -704,13 +704,15 @@ def recon_S_1_2_dc(coefs, **kwargs):
     m = kwargs['m']
     T = kwargs['T']
     C_12_12_FID = coefs[0]
-    # ['FID','FID'] C_12_12 is c_time-independent; average for noise reduction
-    val = np.mean(C_12_12_FID) / (2*m*T)
+    # ['FID','FID'] C_12_12 is c_time-independent; average for noise reduction.
+    # Returns the full one-sided DC value S_1_2(0) = <C>/(MT). Cross-spectra carry
+    # no factor of 2 (unlike the self-spectra Ramsey slope S_aa(0) = 2<C>/(MT)).
+    val = np.mean(C_12_12_FID) / (m*T)
     
     if 'obs_err' in kwargs and kwargs['obs_err'] is not None:
         errs = kwargs['obs_err'][0]
         err_meas = np.sqrt(np.sum(np.array(errs)**2)) / len(errs)
-        return val, err_meas / (2*m*T)
+        return val, err_meas / (m*T)
 
     return val
 
@@ -740,13 +742,14 @@ def recon_S_1_12_dc(coefs, **kwargs):
     m = kwargs['m']
     T = kwargs['T']
     C_1_12_FID = coefs[0]
-    # ['FID','FID'] C_a_b is c_time-independent; average for noise reduction
-    val = np.mean(C_1_12_FID) / (2*m*T)
+    # ['FID','FID'] C_a_b is c_time-independent; average for noise reduction.
+    # Returns the full one-sided DC value S_1_12(0) = <C>/(MT).
+    val = np.mean(C_1_12_FID) / (m*T)
     
     if 'obs_err' in kwargs and kwargs['obs_err'] is not None:
         errs = kwargs['obs_err'][0]
         err_meas = np.sqrt(np.sum(np.array(errs)**2)) / len(errs)
-        return val, err_meas / (2*m*T)
+        return val, err_meas / (m*T)
 
     return val
 
@@ -776,13 +779,17 @@ def recon_S_2_12_dc(coefs, **kwargs):
     m = kwargs['m']
     T = kwargs['T']
     C_2_12_FID = coefs[0]
-    # ['FID','FID'] C_a_b is c_time-independent; average for noise reduction
-    val = -np.mean(C_2_12_FID) / (2*m*T)
+    # ['FID','FID'] C_a_b is c_time-independent; average for noise reduction.
+    # Returns the full one-sided DC value S_2_12(0) = <C>/(MT). Same +sign as
+    # S_1_2/S_1_12: the C_a_b(l=2) FID/FID coefficient is positive here, matching
+    # the harmonic recon_S_2_12 (no sign flip). The earlier leading minus drove the
+    # DC point negative, contradicting both truth and the harmonic points.
+    val = np.mean(C_2_12_FID) / (m*T)
     
     if 'obs_err' in kwargs and kwargs['obs_err'] is not None:
         errs = kwargs['obs_err'][0]
         err_meas = np.sqrt(np.sum(np.array(errs)**2)) / len(errs)
-        return val, err_meas / (2*m*T)
+        return val, err_meas / (m*T)
 
     return val
 
