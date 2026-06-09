@@ -26,8 +26,21 @@ import jax.scipy.signal
 import numpy as np
 import scipy.optimize
 
-from spectra_input import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
-from run_paths import run_folder
+from qns2q.noise.spectra import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
+from qns2q.paths import run_folder, project_root
+
+# Fixed RNG seed for the unseeded np.random restarts (random pulse counts and
+# delay seeding). Pinning it makes the published idling infidelity curves and
+# winning-sequence labels reproducible across re-runs. Recorded in the saved
+# optimization data so every figure carries its provenance.
+RANDOM_SEED = 20260608
+
+# Memoizes the (sequence-independent) folded-correlation setup built by
+# prepare_time_domain_overlap. That setup depends only on the spectrum/grid
+# arrays and (tau, T_seq, M) -- NOT on the pulse sequence. Cached tuples are
+# returned verbatim (bit-identical), so this is a pure speed-up. Cleared at the
+# start of each run_optimization_pipeline call (per M) to keep it bounded.
+_OVERLAP_SETUP_CACHE = {}
 
 # ==============================================================================
 # Configuration
@@ -94,8 +107,7 @@ class Config:
         # Paths
         if fname is None:
             fname = run_folder()
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-        self.path = os.path.join(project_root, fname)
+        self.path = os.path.join(project_root(), fname)
         
         if not os.path.exists(self.path):
              raise FileNotFoundError(f"Data directory not found at {self.path}")
@@ -596,6 +608,11 @@ def prepare_time_domain_overlap(SMat, w_grid, tau, T_seq, M):
     n_base_steps : int
         Number of time steps spanning one base sequence period T_seq.
     """
+    cache_key = (id(SMat), id(w_grid), float(tau), float(T_seq), int(M))
+    cached = _OVERLAP_SETUP_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     N = w_grid.shape[0]
     dw = float(w_grid[1] - w_grid[0])
     w_max = float(w_grid[-1])
@@ -637,7 +654,9 @@ def prepare_time_domain_overlap(SMat, w_grid, tau, T_seq, M):
 
     RMat_data = get_folded_matrix(RMat_shifted)
 
-    return RMat_data, dt, n_base_steps
+    result = (RMat_data, dt, n_base_steps)
+    _OVERLAP_SETUP_CACHE[cache_key] = result
+    return result
 
 
 @jax.jit
@@ -998,6 +1017,9 @@ def run_optimization_pipeline(config):
     """
     Runs the full optimization pipeline based on the provided configuration.
     """
+    # Drop cached folded-correlation setups from a previous M so the cache stays
+    # bounded (it is keyed on this per-M config's spectrum arrays).
+    _OVERLAP_SETUP_CACHE.clear()
     print(f"\n{'='*60}")
     print(f"RUNNING OPTIMIZATION PIPELINE")
     print(f"M (Repetitions): {config.M}")
@@ -1128,24 +1150,25 @@ def run_optimization_pipeline(config):
         sequences_opt.append(best_opt_seq)
 
     # Save Results
-    min_gate_time = np.pi / (4 * 2e6) # Jmax = 2e6, hardcoded for now or add to config
-    
     # Create a dedicated directory for plotting data
     plotting_dir = os.path.join(config.path, "plotting_data")
     os.makedirs(plotting_dir, exist_ok=True)
-    
+
+    # Note: min_gate_time (= pi/(4*Jmax)) is a CZ entangling-gate bound and is
+    # not meaningful for the idling gate, so it is intentionally not saved here
+    # (MINGATE-METADATA). id_plots.py reads it only if present.
     save_dict = {
         'taxis': np.array(xaxis_known),
         'infs_known': np.array(yaxis_known),
         'infs_opt': np.array(yaxis_opt),
         'infs_nopulse': np.array(yaxis_nopulse),
         'tau': config.tau,
-        'min_gate_time': min_gate_time,
-        # Config data needed by standalone plotting script
+        'seed': RANDOM_SEED,
+        # Frequency grid kept for reference; the full-resolution SMat is omitted
+        # (the plot scripts recompute spectra from spectra_input, so saving the
+        # 4x4x20000 matrix here is ~5 MB of dead weight per file).
         'w': np.array(config.w),
         'w_max': float(config.w_max),
-        'SMat_real': np.array(np.real(config.SMat)),
-        'SMat_imag': np.array(np.imag(config.SMat)),
         'M': int(config.M),
         'Tg': float(config.Tg),
         'gate_type': 'id',
@@ -1195,6 +1218,12 @@ def run_optimization_pipeline(config):
 
 if __name__ == "__main__":
     try:
+        # Pin the RNG so the random pulse-count selection and delay seeding are
+        # reproducible across the whole M sweep (SEED-OPT). Seeded once here so
+        # each M draws from a distinct but reproducible stream.
+        np.random.seed(RANDOM_SEED)
+        print(f"[seed={RANDOM_SEED}]")
+
         # Iterate through M values: 1, 2, 4, ..., 512
         M_values = [2**i for i in range(8)] # Adjust range as needed
         results_by_M = {}
@@ -1265,12 +1294,12 @@ if __name__ == "__main__":
             save_all_path = os.path.join(last_config.path, "optimization_data_all_M.npz")
             data_to_save = {}
             data_to_save['M_values'] = np.array(M_values)
-            # Config data needed by standalone plotting script
+            data_to_save['seed'] = RANDOM_SEED
+            # Frequency grid kept for reference; SMat omitted (plot scripts
+            # recompute spectra from spectra_input -- avoids ~5 MB of dead weight).
             data_to_save['tau'] = float(last_config.tau)
             data_to_save['w'] = np.array(last_config.w)
             data_to_save['w_max'] = float(last_config.w_max)
-            data_to_save['SMat_real'] = np.array(np.real(last_config.SMat))
-            data_to_save['SMat_imag'] = np.array(np.imag(last_config.SMat))
 
             def to_numpy_seq(seq):
                 if seq is None: return None

@@ -4,10 +4,40 @@ Maps each publication figure used by the paper
 (`~/Noise_Tailored_2Q_Gates/figures/*.pdf`, referenced from `main_v9.tex`) to the
 exact **(noise model, run data, config, script)** that produced it.
 
-**Status of this file (2026-06-08):** all nine referenced figures are now traced and
-confirmed (previously four idling rows were "best guess" and the CvsM row was a TODO).
-The remaining unknowns are *data* (the featured-idling and CZ runs were gitignored and
-lost), not *provenance*.
+**Status of this file (updated 2026-06-08, evening):** ⚠️ **Largely superseded.** The
+regime/`run_paths.py` restructure described below as "planned" has **landed**, and the
+featured-idling + CZ runs described below as "lost" have been **regenerated**. Read the
+superseding section immediately below; the older sections are kept for historical context.
+
+## ✅ Current state (2026-06-08) — restructure landed + data regenerated
+
+- **Regime selection** is now the `QNS2Q_REGIME` env var (`bland`|`featured`), resolved
+  centrally in `src/run_paths.py`. The `git show 77e516a^:…` model-swap dance and the
+  `Featureless`/`FeatureFull`/`Feature`/`Boring` folder names below are **obsolete**.
+  Canonical run folders are now `DraftRun_NoSPAM_bland` and `DraftRun_NoSPAM_featured`
+  (both tracked in git).
+- **Data is no longer lost.** Seeded regenerations (`RANDOM_SEED = 20260608`) on
+  2026-06-08:
+  - **CZ-featured** — `cz_optimize.py` with `use_simulated=False` (reconstructed spectra)
+    and the CZ-CUMULANT-4X fix → `plotting_data/plotting_data_cz_v2.npz`, `infs_*_cz_v2.npz`.
+  - **idling-featured & idling-bland** — `id_optimize.py` → `optimization_data_all_M.npz`,
+    `plotting_data/plotting_data_id_v4.npz`, `infs_*_id_M*.npz`.
+- **Reproduce now** (no model-swap needed): `cd src/ && export QNS2Q_REGIME=featured`
+  (or `bland`), then run the relevant stage; outputs land in `DraftRun_NoSPAM_<regime>/`.
+- ⚠️ The regenerated CZ and featured-idling **numbers differ from `main_v9.tex`** — the
+  published runs used a different, now-superseded noise model (the *deterministic* FID
+  differs ~4.8×). The manuscript numbers need updating; see REPRO-CZ / REPRO-IDLE-FEAT
+  in `PAPER_CODE_AUDIT.md`.
+- The line 169–170 note below (`use_simulated=True` → reconstructed) is **obsolete on
+  both counts**: `main()` now sets `use_simulated=False`, and `True` would load the
+  *simulated* spectra, not reconstructed.
+
+---
+
+_(Everything below predates the restructure and is retained for history only.)_
+
+**Status of this file (2026-06-08, original):** all nine referenced figures are now traced
+and confirmed (previously four idling rows were "best guess" and the CvsM row was a TODO).
 
 **Why a figure generally can't be reproduced by just running a script at `HEAD`:**
 1. `DraftRun_*/` output dirs are **gitignored** (`.gitignore: DraftRun_*/`) — run data

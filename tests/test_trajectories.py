@@ -7,12 +7,12 @@ import numpy.testing as npt
 import qutip as qt
 import pytest
 
-from trajectories import (
+from qns2q.model.trajectories import (
     f, cpmg, cdd1, cdd3, make_y, custom_y,
     make_init_state, make_noise_mat, make_noise_traj,
     make_Hamiltonian, make_propagator, sinM, cosM,
 )
-from spectra_input import S_11
+from qns2q.noise.spectra import S_11
 
 
 class TestToggleFunction:

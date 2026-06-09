@@ -6,7 +6,7 @@ import numpy.testing as npt
 import qutip as qt
 import pytest
 
-from observables import (
+from qns2q.model.observables import (
     _get_hadamard_operators, _get_rx_operators, povms,
     a, d, parametric_bootstrap_error,
     get_expect_val_from_probs, get_expect_val_per_shot,

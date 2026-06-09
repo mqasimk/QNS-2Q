@@ -17,11 +17,30 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
-from spectral_inversion import (recon_S_11, recon_S_22, recon_S_1_2, recon_S_12_12, recon_S_1_12, recon_S_2_12,
+from qns2q.characterize.inversion import (recon_S_11, recon_S_22, recon_S_1_2, recon_S_12_12, recon_S_1_12, recon_S_2_12,
                                 recon_S_11_dc, recon_S_22_dc, recon_S_1212_dc,
-                                recon_S_1_2_dc, recon_S_1_12_dc, recon_S_2_12_dc)
-from spectra_input import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
-from run_paths import run_folder
+                                recon_S_1_2_dc, recon_S_1_12_dc, recon_S_2_12_dc,
+                                truncation_bias_estimate)
+from qns2q.characterize.systematics import (forward_model_systematic, analytic_spectra,
+                                            dc_fit_systematic)
+from qns2q.noise.spectra import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
+from qns2q.paths import run_folder, project_root
+
+
+# Maps systematics-module spectrum keys <-> reconstructed-spectra / error dict keys.
+_SYS_TO_SPEC = {'S11': 'S_11_k', 'S22': 'S_22_k', 'S1212': 'S_12_12_k',
+                'S12': 'S_1_2_k', 'S112': 'S_1_12_k', 'S212': 'S_2_12_k'}
+_SYS_TO_ERR = {'S11': 'S_11_err', 'S22': 'S_22_err', 'S1212': 'S_12_12_err',
+               'S12': 'S_1_2_err', 'S112': 'S_1_12_err', 'S212': 'S_2_12_err'}
+
+
+def _quad_combine(stat, sys):
+    """Quadrature-combine statistical and systematic error arrays, per component for
+    complex (cross-spectra) arrays: sqrt(Re_stat^2+Re_sys^2) + i sqrt(Im_stat^2+Im_sys^2)."""
+    if np.iscomplexobj(stat) or np.iscomplexobj(sys):
+        return (np.sqrt(np.real(stat) ** 2 + np.real(sys) ** 2)
+                + 1j * np.sqrt(np.imag(stat) ** 2 + np.imag(sys) ** 2))
+    return np.sqrt(np.asarray(stat) ** 2 + np.asarray(sys) ** 2)
 
 
 # --- Publication figure constants ---
@@ -40,6 +59,13 @@ COLORS = {
     "black": "#000000",
     "grey_fill": "#E0E0E0",
 }
+
+# Confidence level (in standard deviations) for the plotted reconstruction error bars.
+# The saved specs.npz keeps 1-sigma semantics (_err/_sys/_errtot); only the *plotted*
+# bars are scaled. 2-sigma bars are the QNS-figure convention: ~95% of points'
+# statistically-consistent bars then cover the theory curve (state "2 sigma" in the
+# paper caption). Set to 1 for 1-sigma bars.
+ERRORBAR_SIGMA = 2
 
 # Subfolder inside each data folder for figures
 FIGURES_SUBDIR = "figures"
@@ -82,8 +108,30 @@ def setup_pub_rcparams(font_scale='compact'):
 
 @dataclass
 class SpectraReconConfig:
-    """Configuration and parameters for spectra reconstruction."""
+    """Configuration and parameters for spectra reconstruction.
+
+    Reconstruction-method options (all default to the legacy behavior):
+
+    inversion_method : {'direct','lstsq','tikhonov'}
+        Linear-solve backend for the harmonic inversion. 'direct' is the legacy
+        square inverse; 'lstsq'/'tikhonov' are robust to ill-conditioning and to
+        overdetermined (tall-U) probe sets.
+    reg_lambda : float
+        Tikhonov ridge parameter (only used when inversion_method='tikhonov').
+    enforce_nonneg : bool
+        Project the three real self-spectra onto S>=0 via NNLS (physical prior).
+    diagnostics : bool
+        Print cond(U) / singular values and a high-frequency truncation-bias
+        estimate for each reconstruction.
+    """
     data_folder: str
+    inversion_method: str = 'direct'
+    reg_lambda: float = 0.0
+    enforce_nonneg: bool = False
+    diagnostics: bool = False
+    # Fold the deterministic comb-inversion systematic into the quoted error bars
+    # (see characterize.systematics). True for honest, n_shots-independent error bars.
+    compute_systematic: bool = True
     params: Dict[str, Any] = field(init=False)
     t_vec: np.ndarray = field(init=False)
     w_grain: int = field(init=False)
@@ -97,8 +145,7 @@ class SpectraReconConfig:
 
     def __post_init__(self):
         """Load parameters from the data folder after initialization."""
-        parent_dir = os.pardir
-        path = os.path.join(parent_dir, self.data_folder)
+        path = os.path.join(project_root(), self.data_folder)
         if not os.path.isdir(path):
             raise FileNotFoundError(f"Data folder not found at: {path}")
 
@@ -152,7 +199,7 @@ class SpectraReconstructor:
 
     def load_observables(self):
         """Loads the observables array from the data folder."""
-        path = os.path.join(os.pardir, self.config.data_folder, "results.npz")
+        path = os.path.join(project_root(), self.config.data_folder, "results.npz")
         self.observables = np.load(path)
 
     def reconstruct(self):
@@ -177,61 +224,151 @@ class SpectraReconstructor:
                 return res
             return res, np.zeros(c.truncate) # Dummy error
 
-        S_11_k, S_11_err = call_recon(recon_S_11, ['C_12_0_MT_1', 'C_12_0_MT_2'], c_times=c.c_times, m=c.M, T=c.T)
-        S_22_k, S_22_err = call_recon(recon_S_22, ['C_12_0_MT_1', 'C_12_0_MT_3'], c_times=c.c_times, m=c.M, T=c.T)
-        S_12_12_k, S_12_12_err = call_recon(recon_S_12_12, ['C_1_0_MT_1', 'C_2_0_MT_1', 'C_12_0_MT_4'], c_times=c.c_times, m=c.M, T=c.T)
-        S_1_2_k, S_1_2_err = call_recon(recon_S_1_2, ['C_12_12_MT_1', 'C_12_12_MT_2'], c_times=c.c_times, m=c.M, T=c.T)
-        S_1_12_k, S_1_12_err = call_recon(recon_S_1_12, ['C_1_2_MT_1', 'C_1_2_MT_2'], c_times=c.c_times, m=c.M, T=c.T)
-        S_2_12_k, S_2_12_err = call_recon(recon_S_2_12, ['C_2_1_MT_1', 'C_2_1_MT_2'], c_times=c.c_times, m=c.M, T=c.T)
+        # Inversion-backend options (selectable via SpectraReconConfig).
+        inv_opts = dict(inversion_method=c.inversion_method, reg_lambda=c.reg_lambda,
+                        diagnostics=c.diagnostics)
+        self_opts = dict(inv_opts, enforce_nonneg=c.enforce_nonneg)
+        if c.diagnostics:
+            print(f"[reconstruct] inversion_method={c.inversion_method} "
+                  f"reg_lambda={c.reg_lambda} enforce_nonneg={c.enforce_nonneg}")
 
-        # Reconstruct DC (w=0) values from FID experiments
-        # For DC, if has_errors, result is (val, err), else val.
-        def call_recon_dc(func, keys, **kwargs):
-            res = func([obs[k] for k in keys], obs_err=get_errs(keys), **kwargs)
-            if has_errors:
-                return res
-            return res, 0.0
+        S_11_k, S_11_err = call_recon(recon_S_11, ['C_12_0_MT_1', 'C_12_0_MT_2'], c_times=c.c_times, m=c.M, T=c.T, **self_opts)
+        S_22_k, S_22_err = call_recon(recon_S_22, ['C_12_0_MT_1', 'C_12_0_MT_3'], c_times=c.c_times, m=c.M, T=c.T, **self_opts)
+        S_12_12_k, S_12_12_err = call_recon(recon_S_12_12, ['C_1_0_MT_1', 'C_2_0_MT_1', 'C_12_0_MT_4'], c_times=c.c_times, m=c.M, T=c.T, **self_opts)
+        S_1_2_k, S_1_2_err = call_recon(recon_S_1_2, ['C_12_12_MT_1', 'C_12_12_MT_2'], c_times=c.c_times, m=c.M, T=c.T, **inv_opts)
+        S_1_12_k, S_1_12_err = call_recon(recon_S_1_12, ['C_1_2_MT_1', 'C_1_2_MT_2'], c_times=c.c_times, m=c.M, T=c.T, **inv_opts)
+        S_2_12_k, S_2_12_err = call_recon(recon_S_2_12, ['C_2_1_MT_1', 'C_2_1_MT_2'], c_times=c.c_times, m=c.M, T=c.T, **inv_opts)
 
-        S_11_dc, S_11_dc_err = call_recon_dc(recon_S_11_dc, ['C_12_0_FID_CPMG'], c_times=c.c_times, m=c.M, T=c.T,
-                                S_22_k=S_22_k, S_1212_k=S_12_12_k)
-        S_22_dc, S_22_dc_err = call_recon_dc(recon_S_22_dc, ['C_12_0_CPMG_FID'], c_times=c.c_times, m=c.M, T=c.T,
-                                S_11_k=S_11_k, S_1212_k=S_12_12_k)
-        S_1212_dc, S_1212_dc_err = call_recon_dc(recon_S_1212_dc, ['C_12_0_FID_FID'], m=c.M, T=c.T,
-                                    S_11_dc=S_11_dc, S_22_dc=S_22_dc, 
-                                    S_11_dc_err=S_11_dc_err, S_22_dc_err=S_22_dc_err)
-        S_1_2_dc, S_1_2_dc_err = call_recon_dc(recon_S_1_2_dc, ['C_12_12_FID'], m=c.M, T=c.T)
-        S_1_12_dc, S_1_12_dc_err = call_recon_dc(recon_S_1_12_dc, ['C_1_12_FID'], m=c.M, T=c.T)
-        S_2_12_dc, S_2_12_dc_err = call_recon_dc(recon_S_2_12_dc, ['C_2_12_FID'], m=c.M, T=c.T)
+        if c.diagnostics:
+            for name, fn, args in [('S_11', S_11, ()), ('S_22', S_22, ()), ('S_1212', S_1212, ())]:
+                frac = truncation_bias_estimate(fn, c.T, c.truncate, args=args)
+                print(f"    [diag] {name}: spectral weight above comb cutoff "
+                      f"omega_kmax = {100*frac:.2f}% (truncation bias)")
 
-        print(f"DC values: S_11(0)={S_11_dc:.4f} +/- {S_11_dc_err:.4f}, "
-              f"S_22(0)={S_22_dc:.4f} +/- {S_22_dc_err:.4f}, "
-              f"S_1212(0)={S_1212_dc:.4f} +/- {S_1212_dc_err:.4f}")
+        # Reconstruct DC (w=0) values from the multi-time FID decay sweep.
+        # Each recon_*_dc fits S(0) from the slope of C(t) over the adaptively-selected
+        # measurable+linear window (inversion._ramsey_fit_dc); returns (val, err,
+        # reliable). reliable=False flags quasi-static / sub-comb-cusp noise whose DC is
+        # only a lower bound -- the figure then quotes an inflated (honest) bar.
+        t_sweep = obs['dc_t_sweep']
+        self.dc_t_sweep = t_sweep
+        self.dc_reliable = {}
 
-        # Prepend DC values (x2 for one-sided PSD convention) to spectrum arrays so wk[0] = 0
+        def call_recon_dc(func, keys, sk, **kwargs):
+            val, err, reliable = func([obs[k] for k in keys], obs_err=get_errs(keys),
+                                      t_sweep=t_sweep, **kwargs)
+            self.dc_reliable[sk] = reliable
+            return val, err
+
+        S_11_dc, S_11_dc_err = call_recon_dc(recon_S_11_dc, ['C_1_0_FIDCDD3'], 'S11')
+        S_22_dc, S_22_dc_err = call_recon_dc(recon_S_22_dc, ['C_2_0_CDD3FID'], 'S22')
+        S_1212_dc, S_1212_dc_err = call_recon_dc(recon_S_1212_dc,
+                                    ['C_1_0_FIDFID', 'C_2_0_FIDFID', 'C_12_0_FID_FID'], 'S1212')
+        S_1_2_dc, S_1_2_dc_err = call_recon_dc(recon_S_1_2_dc, ['C_12_12_FID'], 'S12')
+        S_1_12_dc, S_1_12_dc_err = call_recon_dc(recon_S_1_12_dc, ['C_1_12_FID'], 'S112')
+        S_2_12_dc, S_2_12_dc_err = call_recon_dc(recon_S_2_12_dc, ['C_2_12_FID'], 'S212')
+
+        # Flagged (not-determined) DC points can fit to an unphysical negative S(0) when
+        # the signal is swamped; clamp to a non-negative floor (the first harmonic value)
+        # so downstream consumers see a sane spectrum. The dc_reliable flag + inflated bar
+        # carry the (large) uncertainty.
+        def _floor_dc(val, reliable, harm0):
+            val, harm0 = float(np.real(val)), float(np.real(harm0))
+            return val if (reliable or val >= harm0) else harm0
+        S_11_dc = _floor_dc(S_11_dc, self.dc_reliable['S11'], S_11_k[0])
+        S_22_dc = _floor_dc(S_22_dc, self.dc_reliable['S22'], S_22_k[0])
+        S_1212_dc = _floor_dc(S_1212_dc, self.dc_reliable['S1212'], S_12_12_k[0])
+        S_1_2_dc = _floor_dc(S_1_2_dc, self.dc_reliable['S12'], S_1_2_k[0])
+        S_1_12_dc = _floor_dc(S_1_12_dc, self.dc_reliable['S112'], S_1_12_k[0])
+        S_2_12_dc = _floor_dc(S_2_12_dc, self.dc_reliable['S212'], S_2_12_k[0])
+
+        print(f"DC values (reliable?): S_11(0)={S_11_dc:.1f}({self.dc_reliable['S11']}), "
+              f"S_22(0)={S_22_dc:.1f}({self.dc_reliable['S22']}), "
+              f"S_1212(0)={S_1212_dc:.1f}({self.dc_reliable['S1212']})")
+
+        # Prepend the DC (w=0) point so wk[0] = 0. Each recon_*_dc already returns
+        # the full one-sided S(0) on the same footing as the harmonic samples
+        # (self-spectra: 2<C>/MT; cross-spectra: <C>/MT), so no extra factor is
+        # applied here -- the former blanket x2 double-counted the self-spectra DC.
         self.wk = np.concatenate(([0.0], wk_harmonics))
-        
+
         self.reconstructed_spectra = {
-            "S_11_k": np.concatenate(([2 * S_11_dc], S_11_k)),
-            "S_22_k": np.concatenate(([2 * S_22_dc], S_22_k)),
-            "S_12_12_k": np.concatenate(([2 * S_1212_dc], S_12_12_k)),
-            "S_1_2_k": np.concatenate(([2 * S_1_2_dc + 0j], S_1_2_k)),
-            "S_1_12_k": np.concatenate(([2 * S_1_12_dc + 0j], S_1_12_k)),
-            "S_2_12_k": np.concatenate(([2 * S_2_12_dc + 0j], S_2_12_k)),
+            "S_11_k": np.concatenate(([S_11_dc], S_11_k)),
+            "S_22_k": np.concatenate(([S_22_dc], S_22_k)),
+            "S_12_12_k": np.concatenate(([S_1212_dc], S_12_12_k)),
+            "S_1_2_k": np.concatenate(([S_1_2_dc + 0j], S_1_2_k)),
+            "S_1_12_k": np.concatenate(([S_1_12_dc + 0j], S_1_12_k)),
+            "S_2_12_k": np.concatenate(([S_2_12_dc + 0j], S_2_12_k)),
         }
-        
-        # Store errors (multiplying DC error by 2 as well)
+
         self.reconstructed_spectra_err = {
-            "S_11_err": np.concatenate(([2 * S_11_dc_err], S_11_err)),
-            "S_22_err": np.concatenate(([2 * S_22_dc_err], S_22_err)),
-            "S_12_12_err": np.concatenate(([2 * S_1212_dc_err], S_12_12_err)),
-            "S_1_2_err": np.concatenate(([2 * S_1_2_dc_err + 0j], S_1_2_err)),
-            "S_1_12_err": np.concatenate(([2 * S_1_12_dc_err + 0j], S_1_12_err)),
-            "S_2_12_err": np.concatenate(([2 * S_2_12_dc_err + 0j], S_2_12_err)),
+            "S_11_err": np.concatenate(([S_11_dc_err], S_11_err)),
+            "S_22_err": np.concatenate(([S_22_dc_err], S_22_err)),
+            "S_12_12_err": np.concatenate(([S_1212_dc_err], S_12_12_err)),
+            "S_1_2_err": np.concatenate(([S_1_2_dc_err + 0j], S_1_2_err)),
+            "S_1_12_err": np.concatenate(([S_1_12_dc_err + 0j], S_1_12_err)),
+            "S_2_12_err": np.concatenate(([S_2_12_dc_err + 0j], S_2_12_err)),
         }
+
+    def add_systematic_errors(self):
+        """Fold the deterministic forward-model (comb-inversion) systematic into the bars.
+
+        The simulator's propagator is exact pure dephasing, so the only non-statistical
+        reconstruction error is the harmonic-comb inversion: the single-period comb
+        kernel approximates the full finite-M filter response integrated over the noise
+        synthesis grid. ``forward_model_systematic`` quantifies it with zero Monte Carlo
+        -- it reconstructs the EXACT forward observables of the analytic ground-truth
+        spectra (validated to reproduce the simulated observables within shot noise) and
+        takes the residual vs truth. This supersedes the single-period
+        ``comb_inversion_systematic``, which under-quoted the antisymmetric (CDD3)
+        cross-channel bias ~2x and so left the Im S_1_2 points outside the bars. The
+        w=0 DC point keeps its own Ramsey-slope bias from ``dc_systematic``. Sets
+        ``reconstructed_spectra_sys`` (signed per-point bias) and
+        ``reconstructed_spectra_err_total`` (sqrt(stat^2 + sys^2)).
+        """
+        c = self.config
+        self.reconstructed_spectra_sys = {}
+        self.reconstructed_spectra_err_total = dict(self.reconstructed_spectra_err)
+        try:
+            spectra = analytic_spectra(c.gamma, c.gamma_12)
+            inv_opts = dict(inversion_method=c.inversion_method, reg_lambda=c.reg_lambda,
+                            enforce_nonneg=c.enforce_nonneg)
+            sys = forward_model_systematic(spectra, c.c_times, c.M, c.T, c.t_vec,
+                                           c.gamma, c.gamma_12, c.w_grain, c.wmax,
+                                           inv_opts=inv_opts)
+
+            # DC (w=0) point: deterministic bias of the multi-time slope fit (tiny where
+            # the noise reaches motional narrowing; large = honest inflated bar where it
+            # is quasi-static / sub-comb-cusp and only a lower bound -- see dc_reliable).
+            dc_bias = dc_fit_systematic(spectra, self.dc_t_sweep, c.gamma, c.gamma_12)
+
+            print("[systematic] folded sigma_sys per spectrum (forward-model comb bias; "
+                  "RMS over harmonics, |DC bias|):")
+            for sk, rk in _SYS_TO_SPEC.items():
+                ek = _SYS_TO_ERR[sk]
+                sysk = np.concatenate(([0.0], sys[sk]))   # complex for cross, real for self
+                sysk[0] = abs(dc_bias[sk])                # DC bias is real for every spectrum
+                if not getattr(self, 'dc_reliable', {}).get(sk, True):
+                    # DC not determined from the data (strong-noise cross channel whose
+                    # self-decay swamps the signal, or quasi-static / sub-comb-cusp noise):
+                    # quote an honest bar at the spectrum's own scale and flag it.
+                    harm_scale = float(np.max(np.abs(self.reconstructed_spectra[rk][1:])))
+                    sysk[0] = max(abs(dc_bias[sk]), harm_scale)
+                self.reconstructed_spectra_sys[ek] = sysk
+                self.reconstructed_spectra_err_total[ek] = _quad_combine(
+                    self.reconstructed_spectra_err[ek], sysk)
+                rms_a = np.sqrt(np.mean(np.abs(sys[sk]) ** 2))
+                flag = '' if getattr(self, 'dc_reliable', {}).get(sk, True) else '  [DC flagged: not determined]'
+                print(f"    {sk:>6}: harmonic RMS = {rms_a:8.1f}  |DC bias| = {abs(dc_bias[sk]):8.1f}{flag}")
+        except Exception as e:
+            print(f"[systematic] WARNING: systematic-error computation failed ({e}); "
+                  f"falling back to statistical-only bars.")
+            for ek in _SYS_TO_ERR.values():
+                self.reconstructed_spectra_sys[ek] = np.zeros_like(self.reconstructed_spectra_err[ek])
 
     def _get_output_dir(self, subdir):
         """Returns (and creates) a subfolder inside the data folder for figures."""
-        path = os.path.join(os.pardir, self.config.data_folder, subdir)
+        path = os.path.join(project_root(), self.config.data_folder, subdir)
         os.makedirs(path, exist_ok=True)
         return path
 
@@ -242,9 +379,15 @@ class SpectraReconstructor:
         Right column: complex-valued cross-spectra (S_1_2, S_1_12, S_2_12).
         """
         setup_pub_rcparams('compact')
+        # Quote the honest combined bars (statistical (+) systematic) when available.
+        err_dict = getattr(self, 'reconstructed_spectra_err_total',
+                           getattr(self, 'reconstructed_spectra_err', {}))
 
         w = np.linspace(0, self.config.wmax, self.config.w_grain)
-        xunits = 1e6
+        # w is an angular frequency (rad/s); dividing by 2*pi*1e6 puts the axis
+        # in MHz (ordinary frequency), matching plot_utils.py and the "(MHz)"
+        # label. The previous 1e6 divisor plotted Mrad/s under an MHz label.
+        xunits = 2 * np.pi * 1e6
 
         # --- Style definitions ---
         eb_self = dict(fmt='^', color=COLORS["vermillion"],
@@ -292,8 +435,8 @@ class SpectraReconstructor:
             ax.plot(w / xunits, theory_fn(w), **theory_self_kw)
 
             yerr = None
-            if hasattr(self, 'reconstructed_spectra_err') and err_key in self.reconstructed_spectra_err:
-                yerr = self.reconstructed_spectra_err[err_key]
+            if err_key in err_dict:
+                yerr = ERRORBAR_SIGMA * err_dict[err_key]
 
             ax.errorbar(self.wk / xunits, self.reconstructed_spectra[s_key],
                         yerr=yerr, **eb_self)
@@ -318,10 +461,10 @@ class SpectraReconstructor:
 
             yerr_re = None
             yerr_im = None
-            if hasattr(self, 'reconstructed_spectra_err') and err_key in self.reconstructed_spectra_err:
-                err_complex = self.reconstructed_spectra_err[err_key]
-                yerr_re = np.real(err_complex)
-                yerr_im = np.imag(err_complex)
+            if err_key in err_dict:
+                err_complex = err_dict[err_key]
+                yerr_re = ERRORBAR_SIGMA * np.real(err_complex)
+                yerr_im = ERRORBAR_SIGMA * np.imag(err_complex)
 
             ax.plot(w / xunits, np.real(S_theory), **theory_re_kw)
             ax.errorbar(self.wk / xunits, np.real(self.reconstructed_spectra[s_key]),
@@ -359,6 +502,10 @@ class SpectraReconstructor:
         axs[0, 0].legend(frameon=False, loc='upper right')
         axs[0, 1].legend(frameon=False, loc='upper right', ncol=2)
 
+        if ERRORBAR_SIGMA != 1:
+            fig.text(0.995, 0.005, rf'error bars: ${ERRORBAR_SIGMA}\sigma$',
+                     ha='right', va='bottom', fontsize=7, color='0.4')
+
         plt.tight_layout(pad=0.3)
         output_dir = self._get_output_dir(RECONSTRUCTION_SUBDIR)
         output_path = os.path.join(output_dir, "spectral_reconstruction_all_pub.pdf")
@@ -377,9 +524,15 @@ class SpectraReconstructor:
         underneath the figure.
         """
         setup_pub_rcparams('compact')
+        # Quote the honest combined bars (statistical (+) systematic) when available.
+        err_dict = getattr(self, 'reconstructed_spectra_err_total',
+                           getattr(self, 'reconstructed_spectra_err', {}))
 
         w = np.linspace(0, self.config.wmax, self.config.w_grain)
-        xunits = 1e6
+        # w is an angular frequency (rad/s); dividing by 2*pi*1e6 puts the axis
+        # in MHz (ordinary frequency), matching plot_utils.py and the "(MHz)"
+        # label. The previous 1e6 divisor plotted Mrad/s under an MHz label.
+        xunits = 2 * np.pi * 1e6
 
         eb_re = dict(fmt='^', color=COLORS["vermillion"],
                      markersize=3.5, linewidth=0.8, zorder=10, label=r'Re (recon.)')
@@ -412,10 +565,10 @@ class SpectraReconstructor:
 
             yerr_re = None
             yerr_im = None
-            if hasattr(self, 'reconstructed_spectra_err') and err_key in self.reconstructed_spectra_err:
-                err_complex = self.reconstructed_spectra_err[err_key]
-                yerr_re = np.real(err_complex)
-                yerr_im = np.imag(err_complex)
+            if err_key in err_dict:
+                err_complex = err_dict[err_key]
+                yerr_re = ERRORBAR_SIGMA * np.real(err_complex)
+                yerr_im = ERRORBAR_SIGMA * np.imag(err_complex)
 
             ax.plot(w / xunits, np.real(S_theory), **theory_re_kw)
             ax.errorbar(self.wk / xunits, np.real(self.reconstructed_spectra[s_key]),
@@ -450,6 +603,10 @@ class SpectraReconstructor:
         axs[0].legend(frameon=False, loc='upper right', ncol=2, fontsize=7,
                       handlelength=1.5, columnspacing=1.0, handletextpad=0.4)
 
+        if ERRORBAR_SIGMA != 1:
+            fig.text(0.995, 0.005, rf'error bars: ${ERRORBAR_SIGMA}\sigma$',
+                     ha='right', va='bottom', fontsize=7, color='0.4')
+
         plt.tight_layout(pad=0.3)
         output_dir = self._get_output_dir(RECONSTRUCTION_SUBDIR)
         output_path = os.path.join(output_dir, "spectral_reconstruction_cross_pub.pdf")
@@ -460,13 +617,14 @@ class SpectraReconstructor:
     def save_reconstructed_spectra(self):
         """Saves the reconstructed spectra (including DC at w=0) to a .npz file."""
         # Save specs.npz at the data folder root (consumed by downstream scripts)
-        path = os.path.join(os.pardir, self.config.data_folder, "specs.npz")
+        path = os.path.join(project_root(), self.config.data_folder, "specs.npz")
         save_dict = dict(
             wk=self.wk,
             S11=self.reconstructed_spectra['S_11_k'], S22=self.reconstructed_spectra['S_22_k'],
             S12=self.reconstructed_spectra['S_1_2_k'], S1212=self.reconstructed_spectra['S_12_12_k'],
             S112=self.reconstructed_spectra['S_1_12_k'], S212=self.reconstructed_spectra['S_2_12_k'],
         )
+        # S*_err = STATISTICAL error (unchanged semantics, backward-compatible).
         if hasattr(self, 'reconstructed_spectra_err'):
             save_dict.update(dict(
                 S11_err=self.reconstructed_spectra_err['S_11_err'],
@@ -476,12 +634,39 @@ class SpectraReconstructor:
                 S112_err=self.reconstructed_spectra_err['S_1_12_err'],
                 S212_err=self.reconstructed_spectra_err['S_2_12_err'],
             ))
+        # S*_sys = comb-inversion systematic bias; S*_errtot = sqrt(stat^2 + sys^2),
+        # the honest combined bar plotted in the figures.
+        if getattr(self, 'reconstructed_spectra_sys', None):
+            save_dict.update(dict(
+                S11_sys=self.reconstructed_spectra_sys['S_11_err'],
+                S22_sys=self.reconstructed_spectra_sys['S_22_err'],
+                S1212_sys=self.reconstructed_spectra_sys['S_12_12_err'],
+                S12_sys=self.reconstructed_spectra_sys['S_1_2_err'],
+                S112_sys=self.reconstructed_spectra_sys['S_1_12_err'],
+                S212_sys=self.reconstructed_spectra_sys['S_2_12_err'],
+            ))
+        if getattr(self, 'reconstructed_spectra_err_total', None):
+            save_dict.update(dict(
+                S11_errtot=self.reconstructed_spectra_err_total['S_11_err'],
+                S22_errtot=self.reconstructed_spectra_err_total['S_22_err'],
+                S1212_errtot=self.reconstructed_spectra_err_total['S_12_12_err'],
+                S12_errtot=self.reconstructed_spectra_err_total['S_1_2_err'],
+                S112_errtot=self.reconstructed_spectra_err_total['S_1_12_err'],
+                S212_errtot=self.reconstructed_spectra_err_total['S_2_12_err'],
+            ))
         np.savez(path, **save_dict)
 
     def run(self):
         """Runs the full reconstruction pipeline."""
         self.load_observables()
         self.reconstruct()
+        if self.config.compute_systematic:
+            self.add_systematic_errors()
+        else:
+            # No systematic requested: quoted bars are statistical only.
+            self.reconstructed_spectra_sys = {ek: np.zeros_like(v)
+                                              for ek, v in self.reconstructed_spectra_err.items()}
+            self.reconstructed_spectra_err_total = dict(self.reconstructed_spectra_err)
         self.plot_all_spectra()
         self.plot_cross_spectra()
         self.save_reconstructed_spectra()
