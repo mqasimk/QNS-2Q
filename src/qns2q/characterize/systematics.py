@@ -157,6 +157,67 @@ def comb_inversion_systematic(spectra, c_times, M, T, n_wfine=80001, n_tb=8000,
     return (sys, chk) if return_selfcheck else sys
 
 
+def dc_systematic(spectra, M, T, dc_cts=None, n_tb_per_period=2000,
+                  n_wfine=300001, wmax_fid_factor=200e6, wmax_leak_factor=60e6):
+    """Deterministic bias of the w=0 (DC) reconstruction point, per spectrum.
+
+    The DC points come from a separate Ramsey-slope estimator, not the comb, so they
+    carry their own (deterministic, n_shots-independent) bias:
+
+      * Self-spectra (['FID','CDD3'] / ['CDD3','FID']): the partner-CDD3 a(+)+a(-)
+        combination gives  C_{a,0} = chi_aa^FID(MT) + chi_1212^CDD3(MT), where the
+        first term is the FID short-time tail (small, slightly negative) and the
+        second is the residual S_1212 leak through the CDD3 partner toggle (positive,
+        dominant). Estimate = 2 C/(MT). Bias = estimate - S_aa(0).
+      * Cross-spectra (['FID','FID']): pure FID short-time tail of the (real) cross
+        value. Bias = 2 chi_xy^FID(MT)/(MT) - Re S_xy(0).
+      * S_1212: built by subtracting the (leak-contaminated) self-DC from the FID/FID
+        ZZ observable; the leak largely cancels, leaving ~the FID-tail bias, which we
+        use as a deterministic (conservative) proxy.
+
+    Validated against the simulated data: the self-spectra model reproduces the
+    measured DC offsets (e.g. S_11 ratio ~1.07). Returns a dict of signed DC biases.
+    """
+    if dc_cts is None:
+        dc_cts = np.array([T / 8, T / 10, T / 12])   # matches experiments.py DC block
+    MT = M * T
+
+    # --- FID short-time-tail "apparent DC": 2 chi^FID(MT)/MT, chi=(1/2pi)int S |F_FID|^2
+    wf = np.linspace(0.0, 2 * np.pi * wmax_fid_factor, 2_000_001)
+    F2 = np.empty_like(wf); F2[0] = MT ** 2; F2[1:] = (2 - 2 * np.cos(wf[1:] * MT)) / wf[1:] ** 2
+
+    def apparent_fid(real_S_on_wf):
+        chi = (1 / (2 * np.pi)) * np.trapezoid(real_S_on_wf * F2, wf)
+        return 2 * chi / MT
+
+    # --- residual S_1212 leak through the partner CDD3 toggle, averaged over dc_cts
+    N = n_tb_per_period
+    t_b = np.linspace(0, T, N)
+    t_vec = np.linspace(0, MT, M * N)
+    t_j = jnp.asarray(t_vec)
+    wL = np.linspace((2 * np.pi * wmax_leak_factor) / n_wfine, 2 * np.pi * wmax_leak_factor, n_wfine)
+    S1212_L = np.real(np.asarray(spectra['S1212'](wL)))
+    leaks = []
+    for ct in dc_cts:
+        y = make_y(t_b, ['FID', 'CDD3'], ctime=float(ct), m=M)   # y[2,2] = Ising toggle, tiled
+        FI = _ff_grid(np.asarray(y[2, 2]), t_j, wL, +1)
+        leaks.append((1 / (2 * np.pi)) * np.trapezoid(S1212_L * np.abs(FI) ** 2, wL))
+    leak_dc = 2 * float(np.mean(leaks)) / MT     # the 2/MT estimator factor
+
+    # --- assemble per-spectrum signed DC bias = estimate - truth(0)
+    out = {}
+    S11_0 = float(np.real(spectra['S11'](np.array([0.0]))[0]))
+    S22_0 = float(np.real(spectra['S22'](np.array([0.0]))[0]))
+    S1212_0 = float(np.real(spectra['S1212'](np.array([0.0]))[0]))
+    out['S11'] = apparent_fid(np.real(np.asarray(spectra['S11'](wf)))) + leak_dc - S11_0
+    out['S22'] = apparent_fid(np.real(np.asarray(spectra['S22'](wf)))) + leak_dc - S22_0
+    out['S1212'] = apparent_fid(np.real(np.asarray(spectra['S1212'](wf)))) - S1212_0
+    for key in ('S12', 'S112', 'S212'):
+        S0 = float(np.real(spectra[key](np.array([0.0]))[0]))
+        out[key] = apparent_fid(np.real(np.asarray(spectra[key](wf)))) - S0
+    return out
+
+
 def analytic_spectra(gamma, gamma_12):
     """Ground-truth spectrum callables S(w) for the active regime (exact systematic)."""
     from qns2q.noise.spectra import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12

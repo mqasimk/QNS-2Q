@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 from qns2q.characterize.systematics import (comb_inversion_systematic, analytic_spectra,
-                                            selfconsistent_spectra, SPEC_KERNELS)
+                                            selfconsistent_spectra, dc_systematic, SPEC_KERNELS)
 
 # Small but representative config (keep the grids light so the test stays fast).
 TAU = 2.5e-8
@@ -68,6 +68,25 @@ def test_systematic_is_finite_and_bounded(systematic_result):
 def test_kernels_cover_all_six_spectra():
     """Guard: every reconstructed spectrum has a kernel spec."""
     assert set(SPEC_KERNELS) == set(ALL_KEYS)
+
+
+def test_dc_systematic_finite_and_bounded():
+    """DC bias is finite for all six and a sane fraction (<25%) of the DC value."""
+    spectra = analytic_spectra(GAMMA, GAMMA12)
+    bias = dc_systematic(spectra, M, T, n_tb_per_period=1000, n_wfine=60001)
+    for key in ALL_KEYS:
+        assert np.isfinite(bias[key])
+        s0 = float(np.real(spectra[key](np.array([0.0]))[0]))
+        assert abs(bias[key]) < 0.25 * abs(s0), f"{key} DC bias {bias[key]:.0f} too large"
+
+
+def test_dc_self_spectra_biased_positive_by_ising_leak():
+    """Self-spectra DC bias is positive: the residual S_1212 leak through the partner
+    CDD3 (positive) dominates the small negative FID short-time tail."""
+    spectra = analytic_spectra(GAMMA, GAMMA12)
+    bias = dc_systematic(spectra, M, T, n_tb_per_period=1000, n_wfine=60001)
+    assert bias['S11'] > 0, "S_11 DC should be biased high (Ising leak)"
+    assert bias['S22'] > 0, "S_22 DC should be biased high (Ising leak)"
 
 
 def test_selfconsistent_runs_without_truth(systematic_result):
