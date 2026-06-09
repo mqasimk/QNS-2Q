@@ -22,7 +22,7 @@ from qns2q.characterize.inversion import (recon_S_11, recon_S_22, recon_S_1_2, r
                                 recon_S_1_2_dc, recon_S_1_12_dc, recon_S_2_12_dc,
                                 truncation_bias_estimate)
 from qns2q.characterize.systematics import (comb_inversion_systematic, analytic_spectra,
-                                            selfconsistent_spectra)
+                                            selfconsistent_spectra, dc_systematic)
 from qns2q.noise.spectra import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
 from qns2q.paths import run_folder, project_root
 
@@ -298,8 +298,6 @@ class SpectraReconstructor:
         ``reconstructed_spectra_err_total`` (sqrt(stat^2 + sys^2)).
         """
         c = self.config
-        # DC (w=0) bias comes from the separate Ramsey-slope estimator, not the comb;
-        # leave it out of the comb-systematic (prepend 0 at w=0).
         self.reconstructed_spectra_sys = {}
         self.reconstructed_spectra_err_total = dict(self.reconstructed_spectra_err)
         try:
@@ -310,22 +308,27 @@ class SpectraReconstructor:
             print(f"[systematic] comb-sum self-check max residual = {worst_chk:.2e} "
                   f"(should be ~0; validates kernels/normalization)")
 
+            # DC (w=0) point: its own Ramsey-slope bias (FID short-time tail + residual
+            # S_1212 leak through the CDD3 partner), computed deterministically.
+            dc_bias = dc_systematic(spectra, c.M, c.T)
+
             recon_comb = {sk: self.reconstructed_spectra[_SYS_TO_SPEC[sk]] for sk in _SYS_TO_SPEC}
             sys_sc = comb_inversion_systematic(selfconsistent_spectra(self.wk, recon_comb),
                                                c.c_times, c.M, c.T)
 
-            print("[systematic] folded sigma_sys per spectrum (RMS over harmonics); "
-                  "self-consistent estimate in ():")
+            print("[systematic] folded sigma_sys per spectrum (RMS over harmonics, |DC bias|); "
+                  "self-consistent harmonic estimate in ():")
             for sk, rk in _SYS_TO_SPEC.items():
                 ek = _SYS_TO_ERR[sk]
-                sysk = np.concatenate(([0.0], sys[sk]))      # prepend DC=0
+                sysk = np.concatenate(([0.0], sys[sk]))   # complex for cross, real for self
+                sysk[0] = abs(dc_bias[sk])                # DC bias is real for every spectrum
                 self.reconstructed_spectra_sys[ek] = sysk
                 self.reconstructed_spectra_err_total[ek] = _quad_combine(
                     self.reconstructed_spectra_err[ek], sysk)
                 rms_a = np.sqrt(np.mean(np.abs(sys[sk]) ** 2))
                 rms_sc = np.sqrt(np.mean(np.abs(sys_sc[sk]) ** 2))
-                print(f"    {sk:>6}: sigma_sys RMS = {rms_a:8.1f}  "
-                      f"(self-consistent {rms_sc:8.1f}, ratio {rms_sc/rms_a if rms_a>0 else float('nan'):.2f})")
+                print(f"    {sk:>6}: harmonic RMS = {rms_a:8.1f}  |DC bias| = {abs(dc_bias[sk]):8.1f}  "
+                      f"(s.c. harmonic {rms_sc:8.1f}, ratio {rms_sc/rms_a if rms_a>0 else float('nan'):.2f})")
         except Exception as e:
             print(f"[systematic] WARNING: systematic-error computation failed ({e}); "
                   f"falling back to statistical-only bars.")
