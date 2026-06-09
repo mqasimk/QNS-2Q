@@ -53,7 +53,7 @@ class QNSExperimentConfig:
         fname: The name of the folder to save the results in.
         parent_dir: The parent directory to save the results in.
     """
-    tau: jnp.float32 = 2.5e-8
+    tau: jnp.float32 = 1.0   # tau units (legacy SI anchor: 25 ns)
     M: jnp.int32 = 18
     t_grain: jnp.int32 = 1500
     truncate: jnp.int32 = 5

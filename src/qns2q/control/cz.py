@@ -58,7 +58,8 @@ class CZOptConfig:
     """Configuration for the CZ gate optimization."""
     fname: str = field(default_factory=run_folder)
     parent_dir: str = os.pardir
-    Jmax: float = 2e6
+    # Max Ising coupling in tau units (J*tau): 0.05 = 2e6 rad/s x 25 ns (legacy SI anchor)
+    Jmax: float = 0.05
     # Extended gate time factors to include larger gate times (-1, 0)
     gate_time_factors: list = field(default_factory=lambda: [3, 2, 1, 0, -1, -2, -3])
     output_path_known: str = "infs_known_cz_v2.npz"
@@ -108,6 +109,15 @@ class CZOptConfig:
 
         self.Tqns = float(self.params['T'])
 
+        # Units guard: the pipeline works in tau units (T = 160 tau = 160). A
+        # run/spectra file from the SI-era code has T ~ 4e-6 s; mixing it with
+        # the tau-unit Jmax silently breaks the optimization. Regenerate Stage
+        # 1/2 (or spectra_input) for such folders.
+        if self.Tqns < 1.0:
+            print(f"[cz] WARNING: loaded T={self.Tqns:g} looks like SI-era data "
+                  f"(expected tau-unit T ~ 160). Regenerate the spectra for "
+                  f"this folder before trusting the optimization.")
+
         # Filter gate_time_factors to ensure physical feasibility with Jmax
         min_Tg = np.pi / (4 * self.Jmax)
         valid_factors = []
@@ -116,7 +126,7 @@ class CZOptConfig:
             if Tg >= min_Tg:
                 valid_factors.append(i)
             else:
-                print(f"Config: Excluding factor {i} (Tg={Tg:.2e} s) - too short for Jmax (min {min_Tg:.2e} s)")
+                print(f"Config: Excluding factor {i} (Tg={Tg:.2e} tau) - too short for Jmax (min {min_Tg:.2e} tau)")
         self.gate_time_factors = valid_factors
 
         self.tau = self.Tqns / self.tau_divisor
@@ -473,8 +483,8 @@ def prepare_time_domain_overlap(SMat, w_grid, tau, T_seq, M):
     N_sym = SMat_sym.shape[-1]
 
     dt = 2 * np.pi / (N_sym * dw)
-    print(f"  Time-domain setup: pad_factor={pad_factor}, dt={dt*1e9:.2f} ns, "
-          f"tau/4={tau/4*1e9:.2f} ns")
+    print(f"  Time-domain setup: pad_factor={pad_factor}, dt={dt:.4f} tau, "
+          f"tau/4={tau/4:.4f} tau")
 
     lags_R = (jnp.arange(N_sym) - N_sym // 2) * dt
     RMat_vals = jnp.fft.ifft(SMat_sym, axis=-1)
@@ -920,7 +930,7 @@ def run_optimization(config):
         if Tg < config.tau:
             continue
             
-        print(f"\nGate Time: {Tg*1e6:.2f} us (Tg/T2q1={Tg/config.T2q1:.4f}, Tg/T2q2={Tg/config.T2q2:.4f})")
+        print(f"\nGate Time: {Tg:.1f} tau (Tg/T2q1={Tg/config.T2q1:.4f}, Tg/T2q2={Tg/config.T2q2:.4f})")
 
         # For now, M=1
         M = 1

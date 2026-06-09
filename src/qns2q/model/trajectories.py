@@ -203,7 +203,11 @@ def make_init_state(a_sp, c, **kwargs):
         State preparation errors (coherence) along X/Y axes for [qubit1, qubit2].
     **kwargs
         state : str
-            Target state to generate: 'p0', 'p1', '0p', '1p', or 'pp'.
+            Target state to generate: 'p0', 'p1', '0p', '1p', 'pp', or 'pp_wrung'.
+            'pp_wrung' is the wringing partner of 'pp': a high-fidelity Z1Z2
+            conjugation applied to the (faulty) 'pp' preparation, used by the
+            SPAM-robust protocol to symmetrize transverse SP errors
+            (W_pm{E_rho0[O]} = (E_rho0[O] pm E_{Z1Z2 rho0 Z1Z2}[O])/2).
 
     Returns
     -------
@@ -234,6 +238,10 @@ def make_init_state(a_sp, c, **kwargs):
         return x_gates[0] * ry[1] * rho0 * ry[1].dag() * x_gates[0].dag()
     elif kwargs.get('state') == 'pp':
         return ry[1] * ry[0] * rho0 * ry[0].dag() * ry[1].dag()
+    elif kwargs.get('state') == 'pp_wrung':
+        zz = qt.tensor(qt.sigmaz(), qt.sigmaz())
+        rho_pp = ry[1] * ry[0] * rho0 * ry[0].dag() * ry[1].dag()
+        return zz * rho_pp * zz.dag()
     else:
         raise Exception("Invalid state input")
 

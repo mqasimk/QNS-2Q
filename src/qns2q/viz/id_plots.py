@@ -816,7 +816,7 @@ def generate_spectra_overlay_plot():
         ("Im_S212", "S_2_12", 1, 2, 'imag', r"Im[$S_{2,12}(\omega)$]", r"Im[$G_{2,12}(\omega, T_G)$]")
     ]
     
-    xunits = 1e6 # MHz
+    xunits = 1.0  # tau units: plot the dimensionless w*tau directly
     
     output_dir = paths["output_dir"]
 
@@ -914,7 +914,7 @@ def generate_spectra_overlay_plot():
             ax2.legend(h1 + h2, l1 + l2, loc='upper right', frameon=False, fontsize=8)
             
         # X-label only on bottom
-        axs[1].set_xlabel(r'$\omega$ (MHz)')
+        axs[1].set_xlabel(r'$\omega\tau$')
         
         plt.tight_layout()
         filename = f"spectra_overlay_{suffix}_pub.pdf"

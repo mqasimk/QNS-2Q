@@ -236,24 +236,24 @@ def plot_comparison(config, known_seq, opt_seq, T_seq, filename_suffix=""):
         _, y12 = get_switching_function(pt12, T_seq)
         
         # Row 0: y1
-        axs[0, col_idx].step(t*1e6, y1, 'k-', where='post')
+        axs[0, col_idx].step(t, y1, 'k-', where='post')
         axs[0, col_idx].set_title(f"{title_prefix}\nQubit 1 Switching Function ($y_1$)")
         axs[0, col_idx].set_ylabel(r"$y_1(t)$")
         axs[0, col_idx].set_ylim(-1.2, 1.2)
         axs[0, col_idx].grid(True, alpha=0.3)
 
         # Row 1: y2
-        axs[1, col_idx].step(t*1e6, y2, 'k-', where='post')
+        axs[1, col_idx].step(t, y2, 'k-', where='post')
         axs[1, col_idx].set_title(r"Qubit 2 Switching Function ($y_2$)")
         axs[1, col_idx].set_ylabel(r"$y_2(t)$")
         axs[1, col_idx].set_ylim(-1.2, 1.2)
         axs[1, col_idx].grid(True, alpha=0.3)
 
         # Row 2: y12
-        axs[2, col_idx].step(t*1e6, y12, 'k-', where='post')
+        axs[2, col_idx].step(t, y12, 'k-', where='post')
         axs[2, col_idx].set_title(r"Interaction Switching Function ($y_{12}$)")
         axs[2, col_idx].set_ylabel(r"$y_{12}(t)$")
-        axs[2, col_idx].set_xlabel(r"Time ($\mu$s)")
+        axs[2, col_idx].set_xlabel(r"$t/\tau$")
         axs[2, col_idx].set_ylim(-1.2, 1.2)
         axs[2, col_idx].grid(True, alpha=0.3)
 
@@ -288,7 +288,7 @@ def plot_filter_functions(config, known_seq, opt_seq, T_seq, filename_suffix="")
     fig, axs = plt.subplots(3, cols, figsize=(6 * cols, 10), sharex=True, squeeze=False)
     
     # Frequency grid for plotting (avoid 0 to prevent division by zero)
-    w_plot = np.linspace(1e3, 2 * np.pi * 5e6, 1000) 
+    w_plot = np.linspace(2.5e-5, 2 * np.pi * 0.125, 1000) 
     
     def get_filter_function(pulse_times, T, w):
         Z_w = get_spectral_amplitudes(pulse_times, T, w)
@@ -303,7 +303,7 @@ def plot_filter_functions(config, known_seq, opt_seq, T_seq, filename_suffix="")
         _, F2 = get_filter_function(pt2, T_seq, w_plot)
         _, F12 = get_filter_function(pt12, T_seq, w_plot)
         
-        freqs_mhz = w / (2 * np.pi * 1e6)
+        freqs_wtau = w
         
         # Helper for asinh plotting
         def plot_asinh(ax, x, y, color, label):
@@ -318,22 +318,22 @@ def plot_filter_functions(config, known_seq, opt_seq, T_seq, filename_suffix="")
                 ax.set_ylabel(f"asinh(F/{scale_factor:.1e})")
 
         # Row 0: F1
-        plot_asinh(axs[0, col_idx], freqs_mhz, F1, 'b', "$F_1$")
+        plot_asinh(axs[0, col_idx], freqs_wtau, F1, 'b', "$F_1$")
         axs[0, col_idx].set_title(f"{title_prefix}\nQubit 1 Filter Function ($F_1$)")
         if not axs[0, col_idx].get_ylabel(): axs[0, col_idx].set_ylabel(r"$F_1(\omega)$")
         axs[0, col_idx].grid(True, alpha=0.3)
         
         # Row 1: F2
-        plot_asinh(axs[1, col_idx], freqs_mhz, F2, 'r', "$F_2$")
+        plot_asinh(axs[1, col_idx], freqs_wtau, F2, 'r', "$F_2$")
         axs[1, col_idx].set_title("Qubit 2 Filter Function ($F_2$)")
         if not axs[1, col_idx].get_ylabel(): axs[1, col_idx].set_ylabel(r"$F_2(\omega)$")
         axs[1, col_idx].grid(True, alpha=0.3)
         
         # Row 2: F12
-        plot_asinh(axs[2, col_idx], freqs_mhz, F12, 'g', "$F_{12}$")
+        plot_asinh(axs[2, col_idx], freqs_wtau, F12, 'g', "$F_{12}$")
         axs[2, col_idx].set_title("Interaction Filter Function ($F_{12}$)")
         if not axs[2, col_idx].get_ylabel(): axs[2, col_idx].set_ylabel(r"$F_{12}(\omega)$")
-        axs[2, col_idx].set_xlabel(r"$\omega$ (MHz)")
+        axs[2, col_idx].set_xlabel(r"$\omega\tau$")
         axs[2, col_idx].grid(True, alpha=0.3)
 
     current_col = 0
@@ -372,8 +372,8 @@ def plot_filter_functions_with_spectra(config, known_seq, opt_seq, T_seq, filena
     fig, axs = plt.subplots(3, cols, figsize=(8 * cols, 12), sharex=True, squeeze=False)
     
     # Frequency grid for continuous plotting
-    w_plot = np.linspace(1e3, config.w_max, 2000)
-    freqs_mhz = w_plot / (2 * np.pi * 1e6)
+    w_plot = np.linspace(2.5e-5, config.w_max, 2000)
+    freqs_wtau = w_plot
     
     # Harmonics if M is large
     use_harmonics = (config.M > 10)
@@ -382,7 +382,7 @@ def plot_filter_functions_with_spectra(config, known_seq, opt_seq, T_seq, filena
         max_k = int(config.w_max / w0)
         k_vals = np.arange(1, max_k + 1)
         w_harmonics = k_vals * w0
-        freqs_harmonics_mhz = w_harmonics / (2 * np.pi * 1e6)
+        freqs_harmonics_wtau = w_harmonics
     
     # Spectra (interpolated)
     # SMat indices: 1->S11, 2->S22, 3->S1212
@@ -436,23 +436,23 @@ def plot_filter_functions_with_spectra(config, known_seq, opt_seq, T_seq, filena
             ax1.tick_params(axis='y', labelcolor=color_F)
             
             # Continuous
-            ax1.plot(freqs_mhz, Fs[row], color=color_F, alpha=0.6, label='Filter (Cont.)')
+            ax1.plot(freqs_wtau, Fs[row], color=color_F, alpha=0.6, label='Filter (Cont.)')
             ax1.set_yscale('log')
             
             if use_harmonics:
-                ax1.scatter(freqs_harmonics_mhz, F_harmonics[row], color=color_F, marker='o', s=20, label='Filter (Harmonics)')
+                ax1.scatter(freqs_harmonics_wtau, F_harmonics[row], color=color_F, marker='o', s=20, label='Filter (Harmonics)')
             
             # Plot Spectrum (Right Axis)
             color_S = 'tab:orange'
             ax2.set_ylabel(f"Spectrum {spectra_labels[row]}", color=color_S)
             ax2.tick_params(axis='y', labelcolor=color_S)
             
-            ax2.plot(freqs_mhz, spectra_data[row], color=color_S, linestyle='--', alpha=0.6, label='Spectrum')
+            ax2.plot(freqs_wtau, spectra_data[row], color=color_S, linestyle='--', alpha=0.6, label='Spectrum')
             ax2.set_yscale('log') # Spectra are usually log-scale friendly
             
             ax1.set_title(f"{title_prefix}\n{F_labels[row]} vs {spectra_labels[row]}")
             if row == 2:
-                ax1.set_xlabel(r"$\omega$ (MHz)")
+                ax1.set_xlabel(r"$\omega\tau$")
             
             ax1.grid(True, which='both', alpha=0.3)
 
@@ -478,8 +478,8 @@ def plot_generalized_filter_functions(config, seq, T_seq, label):
 
     print(f"Plotting generalized filter functions for {label}...")
     
-    w_plot = np.linspace(1e3, 2 * np.pi * 5e6, 1000)
-    freqs_mhz = w_plot / (2 * np.pi * 1e6)
+    w_plot = np.linspace(2.5e-5, 2 * np.pi * 0.125, 1000)
+    freqs_wtau = w_plot
     
     pt1, pt2 = seq
     pt12 = make_tk12(pt1, pt2)
@@ -506,18 +506,18 @@ def plot_generalized_filter_functions(config, seq, T_seq, label):
             
             try:
                 ax.set_yscale('asinh', linear_width=scale_factor)
-                ax.plot(freqs_mhz, np.real(G_ab), label='Real')
-                ax.plot(freqs_mhz, np.imag(G_ab), label='Imag', alpha=0.7)
+                ax.plot(freqs_wtau, np.real(G_ab), label='Real')
+                ax.plot(freqs_wtau, np.imag(G_ab), label='Imag', alpha=0.7)
             except ValueError:
                 y_real = np.arcsinh(np.real(G_ab) / scale_factor)
                 y_imag = np.arcsinh(np.imag(G_ab) / scale_factor)
-                ax.plot(freqs_mhz, y_real, label='asinh(Real)')
-                ax.plot(freqs_mhz, y_imag, label='asinh(Imag)', alpha=0.7)
+                ax.plot(freqs_wtau, y_real, label='asinh(Real)')
+                ax.plot(freqs_wtau, y_imag, label='asinh(Imag)', alpha=0.7)
                 ax.set_ylabel(f"asinh(G/{scale_factor:.1e})")
             
             ax.set_title(f"$G_{{{labels[i]},{labels[j]}}}(\\omega)$")
             if i == 2:
-                ax.set_xlabel("Frequency (MHz)")
+                ax.set_xlabel(r"$\omega\tau$")
             if j == 0 and not ax.get_ylabel():
                 ax.set_ylabel("Amplitude")
             ax.grid(True, alpha=0.3)
@@ -543,8 +543,8 @@ def plot_spectra_filter_overlay_6(config, seq, T_seq, label):
     print(f"Plotting 6-panel spectra/filter overlay for {label}...")
     
     # Use config.w_max for range
-    w_plot = np.linspace(1e3, config.w_max, 1000)
-    freqs_mhz = w_plot / (2 * np.pi * 1e6)
+    w_plot = np.linspace(2.5e-5, config.w_max, 1000)
+    freqs_wtau = w_plot
     
     pt1, pt2 = seq
     pt12 = make_tk12(pt1, pt2)
@@ -586,15 +586,15 @@ def plot_spectra_filter_overlay_6(config, seq, T_seq, label):
         
         try:
             ax1.set_yscale('asinh', linear_width=scale_G)
-            ax1.plot(freqs_mhz, np.real(G), color=color_G_real, label='Re[$G^+$]', linewidth=2)
+            ax1.plot(freqs_wtau, np.real(G), color=color_G_real, label='Re[$G^+$]', linewidth=2)
             if idx >= 3: # Off-diagonal
-                ax1.plot(freqs_mhz, np.imag(G), color=color_G_imag, linestyle='--', label='Im[$G^+$]', linewidth=2)
+                ax1.plot(freqs_wtau, np.imag(G), color=color_G_imag, linestyle='--', label='Im[$G^+$]', linewidth=2)
         except ValueError:
             y_real = np.arcsinh(np.real(G) / scale_G)
-            ax1.plot(freqs_mhz, y_real, color=color_G_real, label='Re[$G^+$]', linewidth=2)
+            ax1.plot(freqs_wtau, y_real, color=color_G_real, label='Re[$G^+$]', linewidth=2)
             if idx >= 3:
                 y_imag = np.arcsinh(np.imag(G) / scale_G)
-                ax1.plot(freqs_mhz, y_imag, color=color_G_imag, linestyle='--', label='Im[$G^+$]', linewidth=2)
+                ax1.plot(freqs_wtau, y_imag, color=color_G_imag, linestyle='--', label='Im[$G^+$]', linewidth=2)
             ax1.set_ylabel(f"asinh($G^+$/{scale_G:.1e})", fontsize=16)
             
         ax1.set_ylabel(g_label, color=color_G_real, fontsize=16)
@@ -610,15 +610,15 @@ def plot_spectra_filter_overlay_6(config, seq, T_seq, label):
         
         try:
             ax2.set_yscale('asinh', linear_width=scale_S)
-            ax2.plot(freqs_mhz, np.real(S_interp), color=color_S_real, label='Re[$S^+$]', linewidth=2)
+            ax2.plot(freqs_wtau, np.real(S_interp), color=color_S_real, label='Re[$S^+$]', linewidth=2)
             if idx >= 3:
-                ax2.plot(freqs_mhz, np.imag(S_interp), color=color_S_imag, linestyle='--', label='Im[$S^+$]', linewidth=2)
+                ax2.plot(freqs_wtau, np.imag(S_interp), color=color_S_imag, linestyle='--', label='Im[$S^+$]', linewidth=2)
         except ValueError:
             y_real = np.arcsinh(np.real(S_interp) / scale_S)
-            ax2.plot(freqs_mhz, y_real, color=color_S_real, label='Re[$S^+$]', linewidth=2)
+            ax2.plot(freqs_wtau, y_real, color=color_S_real, label='Re[$S^+$]', linewidth=2)
             if idx >= 3:
                 y_imag = np.arcsinh(np.imag(S_interp) / scale_S)
-                ax2.plot(freqs_mhz, y_imag, color=color_S_imag, linestyle='--', label='Im[$S^+$]', linewidth=2)
+                ax2.plot(freqs_wtau, y_imag, color=color_S_imag, linestyle='--', label='Im[$S^+$]', linewidth=2)
             ax2.set_ylabel(f"asinh($S^+$/{scale_S:.1e})", fontsize=16)
             
         ax2.set_ylabel(s_label, color=color_S_real, fontsize=16)
@@ -632,7 +632,7 @@ def plot_spectra_filter_overlay_6(config, seq, T_seq, label):
         lines2, labels2 = ax2.get_legend_handles_labels()
         ax1.legend(lines1 + lines2, labels1 + labels2, loc='best', fontsize=14)
         
-        ax1.set_xlabel(r"$\omega$ (MHz)", fontsize=16)
+        ax1.set_xlabel(r"$\omega\tau$", fontsize=16)
 
         plt.tight_layout()
         filename = f"spectra_filter_overlay_{suffix}_{label.replace(' ', '_')}.pdf"
@@ -689,20 +689,20 @@ def plot_noise_correlations(config):
             
             try:
                 ax.set_yscale('asinh', linear_width=scale_factor)
-                ax.plot(lags * 1e6, np.real(R_np), label='Real')
-                ax.plot(lags * 1e6, np.imag(R_np), label='Imag', alpha=0.7)
+                ax.plot(lags, np.real(R_np), label='Real')
+                ax.plot(lags, np.imag(R_np), label='Imag', alpha=0.7)
             except ValueError:
                 # Fallback if asinh not available or parameters wrong
                 # Manual transformation for visualization
                 y_real = np.arcsinh(np.real(R_np) / scale_factor)
                 y_imag = np.arcsinh(np.imag(R_np) / scale_factor)
-                ax.plot(lags * 1e6, y_real, label='asinh(Real)')
-                ax.plot(lags * 1e6, y_imag, label='asinh(Imag)', alpha=0.7)
+                ax.plot(lags, y_real, label='asinh(Real)')
+                ax.plot(lags, y_imag, label='asinh(Imag)', alpha=0.7)
                 ax.set_ylabel(f"asinh(Amp/{scale_factor:.1e})")
             
             ax.set_title(f"$R_{{{labels[i]},{labels[j]}}}(\\tau)$")
             if i == 2:
-                ax.set_xlabel(r"Lag $\tau$ ($\mu$s)")
+                ax.set_xlabel(r"Lag (units of $\tau$)")
             if j == 0 and not ax.get_ylabel():
                 ax.set_ylabel("Amplitude")
             ax.grid(True, alpha=0.3)
@@ -768,11 +768,11 @@ def plot_control_correlations(config, seq, T_seq, M, label):
             lags = (np.arange(corr.shape[0]) - (2 * num_steps - 1)) * dt
             
             ax = axs[i, j]
-            ax.plot(lags * 1e6, corr)
+            ax.plot(lags, corr)
             
             ax.set_title(f"$C_{{{labels_y[i]},{labels_y[j]}}}(\\tau)$")
             if i == 2:
-                ax.set_xlabel(r"Lag $\tau$ ($\mu$s)")
+                ax.set_xlabel(r"Lag (units of $\tau$)")
             if j == 0:
                 ax.set_ylabel("Amplitude")
             ax.grid(True, alpha=0.3)

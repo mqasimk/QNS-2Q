@@ -33,6 +33,18 @@ def _get_hadamard_operators() -> List[qt.Qobj]:
     return [h0, h1, h2]
 
 
+def _get_flip_operator() -> qt.Qobj:
+    """
+    Creates the 3-qubit pre-measurement bit-flip ("twisting") operator X \otimes X \otimes I.
+
+    Applied AFTER the measurement-basis rotation and before the POVMs, this flips both
+    measured qubits in the computational basis. Combining flipped and unflipped runs
+    symmetrizes the asymmetric readout error delta_l (companion paper, "twisting"):
+        E_tilde^pm[O] = (E_hat[O] pm E_hat_flipped[O]) / 2.
+    """
+    return qt.tensor(qt.sigmax(), qt.sigmax(), qt.identity(2))
+
+
 def _get_rx_operators() -> List[qt.Qobj]:
     """
     Creates a list of 3-qubit Rx gate operators for Y-basis measurement.
@@ -114,6 +126,7 @@ def get_expect_val_from_probs(probs: np.ndarray, cm: np.ndarray, qubit_idx: int 
         The calculated expectation value.
     """
     pi = jnp.mean(probs, axis=0)
+    cm = np.eye(4) if cm is None else cm
     p_corr = np.linalg.inv(cm) @ pi
     if qubit_idx == 1:
         p = p_corr[0] + p_corr[1]
@@ -140,6 +153,7 @@ def get_expect_val_per_shot(probs: np.ndarray, cm: np.ndarray, qubit_idx: int = 
     # probs is (N, 4). cm_inv is (4, 4).
     # We want p_corr[i, :] = cm_inv @ probs[i, :].T
     # So p_corr = (np.linalg.inv(cm) @ probs.T).T
+    cm = np.eye(4) if cm is None else cm
     p_corr = (np.linalg.inv(cm) @ probs.T).T
 
     if qubit_idx == 1:
@@ -155,9 +169,16 @@ def get_expect_val_per_shot(probs: np.ndarray, cm: np.ndarray, qubit_idx: int = 
 # --- Expectation Value Functions with Error Mitigation ---
 
 def _compute_expectation(gate: qt.Qobj, state: jnp.ndarray, a_m: np.ndarray, delta: np.ndarray,
-                         cm: np.ndarray, qubit_idx: int = -1) -> float:
-    """Helper to compute expectation values using vectorized JAX operations."""
+                         cm: np.ndarray, qubit_idx: int = -1, twist: bool = False) -> float:
+    """Helper to compute expectation values using vectorized JAX operations.
+
+    With ``twist=True`` the pre-measurement bit-flip X1X2 is applied after the
+    basis-rotation gate (the "twisting" run of the SPAM-robust protocol).
+    """
     povms_list = povms(a_m, delta)
+
+    if twist:
+        gate = _get_flip_operator() * gate
 
     # Convert QuTiP objects to JAX arrays
     gate_jax = jnp.array(gate.full())
@@ -222,9 +243,16 @@ def e_yy_hat(state: jnp.ndarray, a_m: np.ndarray, delta: np.ndarray, cm: np.ndar
 
 
 def _compute_expectation_with_stderr(gate: qt.Qobj, state: jnp.ndarray, a_m: np.ndarray, delta: np.ndarray,
-                                     cm: np.ndarray, qubit_idx: int = -1) -> Tuple[float, float]:
-    """Helper to compute expectation values and standard error using vectorized JAX operations."""
+                                     cm: np.ndarray, qubit_idx: int = -1, twist: bool = False) -> Tuple[float, float]:
+    """Helper to compute expectation values and standard error using vectorized JAX operations.
+
+    With ``twist=True`` the pre-measurement bit-flip X1X2 is applied after the
+    basis-rotation gate (the "twisting" run of the SPAM-robust protocol).
+    """
     povms_list = povms(a_m, delta)
+
+    if twist:
+        gate = _get_flip_operator() * gate
 
     # Convert QuTiP objects to JAX arrays
     gate_jax = jnp.array(gate.full())
@@ -320,6 +348,21 @@ def frame_correct(sol: List[qt.Qobj]) -> List[qt.Qobj]:
 # --- Main Calculation Functions for Concurrence ---
 
 
+def _resolve_a_sp_div(sp_mit: bool, kwargs: dict) -> np.ndarray:
+    """Resolve the SP-mitigation divisor for the coefficient estimators.
+
+    The state PREP always uses the true kwargs['a_sp']; the estimators divide by
+    this returned vector (the experimenter's estimate alpha_hat_SP^z). Legacy
+    behavior is preserved: sp_mit=False -> no division; sp_mit=True without an
+    explicit 'a_sp_div' -> oracle division by the true a_sp. The SPAM-mitigated
+    protocol passes a_sp_div = the CALIBRATION-ESTIMATED alpha_SP^z instead.
+    """
+    if not sp_mit:
+        return np.array([1., 1.])
+    div = kwargs.get('a_sp_div')
+    return np.asarray(kwargs['a_sp'] if div is None else div, dtype=float)
+
+
 def parametric_bootstrap_error(means: List[float], stderrs: List[float], func: Callable, n_boot: int = 1000) -> float:
     """
     Estimates the standard error of a function of multiple variables using parametric bootstrapping.
@@ -382,7 +425,7 @@ def make_c_12_0_mt(solver_ftn: Callable, pulse: List[str], t_vec: np.ndarray, c_
     rho0 = make_init_state(kwargs['a_sp'], kwargs['c'], state=kwargs['state'])
     rho_b = 0.5 * qt.identity(2)
     rho = jnp.array((qt.tensor(rho0, rho_b)).full())
-    a_sp = np.array([1., 1.]) if not sp_mit else kwargs['a_sp']
+    a_sp = _resolve_a_sp_div(sp_mit, kwargs)
 
     results = Parallel(n_jobs=1)(
         delayed(c_12_0_mt_i)(
@@ -430,7 +473,7 @@ def make_c_12_12_mt(solver_ftn: Callable, pulse: List[str], t_vec: np.ndarray, c
     rho0 = make_init_state(kwargs['a_sp'], kwargs['c'], state=kwargs['state'])
     rho_b = 0.5 * qt.identity(2)
     rho = jnp.array((qt.tensor(rho0, rho_b)).full())
-    a_sp = np.array([1., 1.]) if not sp_mit else kwargs['a_sp']
+    a_sp = _resolve_a_sp_div(sp_mit, kwargs)
 
     results = Parallel(n_jobs=1)(
         delayed(c_12_12_mt_i)(
@@ -493,7 +536,7 @@ def make_c_a_b_mt(solver_ftn: Callable, pulse: List[str], t_vec: np.ndarray, c_t
     rho_b = 0.5 * qt.identity(2)
     rhop = jnp.array((qt.tensor(rho0p, rho_b)).full())
     rhom = jnp.array((qt.tensor(rho0m, rho_b)).full())
-    a_sp = np.array([1., 1.]) if not sp_mit else kwargs['a_sp']
+    a_sp = _resolve_a_sp_div(sp_mit, kwargs)
 
     results = Parallel(n_jobs=1)(
         delayed(c_a_b_mt_i)(
@@ -556,7 +599,7 @@ def make_c_a_0_mt(solver_ftn: Callable, pulse: List[str], t_vec: np.ndarray, c_t
     rho_b = 0.5 * qt.identity(2)
     rhop = jnp.array((qt.tensor(rho0p, rho_b)).full())
     rhom = jnp.array((qt.tensor(rho0m, rho_b)).full())
-    a_sp = np.array([1., 1.]) if not sp_mit else kwargs['a_sp']
+    a_sp = _resolve_a_sp_div(sp_mit, kwargs)
 
     results = Parallel(n_jobs=1)(
         delayed(c_a_0_mt_i)(

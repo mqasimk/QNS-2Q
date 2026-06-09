@@ -1,6 +1,18 @@
 """
 Analytical definitions of noise power spectral densities (PSDs).
 
+**Units: the minimum pulse separation tau is the unit of time (tau = 1).**
+Frequencies are dimensionless angular frequencies w~ = w*tau and the spectra are
+dimensionless S~ = tau*S; every observable depends only on such products, so the
+physics is identical to the legacy SI-anchored model (see
+``tests/test_tau_invariance.py``). All constants below are written as explicit
+products of the legacy SI values and ``_TAU_SI`` (the historical tau = 25 ns), so
+the provenance stays visible and the conversion is exact: e.g. a peak at
+5e6 rad/s becomes w~0 = 5e6*_TAU_SI = 0.125, an amplitude of 5e4 /s becomes
+S~ = 5e4*_TAU_SI = 1.25e-3, a correlation time of 3e-7 s becomes t~c = 12.
+``_TAU_SI`` is ONLY this conversion constant -- no pipeline code uses it as a
+timescale.
+
 Two noise models are provided and selected at import time by the ``QNS2Q_REGIME``
 environment variable (see ``run_paths.current_regime``):
 
@@ -19,6 +31,11 @@ import jax.numpy as jnp
 import jax
 
 from qns2q.paths import current_regime, run_folder, project_root
+
+# Legacy SI anchor (tau = 25 ns): conversion constant for the dimensionless
+# (tau-unit) spectral definitions below. Frequencies x _TAU_SI, times / _TAU_SI,
+# spectral amplitudes x _TAU_SI.
+_TAU_SI = 2.5e-8
 
 
 @jax.jit
@@ -47,63 +64,63 @@ if _REGIME == "bland":
     # with the SUM of all self variances -- below the n_shots=2000 ensemble floor by
     # the 3rd of 10 sweep points, and the 5e4 rad/s Ising cusp needed t >> 130 us to
     # reach the linear (slope = S(0)) regime vs the 40 us sweep. With these values the
-    # worst decay exponent at t_max=40 us is ~3.4 (signal >= 1.5x floor) and every
-    # channel is >= 95% linear over the fit window.
+    # worst decay exponent at t_max = 1600 tau is ~3.4 (signal >= 1.5x floor) and
+    # every channel is >= 95% linear over the fit window.
+    # All arguments are in tau units: w is w*tau, constants are SI x/_TAU_SI.
     @jax.jit
     def S_11(w):
-        """Self spectrum for qubit 1 (bland)."""
-        tc = 1e-6
-        S0 = 0*3e4
-        St2 = 5e4
-        w0 = 1.4e7
+        """Self spectrum for qubit 1 (bland). w and S in tau units."""
+        tc = 1e-6 / _TAU_SI
+        S0 = 0 * 3e4 * _TAU_SI
+        St2 = 5e4 * _TAU_SI
+        w0 = 1.4e7 * _TAU_SI
         return (S0*(0*Gauss(w, 1.75*w0, 10/tc)+L(w, w0, 1*tc))
                 +St2*L(w, 0, tc))
 
     @jax.jit
     def S_22(w):
-        """Self spectrum for qubit 2 (bland)."""
-        tc=1.5e-6
-        S0 = 0*2.5e4
-        St2 = 2e4
-        w0=0.8e7
+        """Self spectrum for qubit 2 (bland). w and S in tau units."""
+        tc = 1.5e-6 / _TAU_SI
+        S0 = 0 * 2.5e4 * _TAU_SI
+        St2 = 2e4 * _TAU_SI
+        w0 = 0.8e7 * _TAU_SI
         return (S0*(Gauss(w, 1.8*w0, 10/tc)+Gauss(w, 2.5*w0, 20/tc))
                 +St2*L(w, 0, tc))
 
     @jax.jit
     def S_1212(w):
-        """Self spectrum for the ZZ (Ising) interaction (bland)."""
-        tc = 1e-6
-        S0 = 0*1e3
-        St2 = 4e4
-        w0 = 1.5*10**7
+        """Self spectrum for the ZZ (Ising) interaction (bland). w, S in tau units."""
+        tc = 1e-6 / _TAU_SI
+        St2 = 4e4 * _TAU_SI
         return St2/(1+(2*tc*jnp.abs(w)))
 
 else:  # "featured"
     # Multi-peak model -- current HEAD definitions.
+    # All arguments are in tau units: w is w*tau, constants are SI x/_TAU_SI.
     @jax.jit
     def S_11(w):
-        """Self spectrum for qubit 1 (featured: peak@5MHz + plateau + peak + DC)."""
-        peak1 = 5e4 * L(w, 5e6, 3e-7)
-        plateau = 4e4 * Gauss(w, 1.6e7, 3e6)
-        peak2 = 3e4 * Gauss(w, 2.7e7, 2e6)
-        dc = 5e3 * L(w, 0, 1e-6)
+        """Self spectrum for qubit 1 (featured: peak@0.125/tau + plateau + peak + DC)."""
+        peak1 = (5e4 * _TAU_SI) * L(w, 5e6 * _TAU_SI, 3e-7 / _TAU_SI)
+        plateau = (4e4 * _TAU_SI) * Gauss(w, 1.6e7 * _TAU_SI, 3e6 * _TAU_SI)
+        peak2 = (3e4 * _TAU_SI) * Gauss(w, 2.7e7 * _TAU_SI, 2e6 * _TAU_SI)
+        dc = (5e3 * _TAU_SI) * L(w, 0, 1e-6 / _TAU_SI)
         return peak1 + plateau + peak2 + dc
 
     @jax.jit
     def S_22(w):
-        """Self spectrum for qubit 2 (featured: plateau + peak@20MHz + bump + DC)."""
-        plateau = 3e4 * Gauss(w, 8e6, 6e6)
-        peak = 6e4 * L(w, 2e7, 2.5e-7)
-        bump = 2e4 * Gauss(w, 2.8e7, 1.5e6)
-        dc = 8e3 * L(w, 0, 1.5e-6)
+        """Self spectrum for qubit 2 (featured: plateau + peak@0.5/tau + bump + DC)."""
+        plateau = (3e4 * _TAU_SI) * Gauss(w, 8e6 * _TAU_SI, 6e6 * _TAU_SI)
+        peak = (6e4 * _TAU_SI) * L(w, 2e7 * _TAU_SI, 2.5e-7 / _TAU_SI)
+        bump = (2e4 * _TAU_SI) * Gauss(w, 2.8e7 * _TAU_SI, 1.5e6 * _TAU_SI)
+        dc = (8e3 * _TAU_SI) * L(w, 0, 1.5e-6 / _TAU_SI)
         return plateau + peak + bump + dc
 
     @jax.jit
     def S_1212(w):
         """Self spectrum for the ZZ (Ising) interaction (featured: peak + hump + DC)."""
-        peak1 = 4e4 * L(w, 1.2e7, 4e-7)
-        hump = 2e4 * Gauss(w, 2.3e7, 4e6)
-        dc = 1e4 * L(w, 0, 2e-6)
+        peak1 = (4e4 * _TAU_SI) * L(w, 1.2e7 * _TAU_SI, 4e-7 / _TAU_SI)
+        hump = (2e4 * _TAU_SI) * Gauss(w, 2.3e7 * _TAU_SI, 4e6 * _TAU_SI)
+        dc = (1e4 * _TAU_SI) * L(w, 0, 2e-6 / _TAU_SI)
         return peak1 + hump + dc
 
 
@@ -143,8 +160,8 @@ if __name__ == "__main__":
     import numpy as np
     import os
 
-    # Parameters
-    tau = 2.5e-8
+    # Parameters (tau units: tau = 1)
+    tau = 1.0
     T = 160 * tau
     truncate = 20
     gamma = T / 14
@@ -174,8 +191,8 @@ if __name__ == "__main__":
         "S_2_12": S_2_12(wk, gamma12)
     }
 
-    # Plotting
-    xunits = 1e6
+    # Plotting (dimensionless tau-unit axes: x = w*tau, y = S*tau)
+    xunits = 1.0
     plot_params = {
         'lw': 1,
         'legendfont': 12,
@@ -228,7 +245,7 @@ if __name__ == "__main__":
 
     for ax_row in axs:
         for ax in ax_row:
-            ax.set_xlabel(r'$\omega$(MHz)', fontsize=plot_params['xlabelfont'])
+            ax.set_xlabel(r'$\omega\tau$', fontsize=plot_params['xlabelfont'])
             ax.tick_params(direction='in', labelsize=plot_params['tickfont'])
             ax.grid(True, alpha=0.3)
             ax.set_yscale('asinh')

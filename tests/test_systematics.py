@@ -17,7 +17,8 @@ from qns2q.characterize.systematics import (comb_inversion_systematic, analytic_
 from qns2q.characterize.inversion import _ramsey_fit_dc
 
 # Small but representative config (keep the grids light so the test stays fast).
-TAU = 2.5e-8
+# tau units (tau = 1): matches the dimensionless spectra in noise/spectra.py.
+TAU = 1.0
 T = 160 * TAU
 M = 10
 TRUNC = 8                       # fewer harmonics -> faster; invariant is grid-independent
