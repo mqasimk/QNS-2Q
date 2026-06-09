@@ -66,11 +66,11 @@ from qns2q.noise.spectra import S_11, S_22, S_1212
 from qns2q.paths import run_folder, project_root
 
 # --- knobs (kept light: this is a demonstrator, not a production run) ----------
-T_GRAIN  = 300            # time points per base period T (dt = T/T_GRAIN ~ 13 ns << 1/wmax)
-W_GRAIN  = 1500           # noise frequency grain (dw ~ 3.3 kHz: resolves the DC features)
+T_GRAIN  = 300            # time points per base period T (dt = T/T_GRAIN ~ 0.5 tau << 1/wmax)
+W_GRAIN  = 1500           # noise frequency grain (resolves the DC features)
 N_SHOTS  = 4000           # noise realizations per point
-M_VALUES = [1, 2, 4, 6, 8, 10]    # total free-evolution time t = M*T (4..40 us)
-FIT_FROM = 16e-6          # fit the slope on the linear (t >= FIT_FROM) tail
+M_VALUES = [1, 2, 4, 6, 8, 10]    # total free-evolution time t = M*T (160..1600 tau)
+FIT_FROM = 640.0          # fit the slope on the linear (t >= FIT_FROM) tail [tau units; was 16 us at tau=25 ns]
 CPMG_DIV = 6             # partner CPMG cycle = T/CPMG_DIV  (Exp B isolation knob)
 SEED     = 20260608
 
@@ -80,7 +80,7 @@ def S_zero(w):
     return jnp.zeros_like(w)
 
 
-def chi_theory_fid(S, t, wmax_int=2 * np.pi * 200e6, n=400001):
+def chi_theory_fid(S, t, wmax_int=2 * np.pi * 5.0, n=400001):
     """Analytic FID decay exponent chi(t) = (1/2)\\int dw/2pi S(w)|F_FID|^2 (one qubit)."""
     w = np.linspace(0.0, wmax_int, n)
     F2 = np.empty_like(w)
@@ -117,7 +117,7 @@ def sweep(label, pulse, l, spec_vec, cpmg_div=None, midpoint=True):
         C, E, T = run_point(m, pulse, l, spec_vec, cpmg_div, midpoint=midpoint)
         t_tot = m * T
         ts.append(t_tot); Cs.append(C); Es.append(E)
-        print(f"   M={m:2d}  t={t_tot*1e6:5.1f} us   C_{l},0 = {C:9.5f} +/- {E:.5f}   "
+        print(f"   M={m:2d}  t={t_tot:6.0f} tau  C_{l},0 = {C:9.5f} +/- {E:.5f}   "
               f"({time.time()-t0:.1f}s)")
     return np.array(ts), np.array(Cs), np.array(Es)
 
@@ -189,14 +189,14 @@ def main():
 
     ax = axs[0]
     tt = np.linspace(0, max(tA1), 200)
-    ax.plot(tt * 1e6, [chi_theory_fid(S_11, t) for t in tt], '-', color='black', lw=1,
+    ax.plot(tt, [chi_theory_fid(S_11, t) for t in tt], '-', color='black', lw=1,
             label=r'theory $\chi_{11}(t)$ (slope $S_{11}(0)/2$)')
-    ax.errorbar(tA1e * 1e6, CA1e, yerr=EA1e, fmt='x', color='#999999',
+    ax.errorbar(tA1e, CA1e, yerr=EA1e, fmt='x', color='#999999',
                 label=f'legacy $w{{=}}0$ grid (ratio {S11_estA_e/S11_0:.2f})')
-    ax.errorbar(tA1 * 1e6, CA1, yerr=EA1, fmt='o', color='#0072B2',
+    ax.errorbar(tA1, CA1, yerr=EA1, fmt='o', color='#0072B2',
                 label=f'midpoint grid (ratio {S11_estA/S11_0:.2f})')
-    ax.axvline(FIT_FROM * 1e6, color='grey', ls=':', lw=0.8)
-    ax.set_xlabel(r'free-evolution time $t = MT$ ($\mu$s)')
+    ax.axvline(FIT_FROM, color='grey', ls=':', lw=0.8)
+    ax.set_xlabel(r'free-evolution time $t = MT$ (units of $\tau$)')
     ax.set_ylabel(r'$C_{1,0}(t)$  (FID decay exponent $\chi_1$)')
     ax.set_title('(a) $2\\,d\\chi/dt$ recovers $S_{11}(0)$ exactly;\n'
                  'legacy $w{=}0$ noise grid biases it high')
@@ -204,17 +204,17 @@ def main():
     ax.grid(alpha=0.3)
 
     ax = axs[1]
-    ax.errorbar(tB0 * 1e6, CB0, yerr=EB0, fmt='o', color='#999999',
+    ax.errorbar(tB0, CB0, yerr=EB0, fmt='o', color='#999999',
                 label=r'FID/FID (leaks $S_{1212}$)')
-    ax.errorbar(tB1 * 1e6, CB1, yerr=EB1, fmt='^', color='#009E73',
+    ax.errorbar(tB1, CB1, yerr=EB1, fmt='^', color='#009E73',
                 label=r'FID/CPMG (partner decoupled)')
     # reference slopes
-    ax.plot(tB1 * 1e6, 0.5 * S11_0 * tB1, '--', color='#009E73', lw=1,
+    ax.plot(tB1, 0.5 * S11_0 * tB1, '--', color='#009E73', lw=1,
             label=r'slope $=S_{11}(0)/2$')
-    ax.plot(tB0 * 1e6, 0.5 * (S11_0 + S1212_0) * tB0, ':', color='#999999', lw=1,
+    ax.plot(tB0, 0.5 * (S11_0 + S1212_0) * tB0, ':', color='#999999', lw=1,
             label=r'slope $=(S_{11}{+}S_{1212})(0)/2$')
-    ax.axvline(FIT_FROM * 1e6, color='grey', ls=':', lw=0.8)
-    ax.set_xlabel(r'free-evolution time $t = MT$ ($\mu$s)')
+    ax.axvline(FIT_FROM, color='grey', ls=':', lw=0.8)
+    ax.set_xlabel(r'free-evolution time $t = MT$ (units of $\tau$)')
     ax.set_ylabel(r'$C_{1,0}(t)$')
     ax.set_title('(b) full model: partner CPMG isolates $S_{11}(0)$\n'
                  f'naive ratio {S11_estB0/(S11_0+S1212_0):.3f} vs leak target; '

@@ -136,6 +136,8 @@ class TestCrossSpectra:
 
     def test_gamma_introduces_imaginary_part(self):
         """Non-zero gamma should produce complex values."""
-        w = jnp.linspace(1e6, 5e7, 50)  # positive frequencies only
-        vals = S_1_2(w, 1e-7)
-        assert jnp.max(jnp.abs(jnp.imag(vals))) > 1e-3
+        # tau units: probe where the spectra live (w*tau ~ 0.02..1.25) with a
+        # time shift of a few tau.
+        w = jnp.linspace(0.025, 1.25, 50)  # positive frequencies only
+        vals = S_1_2(w, 4.0)
+        assert jnp.max(jnp.abs(jnp.imag(vals))) > 1e-3 * jnp.max(jnp.abs(vals))

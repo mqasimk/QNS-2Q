@@ -29,11 +29,17 @@ def current_regime():
     return regime
 
 
-def run_folder(regime=None, spam=False):
-    """Canonical run-folder *name*, e.g. ``DraftRun_NoSPAM_bland``."""
+def run_folder(regime=None, spam=False, protocol=None):
+    """Canonical run-folder *name*, e.g. ``DraftRun_NoSPAM_bland``.
+
+    ``protocol`` (e.g. 'raw' | 'mitigated' | 'robust') appends a suffix for the
+    SPAM-pipeline runs: ``DraftRun_SPAM_featured_robust``. Default None keeps the
+    canonical two-part names unchanged.
+    """
     regime = regime or current_regime()
     tag = "SPAM" if spam else "NoSPAM"
-    return f"DraftRun_{tag}_{regime}"
+    base = f"DraftRun_{tag}_{regime}"
+    return base if protocol is None else f"{base}_{protocol}"
 
 
 def project_root():
@@ -41,6 +47,6 @@ def project_root():
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def run_path(regime=None, spam=False):
+def run_path(regime=None, spam=False, protocol=None):
     """Absolute path to the canonical run folder for the (regime, spam) selection."""
-    return os.path.join(project_root(), run_folder(regime, spam))
+    return os.path.join(project_root(), run_folder(regime, spam, protocol))

@@ -86,7 +86,7 @@ class Config:
     def __init__(self, 
                  fname=None,
                  include_cross_spectra=True,
-                 Tg=4 * 14 * 1e-6,
+                 Tg=2240.0,   # tau units (= 4*14us at the legacy tau=25ns anchor)
                  tau_divisor=160,
                  M=1,
                  max_pulses=100,
@@ -126,6 +126,11 @@ class Config:
         
         # System Parameters
         self.Tqns = jnp.float64(self.params['T'])
+        # Units guard: tau-unit data has T = 160; SI-era data has T ~ 4e-6 s.
+        if float(self.Tqns) < 1.0:
+            print(f"[idle] WARNING: loaded T={float(self.Tqns):g} looks like "
+                  f"SI-era data (expected tau-unit T ~ 160). Regenerate the "
+                  f"spectra for this folder before trusting the optimization.")
         self.mc = int(self.params['truncate'])
         self.gamma = jnp.float64(self.params['gamma'])
         self.gamma12 = jnp.float64(self.params['gamma_12'])
@@ -147,7 +152,7 @@ class Config:
         
         # Extended gate time factors to include larger gate times
         # Factors are powers of 2 divisor of Tqns.
-        # Tqns is typically ~50us.
+        # Tqns is typically 160 tau.
         # Factor -1 -> Tg = Tqns * 2
         # Factor -2 -> Tg = Tqns * 4
         # Factor -3 -> Tg = Tqns * 8
@@ -634,8 +639,8 @@ def prepare_time_domain_overlap(SMat, w_grid, tau, T_seq, M):
     N_sym = SMat_sym.shape[-1]
 
     dt = 2 * np.pi / (N_sym * dw)
-    print(f"  Time-domain setup: pad_factor={pad_factor}, dt={dt*1e9:.2f} ns, "
-          f"tau/4={tau/4*1e9:.2f} ns")
+    print(f"  Time-domain setup: pad_factor={pad_factor}, dt={dt:.4f} tau, "
+          f"tau/4={tau/4:.4f} tau")
 
     lags_R = (jnp.arange(N_sym) - N_sym // 2) * dt
     RMat_vals = jnp.fft.ifft(SMat_sym, axis=-1)
@@ -1060,7 +1065,7 @@ def run_optimization_pipeline(config):
         config.Tg = Tg
         config.T_seq = Tg / config.M
         
-        print(f"\nGate Time: {Tg*1e6:.2f} us (Tg/T2q1={Tg/config.T2q1:.4f}, Tg/T2q2={Tg/config.T2q2:.4f})")
+        print(f"\nGate Time: {Tg:.1f} tau (Tg/T2q1={Tg/config.T2q1:.4f}, Tg/T2q2={Tg/config.T2q2:.4f})")
         
         # No Pulse Calculation
         pt_nopulse = jnp.array([0., config.T_seq])

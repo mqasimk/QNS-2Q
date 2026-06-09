@@ -114,27 +114,27 @@ def generate_pulse_plot():
     
     # --- Column 0: Known ---
     # Row 0: Qubit 1
-    axs[0, 0].step(t_known_1 * 1e6, y_known_1, where='post', color=COLOR_KNOWN)
+    axs[0, 0].step(t_known_1, y_known_1, where='post', color=COLOR_KNOWN)
     axs[0, 0].set_title("Best Known Sequence")
     
     # Row 1: Qubit 2
-    axs[1, 0].step(t_known_2 * 1e6, y_known_2, where='post', color=COLOR_KNOWN)
+    axs[1, 0].step(t_known_2, y_known_2, where='post', color=COLOR_KNOWN)
     
     # Row 2: Interaction
-    axs[2, 0].step(t_known_12 * 1e6, y_known_12, where='post', color=COLOR_KNOWN)
-    axs[2, 0].set_xlabel(r"Time ($\mu$s)")
+    axs[2, 0].step(t_known_12, y_known_12, where='post', color=COLOR_KNOWN)
+    axs[2, 0].set_xlabel(r"$t/\tau$")
 
     # --- Column 1: Optimized ---
     # Row 0: Qubit 1
-    axs[0, 1].step(t_opt_1 * 1e6, y_opt_1, where='post', color=COLOR_OPT)
+    axs[0, 1].step(t_opt_1, y_opt_1, where='post', color=COLOR_OPT)
     axs[0, 1].set_title("Best Optimized Sequence")
     
     # Row 1: Qubit 2
-    axs[1, 1].step(t_opt_2 * 1e6, y_opt_2, where='post', color=COLOR_OPT)
+    axs[1, 1].step(t_opt_2, y_opt_2, where='post', color=COLOR_OPT)
     
     # Row 2: Interaction
-    axs[2, 1].step(t_opt_12 * 1e6, y_opt_12, where='post', color=COLOR_OPT)
-    axs[2, 1].set_xlabel(r"Time ($\mu$s)")
+    axs[2, 1].step(t_opt_12, y_opt_12, where='post', color=COLOR_OPT)
+    axs[2, 1].set_xlabel(r"$t/\tau$")
 
     # 5. Styling & Labels
     # -------------------

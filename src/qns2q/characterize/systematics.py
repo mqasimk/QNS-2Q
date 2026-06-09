@@ -158,7 +158,9 @@ def comb_inversion_systematic(spectra, c_times, M, T, n_wfine=80001, n_tb=8000,
 
 
 def dc_systematic(spectra, M, T, dc_cts=None, n_tb_per_period=2000,
-                  n_wfine=300001, wmax_fid_factor=200e6, wmax_leak_factor=60e6):
+                  n_wfine=300001, wmax_fid_factor=5.0, wmax_leak_factor=1.5):
+    # wmax_*_factor are ordinary-frequency integration cutoffs in tau units
+    # (cycles per tau): 5.0 and 1.5 = the legacy 200 MHz and 60 MHz at tau = 25 ns.
     """Deterministic bias of the w=0 (DC) reconstruction point, per spectrum.
 
     The DC points come from a separate Ramsey-slope estimator, not the comb, so they
@@ -371,7 +373,9 @@ def forward_model_systematic(spectra, c_times, M, T, t_vec, gamma, gamma_12,
     return sys
 
 
-def dc_fit_systematic(spectra, t_sweep, gamma, gamma_12, n_w=400001, wmax=5e8):
+def dc_fit_systematic(spectra, t_sweep, gamma, gamma_12, n_w=400001, wmax=12.5):
+    # wmax is an angular-frequency integration cutoff in tau units (rad/tau):
+    # 12.5 = the legacy 5e8 rad/s at tau = 25 ns.
     """Deterministic bias of the multi-time DC slope fit, per spectrum.
 
     Mirrors ``inversion._ramsey_fit_dc``: builds the EXACT forward FID-decay curves

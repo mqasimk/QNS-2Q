@@ -26,6 +26,8 @@ jax.config.update("jax_enable_x64", True)
 
 from qns2q.model.observables import (make_c_12_0_mt, make_c_12_12_mt, make_c_a_0_mt,
                          make_c_a_b_mt)
+from qns2q.characterize.spam import (estimate_spam, make_c_12_0_mt_robust,
+                                     make_c_12_12_mt_robust, make_c_a_0_mt_robust)
 from qns2q.noise.spectra import S_11, S_22, S_1212
 from qns2q.model.trajectories import make_noise_mat_arr, solver_prop
 from qns2q.paths import run_folder, project_root
@@ -45,6 +47,15 @@ _EXP_MAP = {
     'C_a_b': make_c_a_b_mt,
 }
 
+# SPAM-robust builders (raw + twisting + wringing; see characterize.spam). The
+# C_a_b coefficients have no SPAM-robust estimator (paper Sec. SPAM-Robust QNS),
+# so S_1_12 / S_2_12 are not accessible under the robust protocol.
+_EXP_MAP_ROBUST = {
+    'C_12_0': make_c_12_0_mt_robust,
+    'C_12_12': make_c_12_12_mt_robust,
+    'C_a_0': make_c_a_0_mt_robust,
+}
+
 
 @dataclass
 class QNSExperimentConfig:
@@ -62,13 +73,35 @@ class QNSExperimentConfig:
         c: The SPAM error parameters.
         a1, b1, a2, b2: The measurement operators.
         spMit: A flag for SPAM mitigation.
+        spam_protocol: How the experiments handle the injected SPAM errors:
+            'none'      -- legacy oracle behavior: invert the TRUE confusion matrix
+                           and (if spMit) divide by the TRUE a_sp. With the default
+                           identity SPAM parameters this is the NoSPAM pipeline.
+            'raw'       -- no mitigation at all (identity CM, no SP division);
+                           quantifies the SPAM-corrupted reconstruction.
+            'mitigated' -- estimated-parameter mitigation (companion paper,
+                           SPAM-Mitigated QNS): calibrate (delta_hat, products),
+                           invert the ESTIMATED confusion matrix, divide by the
+                           ESTIMATED a_sp; transverse SP components are removed
+                           exactly by the prep-level phase twirl.
+            'robust'    -- SPAM-robust estimators (twisting + wringing, raw
+                           readout); harmonic experiments swept over M for the
+                           downstream SPAM-intercept regression.
+        spam_split_error: Relative error of the externally-supplied alpha_M vs
+            alpha_SP^z gauge split used by the 'mitigated' protocol (khan2025);
+            0 = faithful split. The measured products are always exact.
+        m_sweep_robust: Repetition numbers for the robust M-regression; defaults
+            to (M-4, M-2, M) when spam_protocol='robust'.
         gamma: The decay rate.
         gamma_12: The cross-decay rate.
         n_shots: The number of shots for the experiment.
         fname: The name of the folder to save the results in.
         parent_dir: The parent directory to save the results in.
     """
-    tau: jnp.float64 = 2.5e-8
+    # Time unit: the minimum pulse separation tau (tau = 1; all times in units of
+    # tau, all frequencies in 1/tau, spectra dimensionless S*tau -- see
+    # noise/spectra.py). The legacy SI anchor was tau = 25 ns.
+    tau: jnp.float64 = 1.0
     M: jnp.int64 = 10
     t_grain: jnp.int64 = 3000
     truncate: jnp.int64 = 20
@@ -84,6 +117,9 @@ class QNSExperimentConfig:
     a2: jnp.float64 = 1.
     b2: jnp.float64 = 1.
     spMit: bool = False
+    spam_protocol: str = 'none'
+    spam_split_error: float = 0.0
+    m_sweep_robust: tuple = ()
     # Bin-midpoint noise-synthesis grid: excludes the spurious w=0 static tone that
     # otherwise biases DC-sensitive observables by O(dw). Default True for new runs.
     midpoint: bool = True
@@ -121,6 +157,43 @@ class QNSExperimentConfig:
                            0.5 * (1 - self.a_m[1] - self.delta[1]),
                            0.5 * (1 + self.a_m[1] - self.delta[1])
                        ]]))
+
+        # --- SPAM-protocol resolution -------------------------------------------
+        # The TRUE injected parameters are (a_sp, c) for SP and (a_m, delta) for M.
+        # What varies per protocol is what the ESTIMATORS use:
+        #   cm_use   -- confusion matrix inverted by the estimators (None = raw),
+        #   a_sp_div -- SP divisor (None = legacy: true a_sp when spMit),
+        #   c_prep   -- transverse SP component actually prepared (the mitigated
+        #               protocol's phase twirl removes it exactly: every measured
+        #               quantity is linear in rho_in, so averaging the twirl is
+        #               identical to preparing the twirled, c=0 state).
+        if self.spam_protocol not in ('none', 'raw', 'mitigated', 'robust'):
+            raise ValueError(f"Invalid spam_protocol: {self.spam_protocol!r}")
+        self.spam_estimate = None
+        self.cm_use = self.CM
+        self.a_sp_div = None
+        self.c_prep = self.c
+        if self.spam_protocol == 'raw':
+            self.cm_use = None
+            self.spMit = False
+        elif self.spam_protocol == 'mitigated':
+            est = estimate_spam(self.a_m, self.delta,
+                                np.asarray(self.a_sp, dtype=float), self.c,
+                                self.spam_split_error)
+            self.spam_estimate = est
+            self.cm_use = jnp.array(est.cm)
+            self.a_sp_div = est.a_sp
+            self.spMit = True
+            self.c_prep = np.array([0. + 0.j, 0. + 0.j])
+        elif self.spam_protocol == 'robust':
+            self.cm_use = None
+            self.spMit = False
+            if not self.m_sweep_robust:
+                self.m_sweep_robust = tuple(
+                    m for m in (self.M - 4, self.M - 2, self.M) if m >= 2)
+            if len(self.m_sweep_robust) < 2:
+                raise ValueError("spam_protocol='robust' needs >= 2 M values "
+                                 f"(got m_sweep_robust={self.m_sweep_robust})")
 
 
 class ExperimentRunner:
@@ -182,32 +255,72 @@ class ExperimentRunner:
         print(f"Running experiment: {exp_name}")
         start_time = time.time()
 
-        if exp_type not in _EXP_MAP:
-            raise ValueError(f"Invalid experiment type: {exp_type}")
-
         ctimes = self.config.c_times if c_times is None else c_times
-        exp_func = _EXP_MAP[exp_type]
-        means, stderrs = exp_func(
-            solver_prop,
-            pulse_sequence,
-            self.config.t_vec,
-            ctimes,
-            self.config.CM,
-            self.config.spMit,
-            n_shots=self.config.n_shots,
-            m=self.config.M,
-            t_b=self.config.t_b,
-            a_m=self.config.a_m,
-            delta=self.config.delta,
-            a_sp=self.config.a_sp,
-            c=self.config.c,
-            noise_mats=self.noise_mats,
-            **kwargs)
+        means, stderrs = self._call_exp_func(
+            exp_type, pulse_sequence, self.config.t_vec, ctimes,
+            m=self.config.M, **kwargs)
         self.results[exp_name] = means
         self.results[exp_name + '_err'] = stderrs
 
         print(
             f"--- {exp_name} completed in {time.time() - start_time:.2f}s ---")
+
+    def _call_exp_func(self, exp_type: str, pulse_sequence: list, t_vec, c_times,
+                       m: int, **kwargs):
+        """Dispatch one coefficient measurement through the active SPAM protocol.
+
+        The estimator builder is selected from the robust map when
+        spam_protocol='robust'; the confusion matrix / SP divisor are the
+        protocol-resolved ``cm_use`` / ``a_sp_div`` (NOT necessarily the truth).
+        State prep always injects the TRUE (a_sp, c_prep) parameters.
+        """
+        robust = self.config.spam_protocol == 'robust'
+        exp_map = _EXP_MAP_ROBUST if robust else _EXP_MAP
+        if exp_type not in exp_map:
+            raise ValueError(
+                f"Invalid experiment type for spam_protocol="
+                f"{self.config.spam_protocol!r}: {exp_type}")
+        exp_func = exp_map[exp_type]
+        return exp_func(
+            solver_prop,
+            pulse_sequence,
+            t_vec,
+            c_times,
+            self.config.cm_use,
+            self.config.spMit,
+            n_shots=self.config.n_shots,
+            m=m,
+            t_b=self.config.t_b,
+            a_m=self.config.a_m,
+            delta=self.config.delta,
+            a_sp=self.config.a_sp,
+            c=self.config.c_prep,
+            a_sp_div=self.config.a_sp_div,
+            noise_mats=self.noise_mats,
+            **kwargs)
+
+    def run_experiment_msweep(self, exp_name: str, pulse_sequence: list,
+                              exp_type: str, m_values, **kwargs):
+        """Measure a harmonic observable at several repetition numbers M.
+
+        Used by the SPAM-robust protocol: the comb coefficient scales linearly in
+        M while the SPAM term is an M-independent intercept, so a linear
+        regression over ``m_values`` (inversion.regress_observables_over_M)
+        recovers the SPAM-free coefficient. Results are stored under
+        ``{exp_name}_Mrep{m}``.
+        """
+        for m in m_values:
+            m = int(m)
+            print(f"Running experiment: {exp_name} [M={m}]")
+            start_time = time.time()
+            tvec_m = self.config.t_vec[:m * self.config.t_grain]
+            means, stderrs = self._call_exp_func(
+                exp_type, pulse_sequence, tvec_m, self.config.c_times,
+                m=m, **kwargs)
+            self.results[f'{exp_name}_Mrep{m}'] = means
+            self.results[f'{exp_name}_Mrep{m}_err'] = stderrs
+            print(f"--- {exp_name} [M={m}] completed in "
+                  f"{time.time() - start_time:.2f}s ---")
 
     def run_dc_sweep(self, exp_name: str, pulse_sequence: list, exp_type: str,
                      m_sweep, dc_ct: float, **kwargs):
@@ -222,19 +335,12 @@ class ExperimentRunner:
         """
         print(f"Running DC sweep: {exp_name} over m={list(int(m) for m in m_sweep)}")
         start_time = time.time()
-        if exp_type not in _EXP_MAP:
-            raise ValueError(f"Invalid experiment type: {exp_type}")
-        exp_func = _EXP_MAP[exp_type]
         c_vals, c_errs = [], []
         for m in m_sweep:
             m = int(m)
             tvec_m = self.config.t_vec[:m * self.config.t_grain]
-            means, stderrs = exp_func(
-                solver_prop, pulse_sequence, tvec_m, [dc_ct], self.config.CM,
-                self.config.spMit, n_shots=self.config.n_shots, m=m,
-                t_b=self.config.t_b, a_m=self.config.a_m, delta=self.config.delta,
-                a_sp=self.config.a_sp, c=self.config.c, noise_mats=self.noise_mats,
-                **kwargs)
+            means, stderrs = self._call_exp_func(
+                exp_type, pulse_sequence, tvec_m, [dc_ct], m=m, **kwargs)
             c_vals.append(means[0])
             c_errs.append(stderrs[0])
         self.results[exp_name] = np.array(c_vals)
@@ -253,6 +359,22 @@ class ExperimentRunner:
         # The names of the spectra are saved in 'spec_vec_names' for reference.
         params_to_save = self.config.__dict__.copy()
         params_to_save.pop('spec_vec', None)
+        # SPAM-protocol fields: drop objects/None values np.savez can't store
+        # plainly; persist the estimate as flat arrays for the reconstruction
+        # stage and the record.
+        params_to_save.pop('spam_estimate', None)
+        params_to_save.pop('cm_use', None)
+        if params_to_save.get('a_sp_div') is None:
+            params_to_save.pop('a_sp_div', None)
+        params_to_save['m_sweep_robust'] = np.array(self.config.m_sweep_robust,
+                                                    dtype=int)
+        est = self.config.spam_estimate
+        if est is not None:
+            params_to_save['est_a_m'] = est.a_m
+            params_to_save['est_delta'] = est.delta
+            params_to_save['est_a_sp'] = est.a_sp
+            params_to_save['est_products'] = est.products
+            params_to_save['est_cm'] = est.cm
         params_to_save['tau'] = self.config.tau
         np.savez(
             os.path.join(self.path, "params.npz"),
@@ -275,25 +397,50 @@ def main(config=None):
     np.random.seed(RANDOM_SEED)
     print(f"Running QNS experiments [seed={RANDOM_SEED}]...")
     config = QNSExperimentConfig() if config is None else config
+    print(f"SPAM protocol: {config.spam_protocol}")
     runner = ExperimentRunner(config)
 
-    # Harmonic (comb) experiments -- reconstruct S(omega_k), k=1..truncate.
-    harmonic_experiments = [
-        ('C_12_0_MT_1', ['CPMG', 'CPMG'], 'C_12_0', {'state': 'pp'}),
-        ('C_12_0_MT_2', ['CDD3', 'CPMG'], 'C_12_0', {'state': 'pp'}),
-        ('C_12_0_MT_3', ['CPMG', 'CDD3'], 'C_12_0', {'state': 'pp'}),
-        ('C_12_12_MT_1', ['CPMG', 'CPMG'], 'C_12_12', {'state': 'pp'}),
-        ('C_12_12_MT_2', ['CDD3', 'CPMG'], 'C_12_12', {'state': 'pp'}),
-        ('C_1_0_MT_1', ['CDD1', 'CDD1-1/2'], 'C_a_0', {'l': 1}),
-        ('C_2_0_MT_1', ['CDD1-1/2', 'CDD1'], 'C_a_0', {'l': 2}),
-        ('C_12_0_MT_4', ['CDD1', 'CDD1'], 'C_12_0', {'state': 'pp'}),
-        ('C_1_2_MT_1', ['CPMG', 'FID'], 'C_a_b', {'l': 1}),
-        ('C_1_2_MT_2', ['CPMG', 'CDD1-1/4'], 'C_a_b', {'l': 1}),
-        ('C_2_1_MT_1', ['FID', 'CPMG'], 'C_a_b', {'l': 2}),
-        ('C_2_1_MT_2', ['CDD1-1/4', 'CPMG'], 'C_a_b', {'l': 2}),
-    ]
-    for exp_name, pulse_sequence, exp_type, kwargs in harmonic_experiments:
-        runner.run_experiment(exp_name, pulse_sequence, exp_type, **kwargs)
+    if config.spam_protocol == 'robust':
+        # SPAM-robust protocol: two-qubit (twisted+wrung) and single-qubit
+        # (twisted) coefficients, swept over M so the reconstruction stage can
+        # regress out the M-independent SPAM intercept. C_12_12 is exactly
+        # SPAM-free (the intercept cancels in D+ - D-), so a single M suffices.
+        # The C_a_b coefficients (-> S_1_12, S_2_12) have no robust estimator.
+        msweep_experiments = [
+            ('C_12_0_MT_1', ['CPMG', 'CPMG'], 'C_12_0', {'state': 'pp'}),
+            ('C_12_0_MT_2', ['CDD3', 'CPMG'], 'C_12_0', {'state': 'pp'}),
+            ('C_12_0_MT_3', ['CPMG', 'CDD3'], 'C_12_0', {'state': 'pp'}),
+            ('C_12_0_MT_4', ['CDD1', 'CDD1'], 'C_12_0', {'state': 'pp'}),
+            ('C_1_0_MT_1', ['CDD1', 'CDD1-1/2'], 'C_a_0', {'l': 1}),
+            ('C_2_0_MT_1', ['CDD1-1/2', 'CDD1'], 'C_a_0', {'l': 2}),
+        ]
+        for exp_name, pulse_sequence, exp_type, kwargs in msweep_experiments:
+            runner.run_experiment_msweep(exp_name, pulse_sequence, exp_type,
+                                         config.m_sweep_robust, **kwargs)
+        single_m_experiments = [
+            ('C_12_12_MT_1', ['CPMG', 'CPMG'], 'C_12_12', {'state': 'pp'}),
+            ('C_12_12_MT_2', ['CDD3', 'CPMG'], 'C_12_12', {'state': 'pp'}),
+        ]
+        for exp_name, pulse_sequence, exp_type, kwargs in single_m_experiments:
+            runner.run_experiment(exp_name, pulse_sequence, exp_type, **kwargs)
+    else:
+        # Harmonic (comb) experiments -- reconstruct S(omega_k), k=1..truncate.
+        harmonic_experiments = [
+            ('C_12_0_MT_1', ['CPMG', 'CPMG'], 'C_12_0', {'state': 'pp'}),
+            ('C_12_0_MT_2', ['CDD3', 'CPMG'], 'C_12_0', {'state': 'pp'}),
+            ('C_12_0_MT_3', ['CPMG', 'CDD3'], 'C_12_0', {'state': 'pp'}),
+            ('C_12_12_MT_1', ['CPMG', 'CPMG'], 'C_12_12', {'state': 'pp'}),
+            ('C_12_12_MT_2', ['CDD3', 'CPMG'], 'C_12_12', {'state': 'pp'}),
+            ('C_1_0_MT_1', ['CDD1', 'CDD1-1/2'], 'C_a_0', {'l': 1}),
+            ('C_2_0_MT_1', ['CDD1-1/2', 'CDD1'], 'C_a_0', {'l': 2}),
+            ('C_12_0_MT_4', ['CDD1', 'CDD1'], 'C_12_0', {'state': 'pp'}),
+            ('C_1_2_MT_1', ['CPMG', 'FID'], 'C_a_b', {'l': 1}),
+            ('C_1_2_MT_2', ['CPMG', 'CDD1-1/4'], 'C_a_b', {'l': 1}),
+            ('C_2_1_MT_1', ['FID', 'CPMG'], 'C_a_b', {'l': 2}),
+            ('C_2_1_MT_2', ['CDD1-1/4', 'CPMG'], 'C_a_b', {'l': 2}),
+        ]
+        for exp_name, pulse_sequence, exp_type, kwargs in harmonic_experiments:
+            runner.run_experiment(exp_name, pulse_sequence, exp_type, **kwargs)
 
     # --- DC (zero-frequency) characterization: multi-time FID decay-slope fit --------
     # Each FID observable is measured over a sweep of total evolution times t = m*T so
@@ -319,6 +466,12 @@ def main(config=None):
         ('C_1_12_FID',     ['FID', 'FID'], 'C_a_b',   {'l': 1}),
         ('C_2_12_FID',     ['FID', 'FID'], 'C_a_b',   {'l': 2}),
     ]
+    if config.spam_protocol == 'robust':
+        # The C_a_b DC observables have no SPAM-robust estimator; their DC points
+        # (S_1_12(0), S_2_12(0)) are not accessible under the robust protocol.
+        # Note: the DC slope fit is itself insensitive to the M-independent SPAM
+        # intercept, so no M-regression beyond the existing time sweep is needed.
+        dc_experiments = [e for e in dc_experiments if e[2] != 'C_a_b']
     for exp_name, pulse_sequence, exp_type, kwargs in dc_experiments:
         runner.run_dc_sweep(exp_name, pulse_sequence, exp_type, dc_m_sweep, dc_ct, **kwargs)
 
