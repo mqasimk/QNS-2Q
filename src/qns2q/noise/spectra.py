@@ -100,6 +100,16 @@ else:  # "featured"
 
 
 # --- Cross-spectra: derived from the selected self-spectra (regime-agnostic) -----
+#
+# These are the MAXIMALLY-COHERENT cross-spectra: |S_ab(w)| = sqrt(S_aa S_bb), i.e.
+# magnitude-squared coherence gamma^2(w) = |S_ab|^2/(S_aa S_bb) = 1 at every frequency,
+# with a pure linear phase exp(-i w gamma). This is realized EXACTLY by the synthesis
+# in trajectories.make_noise_mat_arr: b_1, b_2, b_12 are built from one shared Gaussian
+# draw (A, B), scaled by sqrt(S_aa) and time-shifted by gamma_a, so the true synthesized
+# cross-PSD is exactly this form at each synthesis line. (A naive FFT of the trajectories
+# estimates coherence ~0.93, but that deficit is a finite-window leakage artifact of the
+# time-shift gamma -- it vanishes at gamma=0 -- not a real decorrelation; the QNS forward
+# model and reconstruction both see coherence 1.)
 
 @jax.jit
 def S_1_2(w, gamma):

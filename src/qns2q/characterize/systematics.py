@@ -218,6 +218,159 @@ def dc_systematic(spectra, M, T, dc_cts=None, n_tb_per_period=2000,
     return out
 
 
+# ==============================================================================
+# Faithful forward-model (comb-inversion) systematic
+# ==============================================================================
+#
+# ``comb_inversion_systematic`` above approximates the forward map with a
+# SINGLE-PERIOD filter and a continuous integral. That under-quotes the bias on
+# the antisymmetric cross channels (the ['CDD3','CPMG'] imaginary channels), whose
+# off-tooth/grating weight the single-period kernel misses -- e.g. for S_1_2 the
+# true comb-inversion bias on Im is ~25%, but the single-period proxy reports ~half.
+#
+# This block computes the GENUINE forward observable. ``trajectories.make_propagator``
+# is exact pure dephasing (diagonal H, phase by trapezoid), so every measured
+# correlator is exactly a fixed combination of the toggled-phase covariances
+#
+#     Cov(Phi_a, Phi_b),   Phi_a = \int_0^{MT} y_a(t) b_a(t) dt,
+#
+# evaluated with the FULL M-rep toggles over the DISCRETE noise-synthesis grid --
+# i.e. the very quantity the simulator averages. The d(+/-) / a(+/-) extraction
+# combinations reduce to (validated against the simulated data to within shot noise):
+#
+#     C_12_0  = 0.5 (Var Phi_1 + Var Phi_2)     (selfs; qubit-qubit cross + Ising cancel)
+#     C_12_12 =      Cov(Phi_1, Phi_2)          (qubit-qubit cross)
+#     C_a_0   = 0.5 (Var Phi_l + Var Phi_12)    (self-l + Ising self)
+#     C_a_b   =      Cov(Phi_l, Phi_12)         (qubit-l <-> Ising cross)
+#
+# Channels: 1 -> (S11, gamma=0, toggle y[0,0]); 2 -> (S22, gamma, y[1,1]);
+#           12 -> (S1212, gamma_12, y[2,2] = y[0,0]*y[1,1]). Cross weight is
+# sqrt(S_a S_b) (the simulator builds b_1,b_2,b_12 from one shared random draw, so
+# the synthesized cross-PSD is exactly sqrt(S_a S_b) e^{-i w (gamma_b-gamma_a)}).
+
+# observable name -> (kind, [pulse_q1, pulse_q2], l)   -- mirrors experiments.py
+_FWD_OBS = {
+    'C_12_0_MT_1':  ('C120',  ['CPMG', 'CPMG'],      None),
+    'C_12_0_MT_2':  ('C120',  ['CDD3', 'CPMG'],      None),
+    'C_12_0_MT_3':  ('C120',  ['CPMG', 'CDD3'],      None),
+    'C_12_0_MT_4':  ('C120',  ['CDD1', 'CDD1'],      None),
+    'C_12_12_MT_1': ('C1212', ['CPMG', 'CPMG'],      None),
+    'C_12_12_MT_2': ('C1212', ['CDD3', 'CPMG'],      None),
+    'C_1_0_MT_1':   ('Ca0',   ['CDD1', 'CDD1-1/2'],  1),
+    'C_2_0_MT_1':   ('Ca0',   ['CDD1-1/2', 'CDD1'],  2),
+    'C_1_2_MT_1':   ('Cab',   ['CPMG', 'FID'],       1),
+    'C_1_2_MT_2':   ('Cab',   ['CPMG', 'CDD1-1/4'],  1),
+    'C_2_1_MT_1':   ('Cab',   ['FID', 'CPMG'],       2),
+    'C_2_1_MT_2':   ('Cab',   ['CDD1-1/4', 'CPMG'],  2),
+}
+
+_CH_TOGGLE = {1: (0, 0), 2: (1, 1), 12: (2, 2)}
+
+
+def forward_observables(spectra, c_times, M, T, t_vec, gamma, gamma_12, w_grain, wmax,
+                        chunk=2000):
+    """Exact deterministic 2nd-cumulant value of every harmonic QNS observable.
+
+    Returns ``{obs_name: ndarray(n_ctimes)}`` for the names in ``_FWD_OBS``. The
+    values are the noiseless (infinite-shot) forward-model observables for the
+    ``spectra`` (an ``analytic_spectra`` dict), computed with the full M-rep toggles
+    on the experiment's time grid ``t_vec`` and summed over the discrete synthesis
+    grid -- identical to what ``trajectories.solver_prop`` averages.
+    """
+    c_times = np.asarray(c_times)
+    n = len(c_times)
+    t_vec = np.asarray(t_vec)
+    t_j = jnp.asarray(t_vec)
+    tgrain = t_vec.size // M
+    tb_base = np.linspace(0, T, tgrain)
+
+    size_w = 2 * w_grain
+    dw = wmax / w_grain
+    wj = (np.arange(size_w) + 0.5) * (2 * wmax) / size_w        # midpoint synthesis grid
+    Sw = {1: np.real(np.asarray(spectra['S11'](wj))),
+          2: np.real(np.asarray(spectra['S22'](wj))),
+          12: np.real(np.asarray(spectra['S1212'](wj)))}
+    gam = {1: 0.0, 2: gamma, 12: gamma_12}
+    phase_shift = {ch: np.exp(1j * wj * gam[ch]) for ch in (1, 2, 12)}
+
+    def cov(Ga, cha, Gb, chb):
+        # Cov(Phi_a, Phi_b) = sum_j (dw/pi) W_ab(w_j) Re[ G_a(w_j)* G_b(w_j) ]
+        W = Sw[cha] if cha == chb else np.sqrt(Sw[cha] * Sw[chb])
+        return float(np.sum((dw / np.pi) * W * np.real(np.conj(Ga) * Gb)))
+
+    out = {k: np.zeros(n) for k in _FWD_OBS}
+    for i in range(n):
+        y_cache = {}        # pulse-tuple -> make_y result
+        G_cache = {}        # (pulse-tuple, ch) -> G(w_j)
+
+        def getG(pulse, ch):
+            key = (tuple(pulse), ch)
+            if key not in G_cache:
+                pk = tuple(pulse)
+                if pk not in y_cache:
+                    y_cache[pk] = make_y(tb_base, list(pulse), ctime=float(c_times[i]), m=M)
+                toggle = np.asarray(y_cache[pk][_CH_TOGGLE[ch]])
+                # G_a(w) = e^{i w gamma_a} * \int toggle(t) e^{i w t} dt   (full record)
+                ff = _ff_grid(toggle, t_j, wj, +1, chunk=chunk)
+                G_cache[key] = ff * phase_shift[ch]
+            return G_cache[key]
+
+        for name, (kind, pulse, l) in _FWD_OBS.items():
+            if kind == 'C120':
+                v = 0.5 * (cov(getG(pulse, 1), 1, getG(pulse, 1), 1)
+                           + cov(getG(pulse, 2), 2, getG(pulse, 2), 2))
+            elif kind == 'C1212':
+                v = cov(getG(pulse, 1), 1, getG(pulse, 2), 2)
+            elif kind == 'Ca0':
+                v = 0.5 * (cov(getG(pulse, l), l, getG(pulse, l), l)
+                           + cov(getG(pulse, 12), 12, getG(pulse, 12), 12))
+            else:  # 'Cab'
+                v = cov(getG(pulse, l), l, getG(pulse, 12), 12)
+            out[name][i] = v
+    return out
+
+
+def forward_model_systematic(spectra, c_times, M, T, t_vec, gamma, gamma_12,
+                             w_grain, wmax, inv_opts=None):
+    """Honest comb-inversion systematic for the harmonic reconstruction points.
+
+    Computes the exact deterministic forward observables for the analytic ``spectra``
+    (``forward_observables``), runs them through the SAME reconstruction kernels the
+    pipeline uses, and returns the residual ``recon(C_fwd) - S_theory(w_k)`` as the
+    per-spectrum bias: real arrays for 'S11'/'S22'/'S1212', complex (Re+iIm) for
+    'S12'/'S112'/'S212'. Supersedes ``comb_inversion_systematic`` -- it captures the
+    full finite-M comb response (not just the single-period proxy), so it does not
+    under-quote the antisymmetric (CDD3) cross-channel bias.
+    """
+    from qns2q.characterize.inversion import (recon_S_11, recon_S_22, recon_S_12_12,
+                                              recon_S_1_2, recon_S_1_12, recon_S_2_12)
+    opts = dict(inv_opts or {})
+    opts['diagnostics'] = False        # never spam diagnostics from inside the systematic
+    C = forward_observables(spectra, c_times, M, T, t_vec, gamma, gamma_12, w_grain, wmax)
+    kw = dict(c_times=np.asarray(c_times), m=M, T=T, **opts)
+
+    rec = {
+        'S11':   recon_S_11([C['C_12_0_MT_1'], C['C_12_0_MT_2']], **kw),
+        'S22':   recon_S_22([C['C_12_0_MT_1'], C['C_12_0_MT_3']], **kw),
+        'S1212': recon_S_12_12([C['C_1_0_MT_1'], C['C_2_0_MT_1'], C['C_12_0_MT_4']], **kw),
+        'S12':   recon_S_1_2([C['C_12_12_MT_1'], C['C_12_12_MT_2']], **kw),
+        'S112':  recon_S_1_12([C['C_1_2_MT_1'], C['C_1_2_MT_2']], **kw),
+        'S212':  recon_S_2_12([C['C_2_1_MT_1'], C['C_2_1_MT_2']], **kw),
+    }
+    wk = np.array([2 * np.pi * (k + 1) / T for k in range(len(c_times))])
+    theory = {'S11': spectra['S11'](wk), 'S22': spectra['S22'](wk),
+              'S1212': spectra['S1212'](wk), 'S12': spectra['S12'](wk),
+              'S112': spectra['S112'](wk), 'S212': spectra['S212'](wk)}
+
+    sys = {}
+    for key in ('S11', 'S22', 'S1212'):
+        sys[key] = np.real(np.asarray(rec[key])) - np.real(np.asarray(theory[key]))
+    for key in ('S12', 'S112', 'S212'):
+        d = np.asarray(rec[key]) - np.asarray(theory[key])
+        sys[key] = np.real(d) + 1j * np.imag(d)
+    return sys
+
+
 def analytic_spectra(gamma, gamma_12):
     """Ground-truth spectrum callables S(w) for the active regime (exact systematic)."""
     from qns2q.noise.spectra import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
