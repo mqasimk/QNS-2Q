@@ -48,13 +48,21 @@ def make_noise_mat_arr(act, **kwargs):
     truncate = kwargs.get('truncate')
     gamma = kwargs.get('gamma')
     gamma_12 = kwargs.get('gamma_12')
+    # `midpoint=True` samples the noise-synthesis frequency grid at bin midpoints
+    # (k+1/2)dw instead of the endpoints k*dw, which excludes the exact w=0 tone.
+    # The w=0 tone otherwise injects a spurious *static* offset of variance
+    # dw*S(0)/pi into every trajectory, biasing DC-sensitive observables (e.g. the
+    # T2*/Ramsey decay) by O(dw). Default False preserves legacy seeded runs.
+    midpoint = kwargs.get('midpoint', False)
     if act == 'load':
         return np.load('noise_mats.npy', allow_pickle=True)
     elif act == 'make':
-        S_11, C_11 = make_noise_mat(spec_vec[0], t_vec, w_grain=w_grain, wmax=wmax, trunc_n=truncate, gamma=0.)
-        S_22g, C_22g = make_noise_mat(spec_vec[1], t_vec, w_grain=w_grain, wmax=wmax, trunc_n=truncate, gamma=gamma)
+        S_11, C_11 = make_noise_mat(spec_vec[0], t_vec, w_grain=w_grain, wmax=wmax, trunc_n=truncate, gamma=0.,
+                                    midpoint=midpoint)
+        S_22g, C_22g = make_noise_mat(spec_vec[1], t_vec, w_grain=w_grain, wmax=wmax, trunc_n=truncate, gamma=gamma,
+                                      midpoint=midpoint)
         S_1212g, C_1212g = make_noise_mat(spec_vec[2], t_vec, w_grain=w_grain, wmax=wmax, trunc_n=truncate,
-                                      gamma=gamma_12)
+                                      gamma=gamma_12, midpoint=midpoint)
         return jnp.array([[S_11, C_11], [S_22g, C_22g], [S_1212g, C_1212g]])
     elif act == 'save':
         mats = make_noise_mat_arr('make', **kwargs)
@@ -142,9 +150,14 @@ def make_noise_mat(spec, t_vec, **kwargs):
     w_grain = kwargs.get('w_grain')
     wmax = kwargs.get('wmax')
     gamma = kwargs.get('gamma')
+    midpoint = kwargs.get('midpoint', False)
     size_w = int(2 * w_grain)
-    w = jnp.linspace(0, 2 * wmax, size_w)
     dw = wmax / w_grain
+    if midpoint:
+        # Bin-midpoint grid: excludes the exact w=0 tone (no spurious static term).
+        w = (jnp.arange(size_w) + 0.5) * (2 * wmax) / size_w
+    else:
+        w = jnp.linspace(0, 2 * wmax, size_w)
     Sf = jax.vmap(jax.vmap(sinM, in_axes=(None, 0, None, None, None)), in_axes=(None, None, 0, None, None))
     Cf = jax.vmap(jax.vmap(cosM, in_axes=(None, 0, None, None, None)), in_axes=(None, None, 0, None, None))
     return Sf(spec, w, t_vec, dw, gamma), Cf(spec, w, t_vec, dw, gamma)

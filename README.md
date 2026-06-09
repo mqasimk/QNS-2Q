@@ -65,13 +65,7 @@ QNS-2Q/
 │   ├── cz_pulse_plot.py              # Stage 4: CZ pulse sequence visualization
 │   ├── id_plots.py                   # Stage 4: Identity gate publication figures
 │   ├── qns_plots.py                  # Stage 4: QNS spectra comparison plots
-│   ├── plot_utils.py                 # Shared plotting utilities
-│   │
-│   ├── cz_optimize_legacy.py         # Legacy: previous CZ optimization version
-│   ├── id_optimize_v2_legacy.py      # Legacy: previous ID optimization v2
-│   ├── id_optimize_v3_legacy.py      # Legacy: previous ID optimization v3
-│   ├── opt_plot.py                   # Auxiliary plotting scripts
-│   └── opt_window.py                 # Window optimization helper
+│   └── plot_utils.py                 # Shared plotting utilities
 └── tests/
     ├── conftest.py                   # Shared test fixtures and path setup
     ├── test_spectra_input.py         # Tests for noise spectrum definitions
@@ -126,9 +120,15 @@ All scripts are standalone runners. Configuration is done by editing the config 
 
 The active noise model *and* output folder are selected by the `QNS2Q_REGIME` environment variable (`bland` or `featured`, default `featured`), resolved centrally in `run_paths.py`. Switch the whole pipeline with one variable — no source edits:
 
+> **Layout note (updated).** The code is now a package under `src/qns2q/`
+> (`characterize/` + `control/` arms, shared `noise/`+`model/`, `viz/`), run from the
+> **repo root** via thin `scripts/run_*.py` entry points. The per-stage `python <file>.py`
+> commands below map to `python scripts/run_<stage>.py` (e.g. `run_experiments`,
+> `run_reconstruct`, `run_cz`, `run_idle`, `run_id_plots`, …). Paths resolve from
+> `qns2q.paths.project_root()`, so no `cd src/` is needed. **CLAUDE.md is authoritative.**
+
 ```bash
-cd src/
-export QNS2Q_REGIME=featured   # or: bland
+export QNS2Q_REGIME=featured   # or: bland   (run from the repo root)
 ```
 
 ### Stage 1: Generate QNS Experiment Data
@@ -136,7 +136,7 @@ export QNS2Q_REGIME=featured   # or: bland
 Simulates QNS experiments using configurable pulse sequences (CPMG, CDD1, CDD3) and computes correlation function observables ($C_{12,0}$, $C_{12,12}$, $C_{a,0}$, $C_{a,b}$) with error bars.
 
 ```bash
-python qns_experiments.py
+python scripts/run_experiments.py
 ```
 
 **Configuration:** Edit `QNSExperimentConfig` in the script.
@@ -144,9 +144,9 @@ python qns_experiments.py
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `T` | Total experiment time per block | `160 * tau` |
-| `M` | Number of blocks | `1` |
-| `t_grain` | Time discretization grain | `10000` |
-| `w_grain` | Frequency discretization grain | `10000` |
+| `M` | Number of blocks | `10` |
+| `t_grain` | Time discretization grain | `3000` |
+| `w_grain` | Frequency discretization grain | `500` |
 | `truncate` | Number of harmonics | `20` |
 | `n_shots` | Noise realizations per experiment | `10000` |
 | `a_sp` | State preparation fidelities | `[1., 1.]` |

@@ -3,7 +3,7 @@ matplotlib.use('Agg') # Use non-interactive backend
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from run_paths import run_path
+from qns2q.paths import run_path
 
 def generate_publication_plot():
     """

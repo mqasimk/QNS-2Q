@@ -3,7 +3,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from run_paths import run_path
+from qns2q.paths import run_path
 
 def make_tk12(tk1, tk2):
     """

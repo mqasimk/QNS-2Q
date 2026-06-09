@@ -17,11 +17,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
-from spectral_inversion import (recon_S_11, recon_S_22, recon_S_1_2, recon_S_12_12, recon_S_1_12, recon_S_2_12,
+from qns2q.characterize.inversion import (recon_S_11, recon_S_22, recon_S_1_2, recon_S_12_12, recon_S_1_12, recon_S_2_12,
                                 recon_S_11_dc, recon_S_22_dc, recon_S_1212_dc,
-                                recon_S_1_2_dc, recon_S_1_12_dc, recon_S_2_12_dc)
-from spectra_input import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
-from run_paths import run_folder
+                                recon_S_1_2_dc, recon_S_1_12_dc, recon_S_2_12_dc,
+                                truncation_bias_estimate)
+from qns2q.noise.spectra import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
+from qns2q.paths import run_folder, project_root
 
 
 # --- Publication figure constants ---
@@ -82,8 +83,27 @@ def setup_pub_rcparams(font_scale='compact'):
 
 @dataclass
 class SpectraReconConfig:
-    """Configuration and parameters for spectra reconstruction."""
+    """Configuration and parameters for spectra reconstruction.
+
+    Reconstruction-method options (all default to the legacy behavior):
+
+    inversion_method : {'direct','lstsq','tikhonov'}
+        Linear-solve backend for the harmonic inversion. 'direct' is the legacy
+        square inverse; 'lstsq'/'tikhonov' are robust to ill-conditioning and to
+        overdetermined (tall-U) probe sets.
+    reg_lambda : float
+        Tikhonov ridge parameter (only used when inversion_method='tikhonov').
+    enforce_nonneg : bool
+        Project the three real self-spectra onto S>=0 via NNLS (physical prior).
+    diagnostics : bool
+        Print cond(U) / singular values and a high-frequency truncation-bias
+        estimate for each reconstruction.
+    """
     data_folder: str
+    inversion_method: str = 'direct'
+    reg_lambda: float = 0.0
+    enforce_nonneg: bool = False
+    diagnostics: bool = False
     params: Dict[str, Any] = field(init=False)
     t_vec: np.ndarray = field(init=False)
     w_grain: int = field(init=False)
@@ -97,8 +117,7 @@ class SpectraReconConfig:
 
     def __post_init__(self):
         """Load parameters from the data folder after initialization."""
-        parent_dir = os.pardir
-        path = os.path.join(parent_dir, self.data_folder)
+        path = os.path.join(project_root(), self.data_folder)
         if not os.path.isdir(path):
             raise FileNotFoundError(f"Data folder not found at: {path}")
 
@@ -152,7 +171,7 @@ class SpectraReconstructor:
 
     def load_observables(self):
         """Loads the observables array from the data folder."""
-        path = os.path.join(os.pardir, self.config.data_folder, "results.npz")
+        path = os.path.join(project_root(), self.config.data_folder, "results.npz")
         self.observables = np.load(path)
 
     def reconstruct(self):
@@ -177,12 +196,26 @@ class SpectraReconstructor:
                 return res
             return res, np.zeros(c.truncate) # Dummy error
 
-        S_11_k, S_11_err = call_recon(recon_S_11, ['C_12_0_MT_1', 'C_12_0_MT_2'], c_times=c.c_times, m=c.M, T=c.T)
-        S_22_k, S_22_err = call_recon(recon_S_22, ['C_12_0_MT_1', 'C_12_0_MT_3'], c_times=c.c_times, m=c.M, T=c.T)
-        S_12_12_k, S_12_12_err = call_recon(recon_S_12_12, ['C_1_0_MT_1', 'C_2_0_MT_1', 'C_12_0_MT_4'], c_times=c.c_times, m=c.M, T=c.T)
-        S_1_2_k, S_1_2_err = call_recon(recon_S_1_2, ['C_12_12_MT_1', 'C_12_12_MT_2'], c_times=c.c_times, m=c.M, T=c.T)
-        S_1_12_k, S_1_12_err = call_recon(recon_S_1_12, ['C_1_2_MT_1', 'C_1_2_MT_2'], c_times=c.c_times, m=c.M, T=c.T)
-        S_2_12_k, S_2_12_err = call_recon(recon_S_2_12, ['C_2_1_MT_1', 'C_2_1_MT_2'], c_times=c.c_times, m=c.M, T=c.T)
+        # Inversion-backend options (selectable via SpectraReconConfig).
+        inv_opts = dict(inversion_method=c.inversion_method, reg_lambda=c.reg_lambda,
+                        diagnostics=c.diagnostics)
+        self_opts = dict(inv_opts, enforce_nonneg=c.enforce_nonneg)
+        if c.diagnostics:
+            print(f"[reconstruct] inversion_method={c.inversion_method} "
+                  f"reg_lambda={c.reg_lambda} enforce_nonneg={c.enforce_nonneg}")
+
+        S_11_k, S_11_err = call_recon(recon_S_11, ['C_12_0_MT_1', 'C_12_0_MT_2'], c_times=c.c_times, m=c.M, T=c.T, **self_opts)
+        S_22_k, S_22_err = call_recon(recon_S_22, ['C_12_0_MT_1', 'C_12_0_MT_3'], c_times=c.c_times, m=c.M, T=c.T, **self_opts)
+        S_12_12_k, S_12_12_err = call_recon(recon_S_12_12, ['C_1_0_MT_1', 'C_2_0_MT_1', 'C_12_0_MT_4'], c_times=c.c_times, m=c.M, T=c.T, **self_opts)
+        S_1_2_k, S_1_2_err = call_recon(recon_S_1_2, ['C_12_12_MT_1', 'C_12_12_MT_2'], c_times=c.c_times, m=c.M, T=c.T, **inv_opts)
+        S_1_12_k, S_1_12_err = call_recon(recon_S_1_12, ['C_1_2_MT_1', 'C_1_2_MT_2'], c_times=c.c_times, m=c.M, T=c.T, **inv_opts)
+        S_2_12_k, S_2_12_err = call_recon(recon_S_2_12, ['C_2_1_MT_1', 'C_2_1_MT_2'], c_times=c.c_times, m=c.M, T=c.T, **inv_opts)
+
+        if c.diagnostics:
+            for name, fn, args in [('S_11', S_11, ()), ('S_22', S_22, ()), ('S_1212', S_1212, ())]:
+                frac = truncation_bias_estimate(fn, c.T, c.truncate, args=args)
+                print(f"    [diag] {name}: spectral weight above comb cutoff "
+                      f"omega_kmax = {100*frac:.2f}% (truncation bias)")
 
         # Reconstruct DC (w=0) values from FID experiments
         # For DC, if has_errors, result is (val, err), else val.
@@ -192,10 +225,10 @@ class SpectraReconstructor:
                 return res
             return res, 0.0
 
-        S_11_dc, S_11_dc_err = call_recon_dc(recon_S_11_dc, ['C_12_0_FID_CPMG'], c_times=c.c_times, m=c.M, T=c.T,
-                                S_22_k=S_22_k, S_1212_k=S_12_12_k)
-        S_22_dc, S_22_dc_err = call_recon_dc(recon_S_22_dc, ['C_12_0_CPMG_FID'], c_times=c.c_times, m=c.M, T=c.T,
-                                S_11_k=S_11_k, S_1212_k=S_12_12_k)
+        # Self-spectra DC: partner-decoupled single-qubit FID Ramsey slope
+        # S_aa(0) = 2<C_{a,0}>/(MT) (see spectral_inversion.recon_S_11_dc).
+        S_11_dc, S_11_dc_err = call_recon_dc(recon_S_11_dc, ['C_1_0_FIDCDD3'], m=c.M, T=c.T)
+        S_22_dc, S_22_dc_err = call_recon_dc(recon_S_22_dc, ['C_2_0_CDD3FID'], m=c.M, T=c.T)
         S_1212_dc, S_1212_dc_err = call_recon_dc(recon_S_1212_dc, ['C_12_0_FID_FID'], m=c.M, T=c.T,
                                     S_11_dc=S_11_dc, S_22_dc=S_22_dc, 
                                     S_11_dc_err=S_11_dc_err, S_22_dc_err=S_22_dc_err)
@@ -231,7 +264,7 @@ class SpectraReconstructor:
 
     def _get_output_dir(self, subdir):
         """Returns (and creates) a subfolder inside the data folder for figures."""
-        path = os.path.join(os.pardir, self.config.data_folder, subdir)
+        path = os.path.join(project_root(), self.config.data_folder, subdir)
         os.makedirs(path, exist_ok=True)
         return path
 
@@ -466,7 +499,7 @@ class SpectraReconstructor:
     def save_reconstructed_spectra(self):
         """Saves the reconstructed spectra (including DC at w=0) to a .npz file."""
         # Save specs.npz at the data folder root (consumed by downstream scripts)
-        path = os.path.join(os.pardir, self.config.data_folder, "specs.npz")
+        path = os.path.join(project_root(), self.config.data_folder, "specs.npz")
         save_dict = dict(
             wk=self.wk,
             S11=self.reconstructed_spectra['S_11_k'], S22=self.reconstructed_spectra['S_22_k'],
