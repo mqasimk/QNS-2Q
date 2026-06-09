@@ -40,13 +40,21 @@ def Gauss(w, w0, sig):
 _REGIME = current_regime()
 
 if _REGIME == "bland":
-    # Monotonic Lorentzian model -- verbatim from 77e516a^:src/spectra_input.py.
+    # Monotonic model -- shape families from 77e516a^:src/spectra_input.py, weakened
+    # ~5x (and the Ising cusp broadened 10x) so the w=0 point is measurable by the
+    # multi-time FID decay-slope DC protocol. The original amplitudes (S11/S22/S1212 =
+    # 2.5e5/1e5/1e6, Ising tc=1e-5) put the joint FID/FID coherences -- which decay
+    # with the SUM of all self variances -- below the n_shots=2000 ensemble floor by
+    # the 3rd of 10 sweep points, and the 5e4 rad/s Ising cusp needed t >> 130 us to
+    # reach the linear (slope = S(0)) regime vs the 40 us sweep. With these values the
+    # worst decay exponent at t_max=40 us is ~3.4 (signal >= 1.5x floor) and every
+    # channel is >= 95% linear over the fit window.
     @jax.jit
     def S_11(w):
         """Self spectrum for qubit 1 (bland)."""
         tc = 1e-6
         S0 = 0*3e4
-        St2 = 2.5e5
+        St2 = 5e4
         w0 = 1.4e7
         return (S0*(0*Gauss(w, 1.75*w0, 10/tc)+L(w, w0, 1*tc))
                 +St2*L(w, 0, tc))
@@ -56,7 +64,7 @@ if _REGIME == "bland":
         """Self spectrum for qubit 2 (bland)."""
         tc=1.5e-6
         S0 = 0*2.5e4
-        St2 = 1e5
+        St2 = 2e4
         w0=0.8e7
         return (S0*(Gauss(w, 1.8*w0, 10/tc)+Gauss(w, 2.5*w0, 20/tc))
                 +St2*L(w, 0, tc))
@@ -64,9 +72,9 @@ if _REGIME == "bland":
     @jax.jit
     def S_1212(w):
         """Self spectrum for the ZZ (Ising) interaction (bland)."""
-        tc = 1e-5
+        tc = 1e-6
         S0 = 0*1e3
-        St2 = 1e6
+        St2 = 4e4
         w0 = 1.5*10**7
         return St2/(1+(2*tc*jnp.abs(w)))
 
