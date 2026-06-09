@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from spectra_input import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
+from qns2q.noise.spectra import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
+from qns2q.paths import project_root
 
 # --- Configuration ---
 # Directories for the two datasets to be compared
@@ -82,7 +83,7 @@ def plot_all_spectrums(axs, w_plot, wk, specs1, specs2, params):
 
 def main():
     """Main function to load data, plot, and save the results."""
-    project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    project_dir = project_root()
     output_path = os.path.join(project_dir, OUTPUT_DIR)
 
     specs1, specs2, params = load_data(project_dir)

@@ -9,9 +9,6 @@ The main components are:
 - ExperimentRunner: A class that takes a configuration object and runs the
   experiments.
 - A main execution block that demonstrates how to use these components.
-
-Author: [Q]
-Date: [01/18/2026]
 """
 
 
@@ -21,14 +18,17 @@ from dataclasses import dataclass, field
 
 import jax.numpy as jnp
 import numpy as np
-import jax
-jax.config.update("jax_enable_x64", True)
+import matplotlib.pyplot as plt
 
-from observables import (make_c_12_0_mt, make_c_12_12_mt, make_c_a_0_mt,
+from qns2q.model.observables import (make_c_12_0_mt, make_c_12_12_mt, make_c_a_0_mt,
                          make_c_a_b_mt)
-from spectra_input import S_11, S_22, S_1212
-from trajectories import make_noise_mat_arr, solver_prop
-from run_paths import run_folder
+from qns2q.noise.spectra import S_11, S_22, S_1212
+from qns2q.model.trajectories import make_noise_mat_arr, solver_prop
+from qns2q.paths import project_root
+
+# Fixed RNG seed. solver_prop() draws its per-shot noise keys from np.random,
+# so seeding makes the published C_1_0_MT_vs_M figure reproducible.
+RANDOM_SEED = 20260608
 
 
 @dataclass
@@ -53,34 +53,34 @@ class QNSExperimentConfig:
         fname: The name of the folder to save the results in.
         parent_dir: The parent directory to save the results in.
     """
-    tau: jnp.float64 = 2.5e-8
-    M: jnp.int64 = 10
-    t_grain: jnp.int64 = 3000
-    truncate: jnp.int64 = 20
-    w_grain: jnp.int64 = 500
+    tau: jnp.float32 = 2.5e-8
+    M: jnp.int32 = 18
+    t_grain: jnp.int32 = 1500
+    truncate: jnp.int32 = 5
+    w_grain: jnp.int32 = 1000
     spec_vec: list = field(default_factory=lambda: [S_11, S_22, S_1212])
-    a_sp: np.ndarray = field(default_factory=lambda: jnp.array([1., 1.]))
+    a_sp: np.ndarray = field(default_factory=lambda: jnp.array([0.99, 0.98]))
     c: np.ndarray = field(
         default_factory=lambda: np.array(
-            [jnp.array(0. + 0. * 1j),
-             jnp.array(0. + 0. * 1j)]))
-    a1: jnp.float64 = 1.
-    b1: jnp.float64 = 1.
-    a2: jnp.float64 = 1.
-    b2: jnp.float64 = 1.
+            [jnp.array(0. + 0.01 * 1j),
+             jnp.array(0. - 0.02 * 1j)]))
+    a1: jnp.float32 = 0.990
+    b1: jnp.float32 = 0.980
+    a2: jnp.float32 = 0.985
+    b2: jnp.float32 = 0.970
     spMit: bool = False
-    T: jnp.float64 = 160*tau
-    gamma: jnp.float64 = T / 14
-    gamma_12: jnp.float64 = T / 28
-    n_shots: jnp.int64 = 10000
-    fname: str = field(default_factory=run_folder)
+    T: jnp.float32 = 160*tau
+    gamma: jnp.float32 = T / 14
+    gamma_12: jnp.float32 = T / 28
+    n_shots: jnp.int32 = 2000
+    fname: str = "DraftRun_MScaling"
     parent_dir: str = os.pardir
 
     def __post_init__(self):
         self.wmax = 2 * np.pi * self.truncate / self.T
         self.t_b = jnp.linspace(0, self.T, self.t_grain)
         self.t_vec = jnp.linspace(0, self.M * self.T,
-                                 self.M * jnp.size(self.t_b))
+                                  self.M * jnp.size(self.t_b))
         self.c_times = jnp.array([self.T / n for n in range(1, self.truncate + 1)])
         # Store names of spectra functions for saving, as functions aren't picklable
         self.spec_vec_names = [f.__name__ for f in self.spec_vec]
@@ -91,18 +91,18 @@ class QNSExperimentConfig:
                 0.5 * (1 + self.a_m[0] + self.delta[0]),
                 0.5 * (1 - self.a_m[0] + self.delta[0])
             ],
-                       [
-                           0.5 * (1 - self.a_m[0] - self.delta[0]),
-                           0.5 * (1 + self.a_m[0] - self.delta[0])
-                       ]]),
+                [
+                    0.5 * (1 - self.a_m[0] - self.delta[0]),
+                    0.5 * (1 + self.a_m[0] - self.delta[0])
+                ]]),
             jnp.array([[
                 0.5 * (1 + self.a_m[1] + self.delta[1]),
                 0.5 * (1 - self.a_m[1] + self.delta[1])
             ],
-                       [
-                           0.5 * (1 - self.a_m[1] - self.delta[1]),
-                           0.5 * (1 + self.a_m[1] - self.delta[1])
-                       ]]))
+                [
+                    0.5 * (1 - self.a_m[1] - self.delta[1]),
+                    0.5 * (1 + self.a_m[1] - self.delta[1])
+                ]]))
 
 
 class ExperimentRunner:
@@ -126,7 +126,7 @@ class ExperimentRunner:
         """
         Creates the output directory if it doesn't exist.
         """
-        path = os.path.join(self.config.parent_dir, self.config.fname)
+        path = os.path.join(project_root(), self.config.fname)
         if not os.path.exists(path):
             os.mkdir(path)
         return path
@@ -209,40 +209,80 @@ class ExperimentRunner:
         np.savez(os.path.join(self.path, "results.npz"), **self.results)
         print(f"Results saved to {self.path}")
 
-
 def main():
     """
     Main function to run the QNS experiments.
+
+    Produces C_1_0_MT_vs_M.pdf: for a fixed measured qubit (``l_index``), the
+    reconstruction observable C_{1,0}(MT) is evaluated at each of the
+    ``truncate`` control-time harmonics (c_times = T/k, k = 1..truncate) and
+    plotted against M. The plotted curves are indexed by that harmonic index --
+    the superscript "(l)" in C_{1,0}^{(l)} -- which is distinct from
+    ``l_index`` (the measured qubit) and from the CDD order; the symbol
+    collision is noted in the figure caption.
     """
-    config = QNSExperimentConfig()
-    runner = ExperimentRunner(config)
+    # Pin the RNG: solver_prop draws its per-shot noise keys from np.random,
+    # so seeding here makes the published figure reproducible.
+    np.random.seed(RANDOM_SEED)
 
-    experiments = [
-        ('C_12_0_MT_1', ['CPMG', 'CPMG'], 'C_12_0', {'state': 'pp'}),
-        ('C_12_0_MT_2', ['CDD3', 'CPMG'], 'C_12_0', {'state': 'pp'}),
-        ('C_12_0_MT_3', ['CPMG', 'CDD3'], 'C_12_0', {'state': 'pp'}),
-        ('C_12_12_MT_1', ['CPMG', 'CPMG'], 'C_12_12', {'state': 'pp'}),
-        ('C_12_12_MT_2', ['CDD3', 'CPMG'], 'C_12_12', {'state': 'pp'}),
-        ('C_1_0_MT_1', ['CDD1', 'CDD1-1/2'], 'C_a_0', {'l': 1}),
-        ('C_2_0_MT_1', ['CDD1-1/2', 'CDD1'], 'C_a_0', {'l': 2}),
-        ('C_12_0_MT_4', ['CDD1', 'CDD1'], 'C_12_0', {'state': 'pp'}),
-        ('C_1_2_MT_1', ['CPMG', 'FID'], 'C_a_b', {'l': 1}),
-        ('C_1_2_MT_2', ['CPMG', 'CDD1-1/4'], 'C_a_b', {'l': 1}),
-        ('C_2_1_MT_1', ['FID', 'CPMG'], 'C_a_b', {'l': 2}),
-        ('C_2_1_MT_2', ['CDD1-1/4', 'CPMG'], 'C_a_b', {'l': 2}),
-        # FID experiments for DC spectral characterization
-        ('C_12_0_FID_CPMG', ['FID', 'CPMG'], 'C_12_0', {'state': 'pp'}),
-        ('C_12_0_CPMG_FID', ['CPMG', 'FID'], 'C_12_0', {'state': 'pp'}),
-        ('C_12_0_FID_FID',  ['FID', 'FID'],  'C_12_0', {'state': 'pp'}),
-        ('C_12_12_FID',     ['FID', 'FID'],  'C_12_12', {'state': 'pp'}),
-        ('C_1_12_FID',      ['FID', 'FID'],  'C_a_b',   {'l': 1}),
-        ('C_2_12_FID',      ['FID', 'FID'],  'C_a_b',   {'l': 2}),
-    ]
+    m_values = list(range(5, 20))
+    c_1_0_mt_1_results = []
+    l_index = 1  # measured qubit (subscript in C_{1,0}); NOT the harmonic index
 
-    for exp_name, pulse_sequence, exp_type, kwargs in experiments:
-        runner.run_experiment(exp_name, pulse_sequence, exp_type, **kwargs)
+    for m in m_values:
+        print(f"Running experiment for M = {m}")
+        config = QNSExperimentConfig(M=m)
+        runner = ExperimentRunner(config)
 
-    runner.save_results()
+        experiments = [
+            ('C_1_0_MT_1', ['CDD1', 'CDD1-1/2'], 'C_a_0', {'l': l_index}),
+        ]
+
+        for exp_name, pulse_sequence, exp_type, kwargs in experiments:
+            runner.run_experiment(exp_name, pulse_sequence, exp_type, **kwargs)
+            c_1_0_mt_1_results.append(runner.results[exp_name])
+        # runner.save_results() # Optional: decide if you want to save results for each M
+
+    c_1_0_mt_1_results = np.array(c_1_0_mt_1_results)
+
+    # Publication-quality plot settings
+    plt.rc('text', usetex=False)
+    plt.rc('font', family='serif', size=12)
+    plt.rc('axes', titlesize=14, labelsize=12)
+    plt.rc('xtick', labelsize=10)
+    plt.rc('ytick', labelsize=10)
+    plt.rc('legend', fontsize=10)
+
+    fig, ax = plt.subplots(figsize=(6, 4)) # Standard size for a single-column figure
+
+    # One curve per control-time harmonic l = 1..truncate (the columns of the
+    # results array, one per c_times entry). Build the legend from the actual
+    # number of curves rather than a hardcoded 5-entry list, so it stays correct
+    # if `truncate` changes.
+    n_harmonics = c_1_0_mt_1_results.shape[1]
+    for l in range(n_harmonics):
+        ax.plot(m_values, c_1_0_mt_1_results[:, l], linestyle='-', marker='o',
+                label=fr'$l={l + 1}$')
+
+    ax.set_xlabel(r'$M$')
+    ax.set_ylabel(fr'$C_{{1,0}}^{{(l)}}(MT)$')
+    ax.grid(True, linestyle='--', alpha=0.6)
+    ax.legend()
+
+    # Adjust layout to prevent labels from being cut off
+    plt.tight_layout()
+
+    # Persist the exact figure-source data for reproducibility, and save under
+    # the filename the manuscript references (FILENAME-CVSM).
+    np.savez("C_1_0_MT_vs_M.npz",
+             M_values=np.array(m_values),
+             c_1_0_mt=c_1_0_mt_1_results,
+             c_times=np.array(config.c_times),
+             l_qubit=l_index,
+             seed=RANDOM_SEED)
+    plt.savefig("C_1_0_MT_vs_M.pdf", format='pdf', bbox_inches='tight')
+    print("Plot saved to C_1_0_MT_vs_M.pdf")
+    plt.show()
 
 
 if __name__ == "__main__":

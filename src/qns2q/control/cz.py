@@ -9,7 +9,7 @@ to minimize infidelity in a two-qubit system. It supports:
 4. Optimizing random pulse sequences using JAX-based gradient descent.
 5. Optimizing the coupling strength J dynamically.
 
-Based on id_optimize.py and cz_optimize_legacy.py.
+Based on id_optimize.py (and the now-removed cz_optimize_legacy.py).
 
 Author: [Q]
 Date: [01/18/2026]
@@ -29,8 +29,24 @@ import jax.scipy.signal
 import numpy as np
 import scipy.optimize
 
-from spectra_input import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
-from run_paths import run_folder
+from qns2q.noise.spectra import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
+from qns2q.paths import run_folder, project_root
+
+
+# Fixed RNG seed for the unseeded np.random restarts (pulse-count / delay
+# initialization). Pinning it makes the published infidelity curves and the
+# winning-sequence labels reproducible across re-runs. Recorded in the saved
+# plotting_data so every figure carries its provenance.
+RANDOM_SEED = 20260608
+
+
+# Memoizes the (sequence-independent) folded-correlation setup built by
+# prepare_time_domain_overlap. That setup depends only on the spectrum/grid
+# arrays and (tau, T_seq, M) -- NOT on the pulse sequence -- yet was rebuilt once
+# per pulse-count pair within each gate-time block. Cached tuples are returned
+# verbatim (bit-identical), so this is a pure speed-up. Cleared at the start of
+# run_optimization to keep it bounded.
+_OVERLAP_SETUP_CACHE = {}
 
 
 # ==============================================================================
@@ -73,8 +89,7 @@ class CZOptConfig:
     tau: float = field(init=False)
 
     def __post_init__(self):
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-        self.path = os.path.join(project_root, self.fname)
+        self.path = os.path.join(project_root(), self.fname)
         
         if not os.path.exists(self.path):
              raise FileNotFoundError(f"Data directory not found at {self.path}")
@@ -432,6 +447,11 @@ def prepare_time_domain_overlap(SMat, w_grid, tau, T_seq, M):
     n_base_steps : int
         Number of time steps spanning one base sequence period T_seq.
     """
+    cache_key = (id(SMat), id(w_grid), float(tau), float(T_seq), int(M))
+    cached = _OVERLAP_SETUP_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     N = w_grid.shape[0]
     dw = float(w_grid[1] - w_grid[0])
     w_max = float(w_grid[-1])
@@ -473,7 +493,9 @@ def prepare_time_domain_overlap(SMat, w_grid, tau, T_seq, M):
 
     RMat_data = get_folded_matrix(RMat_shifted)
 
-    return RMat_data, dt, n_base_steps
+    result = (RMat_data, dt, n_base_steps)
+    _OVERLAP_SETUP_CACHE[cache_key] = result
+    return result
 
 
 # ==============================================================================
@@ -540,20 +562,16 @@ def calculate_cz_fidelity(I_matrix, J, M, dc_12):
             for j in range(3):
                 idx_i = i + 1
                 idx_j = j + 1
-                
-                # pre_factor = -0.5 * (sgn(Oi, idx_i, idx_j) + 1)
-                pre_factor = -0.5 * (sgn(Oi, idx_i, idx_j) + 1.0)
-                
-                # sgn_term = sgn(Oi, idx_i, 0) - 1
-                sgn_term = sgn(Oi, idx_i, 0) - 1.0
-                
-                # overlap_term = 2.0 * I_matrix[idx_i, idx_j]
-                # Factor of 2 accounts for 1/pi vs 1/2pi difference
-                overlap_term = 2.0 * I_matrix[idx_i, idx_j]
-                
-                term = pre_factor * sgn_term * overlap_term
-                
-                val_CO += term * (z2q[idx_i] @ z2q[idx_j])
+
+                # Second-cumulant decay coefficient. Mirrors calculate_idling_fidelity
+                # (id_optimize.py): the per-channel weight is
+                #   -1/2 * (sgn(O, a, 0) - 1) * I_{a,b},  summed over a, b in {1, 2, 12}.
+                # I_matrix is the (1/2pi)-normalized overlap returned by
+                # evaluate_overlap_comb, so it enters directly (no extra factor of 2),
+                # and every (a, b) pair contributes (no gating by sgn(O, a, b)).
+                coeff = -0.5 * (sgn(Oi, idx_i, 0) - 1.0)
+
+                val_CO += coeff * I_matrix[idx_i, idx_j] * (z2q[idx_i] @ z2q[idx_j])
         
         rot_val = (1.0 - sgn(Oi, 1, 2)) * M * J * dc_12
         rot_op = rot_val * z2q[3]
@@ -878,11 +896,17 @@ def calculate_infidelity(seq, config, M, T_seq, use_ideal=False):
 # ==============================================================================
 
 def run_optimization(config):
+    # Pin the RNG so the random pulse-count selection and delay seeding are
+    # reproducible (SEED-OPT). Without this the headline CZ infidelities and
+    # winning sequences drift between runs.
+    np.random.seed(RANDOM_SEED)
+    _OVERLAP_SETUP_CACHE.clear()
+
     yaxis_opt, xaxis_opt = [], []
     yaxis_known, xaxis_known = [], []
     yaxis_nopulse = []
-    
-    print(f"Running CZ Optimization (v2)...")
+
+    print(f"Running CZ Optimization (v2) [seed={RANDOM_SEED}]...")
     
     best_opt_seq_overall = None
     best_opt_inf_overall = 1.0
@@ -1027,11 +1051,12 @@ def run_optimization(config):
         'infs_nopulse': np.array(yaxis_nopulse),
         'tau': config.tau,
         'min_gate_time': min_gate_time,
-        # Config data needed by standalone plotting script
+        'seed': RANDOM_SEED,
+        # Frequency grid kept for reference; the full-resolution SMat is omitted
+        # (the plot scripts recompute spectra from spectra_input, so saving the
+        # 4x4x20000 matrix here is ~5 MB of dead weight per file).
         'w': np.array(config.w),
         'w_max': float(config.w_max),
-        'SMat_real': np.array(np.real(config.SMat)),
-        'SMat_imag': np.array(np.imag(config.SMat)),
         'M': M,
         'Tg': T_seq_best_known if T_seq_best_known is not None else T_seq_best_opt,
         'gate_type': 'cz',
@@ -1058,5 +1083,9 @@ def run_optimization(config):
     print(f"\nTo generate plots, run:\n  python plot_optimization.py --data-dir {config.path} --gate-type cz")
 
 if __name__ == '__main__':
-    config = CZOptConfig(use_simulated=True)
+    # use_simulated=False loads the SPAM-free reconstructed spectra (specs.npz),
+    # matching the manuscript text (§V.C and the fig:infidelity_vs_time /
+    # tab:fidelity_summary captions) which states the CZ optimization is run on
+    # the reconstructed spectra. (Requires Stage 2 to have produced specs.npz.)
+    config = CZOptConfig(use_simulated=False)
     run_optimization(config)

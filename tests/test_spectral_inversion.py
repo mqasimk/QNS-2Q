@@ -4,7 +4,7 @@ import numpy as np
 import numpy.testing as npt
 import pytest
 
-from spectral_inversion import ff, propagate_linear_error, f1_fid
+from qns2q.characterize.inversion import ff, propagate_linear_error, f1_fid
 
 
 class TestFilterFunction:
