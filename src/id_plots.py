@@ -865,7 +865,9 @@ def generate_spectra_overlay_plot():
                 
                 Za = Zs[idx_a]
                 Zb = Zs[idx_b]
-                G = (Za * np.conj(Zb)) / (w_eval**2 * longest_gt)
+                # Generalized filter function G = A_a A_b* / w^2, matching the
+                # paper's App E definition (no 1/T_G factor; OVERLAY-G-NORM).
+                G = (Za * np.conj(Zb)) / (w_eval**2)
                 
                 if part == 'real':
                     G_vals = np.real(G)

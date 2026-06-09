@@ -281,7 +281,8 @@ def cpmg(t, n):
     t : array_like
         Time grid.
     n : int
-        Number of pi-pulses.
+        Number of base-cycle (CDD2) repetitions. The generated sequence has
+        2n pi-pulses (matching the paper's [CDD2]_n convention).
 
     Returns
     -------
