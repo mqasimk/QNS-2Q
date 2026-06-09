@@ -240,26 +240,28 @@ class SpectraReconstructor:
               f"S_22(0)={S_22_dc:.4f} +/- {S_22_dc_err:.4f}, "
               f"S_1212(0)={S_1212_dc:.4f} +/- {S_1212_dc_err:.4f}")
 
-        # Prepend DC values (x2 for one-sided PSD convention) to spectrum arrays so wk[0] = 0
+        # Prepend the DC (w=0) point so wk[0] = 0. Each recon_*_dc already returns
+        # the full one-sided S(0) on the same footing as the harmonic samples
+        # (self-spectra: 2<C>/MT; cross-spectra: <C>/MT), so no extra factor is
+        # applied here -- the former blanket x2 double-counted the self-spectra DC.
         self.wk = np.concatenate(([0.0], wk_harmonics))
-        
+
         self.reconstructed_spectra = {
-            "S_11_k": np.concatenate(([2 * S_11_dc], S_11_k)),
-            "S_22_k": np.concatenate(([2 * S_22_dc], S_22_k)),
-            "S_12_12_k": np.concatenate(([2 * S_1212_dc], S_12_12_k)),
-            "S_1_2_k": np.concatenate(([2 * S_1_2_dc + 0j], S_1_2_k)),
-            "S_1_12_k": np.concatenate(([2 * S_1_12_dc + 0j], S_1_12_k)),
-            "S_2_12_k": np.concatenate(([2 * S_2_12_dc + 0j], S_2_12_k)),
+            "S_11_k": np.concatenate(([S_11_dc], S_11_k)),
+            "S_22_k": np.concatenate(([S_22_dc], S_22_k)),
+            "S_12_12_k": np.concatenate(([S_1212_dc], S_12_12_k)),
+            "S_1_2_k": np.concatenate(([S_1_2_dc + 0j], S_1_2_k)),
+            "S_1_12_k": np.concatenate(([S_1_12_dc + 0j], S_1_12_k)),
+            "S_2_12_k": np.concatenate(([S_2_12_dc + 0j], S_2_12_k)),
         }
-        
-        # Store errors (multiplying DC error by 2 as well)
+
         self.reconstructed_spectra_err = {
-            "S_11_err": np.concatenate(([2 * S_11_dc_err], S_11_err)),
-            "S_22_err": np.concatenate(([2 * S_22_dc_err], S_22_err)),
-            "S_12_12_err": np.concatenate(([2 * S_1212_dc_err], S_12_12_err)),
-            "S_1_2_err": np.concatenate(([2 * S_1_2_dc_err + 0j], S_1_2_err)),
-            "S_1_12_err": np.concatenate(([2 * S_1_12_dc_err + 0j], S_1_12_err)),
-            "S_2_12_err": np.concatenate(([2 * S_2_12_dc_err + 0j], S_2_12_err)),
+            "S_11_err": np.concatenate(([S_11_dc_err], S_11_err)),
+            "S_22_err": np.concatenate(([S_22_dc_err], S_22_err)),
+            "S_12_12_err": np.concatenate(([S_1212_dc_err], S_12_12_err)),
+            "S_1_2_err": np.concatenate(([S_1_2_dc_err + 0j], S_1_2_err)),
+            "S_1_12_err": np.concatenate(([S_1_12_dc_err + 0j], S_1_12_err)),
+            "S_2_12_err": np.concatenate(([S_2_12_dc_err + 0j], S_2_12_err)),
         }
 
     def _get_output_dir(self, subdir):
