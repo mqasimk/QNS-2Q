@@ -9,7 +9,7 @@ to minimize infidelity in a two-qubit system. It supports:
 4. Optimizing random pulse sequences using JAX-based gradient descent.
 5. Optimizing the coupling strength J dynamically.
 
-Based on id_optimize.py and cz_optimize_legacy.py.
+Based on id_optimize.py (and the now-removed cz_optimize_legacy.py).
 
 Author: [Q]
 Date: [01/18/2026]
@@ -29,8 +29,8 @@ import jax.scipy.signal
 import numpy as np
 import scipy.optimize
 
-from spectra_input import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
-from run_paths import run_folder
+from qns2q.noise.spectra import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
+from qns2q.paths import run_folder, project_root
 
 
 # Fixed RNG seed for the unseeded np.random restarts (pulse-count / delay
@@ -89,8 +89,7 @@ class CZOptConfig:
     tau: float = field(init=False)
 
     def __post_init__(self):
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-        self.path = os.path.join(project_root, self.fname)
+        self.path = os.path.join(project_root(), self.fname)
         
         if not os.path.exists(self.path):
              raise FileNotFoundError(f"Data directory not found at {self.path}")

@@ -8,7 +8,123 @@ reconstruction from FID and CPMG/CDD experiments.
 """
 
 import numpy as np
-from trajectories import make_y
+from qns2q.model.trajectories import make_y
+
+
+# ==============================================================================
+# Inversion backends (selectable; default 'direct' preserves legacy behavior)
+# ==============================================================================
+#
+# Every harmonic reconstruction solves a linear system  U @ S = C  for the
+# spectral samples S.  The legacy code uses a square, exactly-determined U and
+# np.linalg.inv -- which amplifies observation noise by cond(U) and can return
+# unphysical (negative) self-spectra.  ``solve_inverse`` adds robustness options
+# that the caller selects via the ``inversion_method`` kwarg:
+#
+#   'direct'   : S = inv(U) @ C                       (legacy; U must be square)
+#   'lstsq'    : S = pinv(U) @ C                      (works for tall/overdetermined U)
+#   'tikhonov' : S = (U^H U + lam I)^-1 U^H @ C       (ridge-regularized)
+#   'nnls'     : non-negative least squares           (self-spectra only; S >= 0)
+#
+# All paths return (S, J) where J is the *effective linear map* (S = J @ C) used
+# for analytic error propagation via ``propagate_linear_error``.  For 'nnls' the
+# map is nonlinear at active constraints, so J is the unconstrained least-squares
+# map -- error bars are then a (slightly conservative) approximation.
+
+def solve_inverse(U, rhs, method='direct', reg_lambda=0.0, nonneg=False,
+                  diagnostics=False, label=''):
+    """Solve U @ S = rhs with a selectable backend. Returns (S, J)."""
+    U = np.asarray(U)
+    rhs = np.asarray(rhs)
+
+    if diagnostics:
+        try:
+            cond = np.linalg.cond(U)
+        except np.linalg.LinAlgError:
+            cond = np.inf
+        sv = np.linalg.svd(U, compute_uv=False)
+        print(f"    [diag] {label or 'U'}: shape={U.shape} cond={cond:.3e} "
+              f"sigma_max={sv[0]:.3e} sigma_min={sv[-1]:.3e}")
+
+    if nonneg:
+        # Non-negative LS for real self-spectra. Operate on the real part.
+        from scipy.optimize import nnls
+        S, _ = nnls(np.real(U), np.real(rhs))
+        J = np.linalg.pinv(U)            # for (approximate) error propagation
+        return S.astype(U.dtype), J
+
+    if method == 'direct':
+        J = np.linalg.inv(U)
+        return J @ rhs, J
+    if method == 'lstsq':
+        J = np.linalg.pinv(U)
+        return J @ rhs, J
+    if method == 'tikhonov':
+        UH = U.conj().T
+        J = np.linalg.inv(UH @ U + reg_lambda * np.eye(U.shape[1], dtype=U.dtype)) @ UH
+        return J @ rhs, J
+    raise ValueError(f"Unknown inversion_method '{method}'")
+
+
+def _inv_opts(kwargs):
+    """Extract the inversion-backend options from a recon function's kwargs."""
+    return dict(
+        method=kwargs.get('inversion_method', 'direct'),
+        reg_lambda=kwargs.get('reg_lambda', 0.0),
+        diagnostics=kwargs.get('diagnostics', False),
+    )
+
+
+def regress_observables_over_M(obs_by_M, M_values, m_ref):
+    """SPAM-free M-scaling regression of a single comb observable.
+
+    The comb coefficient scales as  C(MT) ~ (M/T) sum_k U'_k S_k + b , where the
+    M-independent intercept b absorbs the SPAM term and the O(1/M) comb-collapse
+    systematic.  Fitting C(M_i) linearly in M_i and keeping the SLOPE removes
+    both.  The returned ``C_eff = slope * m_ref`` is the SPAM-free coefficient at
+    the reference repetition ``m_ref`` (the M used to build U in the recon_*
+    functions), so it can be dropped straight into the existing reconstructors.
+
+    Parameters
+    ----------
+    obs_by_M : dict[int, array_like]   mapping M -> observable vector (over c_times)
+    M_values : sequence of int          the M's to regress over (>= 2, all >> 1)
+    m_ref : int                          repetition at which U is constructed
+
+    Returns
+    -------
+    (C_eff, slope_err) : the SPAM-free coefficient and the per-point slope stderr.
+    """
+    M = np.asarray(sorted(M_values), dtype=float)
+    if M.size < 2:
+        raise ValueError("M-scaling regression needs >= 2 distinct M values.")
+    Y = np.array([np.asarray(obs_by_M[int(m)]) for m in M])     # (n_M, n_ctimes)
+    # Per-c_time linear fit C = slope*M + intercept (least squares, vectorized).
+    A = np.vstack([M, np.ones_like(M)]).T                       # (n_M, 2)
+    coef, *_ = np.linalg.lstsq(A, Y, rcond=None)                # (2, n_ctimes)
+    slope = coef[0]
+    resid = Y - A @ coef
+    dof = max(M.size - 2, 1)
+    s2 = np.sum(resid ** 2, axis=0) / dof
+    Sxx = np.sum((M - M.mean()) ** 2)
+    slope_err = np.sqrt(s2 / Sxx)
+    return slope * m_ref, slope_err * m_ref
+
+
+def truncation_bias_estimate(spec_fn, T, truncate, wmax_factor=8.0, args=()):
+    """Estimate the fraction of spectral weight beyond the comb cutoff omega_kmax.
+
+    The comb reconstructs S at omega_k = 2*pi*k/T, k=1..truncate; weight above
+    omega_kmax = 2*pi*truncate/T is unsampled and biases the overlap integrals.
+    Returns (weight_above / weight_total) using the analytic spectrum spec_fn.
+    """
+    w_cut = 2 * np.pi * truncate / T
+    w = np.linspace(0, wmax_factor * w_cut, 200001)
+    Sw = np.real(spec_fn(w, *args))
+    total = np.trapezoid(Sw, w)
+    above = np.trapezoid(Sw[w > w_cut], w[w > w_cut])
+    return float(above / total) if total > 0 else 0.0
+
 
 def ff(y, t, w):
     """
@@ -175,9 +291,10 @@ def recon_S_11(coefs, **kwargs):
         for j in range(np.size(c_times)):
             U[i, j] = ((m/T)*(np.square(np.absolute(ff(y_arr[i][0, 0], tb, wk[j])))
                               - np.square(np.absolute(ff(y_arr[i][1, 1], tb, wk[j])))))
-    inv_U = np.linalg.inv(U)
-    S_11_k = inv_U@(C_12_0_MT_1-C_12_0_MT_2)
-    
+    S_11_k, inv_U = solve_inverse(U, C_12_0_MT_1 - C_12_0_MT_2,
+                                  nonneg=kwargs.get('enforce_nonneg', False),
+                                  label='S_11', **_inv_opts(kwargs))
+
     if 'obs_err' in kwargs and kwargs['obs_err'] is not None:
         errs = kwargs['obs_err']
         # Error of difference is sqrt(err1^2 + err2^2)
@@ -225,9 +342,10 @@ def recon_S_22(coefs, **kwargs):
         for j in range(np.size(c_times)):
             U[i, j] = (m/T)*(np.square(np.absolute(ff(y_arr[i][0, 0], tb, wk[j])))
                              - np.square(np.absolute(ff(y_arr[i][1, 1], tb, wk[j]))))
-    inv_U = np.linalg.inv(U)
-    S_22_k = inv_U@(C_12_0_MT_1-C_12_0_MT_3)
-    
+    S_22_k, inv_U = solve_inverse(U, C_12_0_MT_1 - C_12_0_MT_3,
+                                  nonneg=kwargs.get('enforce_nonneg', False),
+                                  label='S_22', **_inv_opts(kwargs))
+
     if 'obs_err' in kwargs and kwargs['obs_err'] is not None:
         errs = kwargs['obs_err']
         combined_err = np.sqrt(np.array(errs[0])**2 + np.array(errs[1])**2)
@@ -278,11 +396,11 @@ def recon_S_1_2(coefs, **kwargs):
             U_1[i, j] = (2*m/T)*(ff(y1_arr[i][0, 0], tb, wk[j])*ff(y1_arr[i][1, 1], tb, -wk[j]))
             U_2[i, j] = np.imag((2*m/T)*(ff(y2_arr[i][0, 0], tb, wk[j])*ff(y2_arr[i][1, 1], tb, -wk[j])))
     
-    inv_U1 = np.linalg.inv(U_1)
-    inv_U2 = np.linalg.inv(U_2)
-    
-    Re_S_1_2_k = np.real(inv_U1@C_12_12_MT_1)
-    Im_S_1_2_k = -np.real(inv_U2@C_12_12_MT_2)
+    opts = _inv_opts(kwargs)
+    s1, inv_U1 = solve_inverse(U_1, C_12_12_MT_1, label='Re S_1_2', **opts)
+    s2, inv_U2 = solve_inverse(U_2, C_12_12_MT_2, label='Im S_1_2', **opts)
+    Re_S_1_2_k = np.real(s1)
+    Im_S_1_2_k = -np.real(s2)
     S_val = Re_S_1_2_k + 1j*Im_S_1_2_k
     
     if 'obs_err' in kwargs and kwargs['obs_err'] is not None:
@@ -331,9 +449,10 @@ def recon_S_12_12(coefs, **kwargs):
     for i in range(np.size(c_times)):
         for j in range(np.size(c_times)):
             U[i, j] = (2*m/T)*(np.real(np.square(np.absolute(ff(y_arr[i][0, 0], tb, wk[j])))))
-    inv_U = np.linalg.inv(U)
-    S_1212_k = inv_U@np.real(C_1_0_MT_1+C_2_0_MT_1-C_12_0_MT_4)
-    
+    S_1212_k, inv_U = solve_inverse(U, np.real(C_1_0_MT_1 + C_2_0_MT_1 - C_12_0_MT_4),
+                                    nonneg=kwargs.get('enforce_nonneg', False),
+                                    label='S_1212', **_inv_opts(kwargs))
+
     if 'obs_err' in kwargs and kwargs['obs_err'] is not None:
         errs = kwargs['obs_err']
         # err sum = sqrt(err1^2 + err2^2 + err3^2)
@@ -384,11 +503,11 @@ def recon_S_1_12(coefs, **kwargs):
             U1[i, j]=(2*m/T)*(ff(y1_arr[i][0, 0], tb, wk[j])*ff(y1_arr[i][2, 2], tb, -wk[j]))
             U2[i, j]=np.imag((2*m/T)*ff(y2_arr[i][0, 0], tb, wk[j])*ff(y2_arr[i][1, 1], tb, -wk[j]))
     
-    inv_U1 = np.linalg.inv(U1)
-    inv_U2 = np.linalg.inv(U2)
-    
-    Re_S_1_12_k = np.real(inv_U1@C_1_2_MT_1)
-    Im_S_1_12_k = -np.real(inv_U2@C_1_2_MT_2)
+    opts = _inv_opts(kwargs)
+    s1, inv_U1 = solve_inverse(U1, C_1_2_MT_1, label='Re S_1_12', **opts)
+    s2, inv_U2 = solve_inverse(U2, C_1_2_MT_2, label='Im S_1_12', **opts)
+    Re_S_1_12_k = np.real(s1)
+    Im_S_1_12_k = -np.real(s2)
     S_val = Re_S_1_12_k + 1j*Im_S_1_12_k
     
     if 'obs_err' in kwargs and kwargs['obs_err'] is not None:
@@ -440,11 +559,11 @@ def recon_S_2_12(coefs, **kwargs):
             U1[i, j]=(2*m/T)*(ff(y1_arr[i][1, 1], tb, wk[j])*ff(y1_arr[i][2, 2], tb, -wk[j]))
             U2[i, j]=np.imag((2*m/T)*ff(y2_arr[i][1, 1], tb, wk[j])*ff(y2_arr[i][0, 0], tb, -wk[j]))
     
-    inv_U1 = np.linalg.inv(U1)
-    inv_U2 = np.linalg.inv(U2)
-
-    Re_S_2_12_k = np.real(inv_U1@C_2_1_MT_1)
-    Im_S_2_12_k = -np.real(inv_U2@C_2_1_MT_2)
+    opts = _inv_opts(kwargs)
+    s1, inv_U1 = solve_inverse(U1, C_2_1_MT_1, label='Re S_2_12', **opts)
+    s2, inv_U2 = solve_inverse(U2, C_2_1_MT_2, label='Im S_2_12', **opts)
+    Re_S_2_12_k = np.real(s1)
+    Im_S_2_12_k = -np.real(s2)
     S_val = Re_S_2_12_k + 1j*Im_S_2_12_k
     
     if 'obs_err' in kwargs and kwargs['obs_err'] is not None:
@@ -459,122 +578,49 @@ def recon_S_2_12(coefs, **kwargs):
 
 # --- DC reconstruction functions from FID experiments ---
 
-def recon_S_11_dc(coefs, **kwargs):
+def _ramsey_slope_dc(C, m, T, obs_err=None):
+    """Shared motional-narrowing DC estimator: S(0) = 2 <C_{a,0}> / (M T).
+
+    The partner-decoupled single-qubit FID coefficient C_{a,0}(MT) grows as
+    (S_aa(0)/2) MT in the motional-narrowing regime, so 2*<C>/(MT) recovers the
+    zero-frequency self-spectrum. (Slope-from-origin at the production M; a small
+    ~few-% positive offset from the quasi-static short-time tail is acceptable and
+    far below the comb-subtraction error it replaces.)
     """
-    Reconstruct S_11(0) from C_12_0 with ['FID','CPMG'] pulse sequence.
-
-    Subtracts harmonic contributions of S_22 and S_1212 at CPMG harmonics,
-    then averages over c_times to extract the DC value.
-
-    Parameters
-    ----------
-    coefs : list of array_like
-        Observables (C_12_0_FID_CPMG).
-    **kwargs
-        c_times : array_like
-            Control times used.
-        m : int
-            Number of repetitions.
-        T : float
-            Time per repetition.
-        S_22_k : array_like
-            Already reconstructed S_22 harmonic values.
-        S_1212_k : array_like
-            Already reconstructed S_1212 harmonic values.
-        obs_err : list of array_like, optional
-            Standard errors for the observables.
-
-    Returns
-    -------
-    float or (float, float)
-        Reconstructed DC value S_11(0).
-        If obs_err is provided, returns (S_11_dc, S_11_dc_err).
-    """
-    c_times = kwargs['c_times']
-    m = kwargs['m']
-    T = kwargs['T']
-    S_22_k = kwargs['S_22_k']
-    S_1212_k = kwargs['S_1212_k']
-    C_12_0_FID_CPMG = coefs[0]
-    wk = np.array([2*np.pi*(n+1)/T for n in range(np.size(c_times))])
-    tb = np.linspace(0, T, 10**5)
-    dc_estimates = np.zeros(np.size(c_times))
-    for i in range(np.size(c_times)):
-        y = make_y(tb, ['FID', 'CPMG'], ctime=c_times[i], m=1)
-        harmonic_sum = 0.0
-        for j in range(np.size(c_times)):
-            F_cpmg_sq = np.square(np.absolute(ff(y[1, 1], tb, wk[j])))
-            harmonic_sum += (m/T) * F_cpmg_sq * (S_22_k[j] + 2*S_1212_k[j])
-        dc_estimates[i] = (C_12_0_FID_CPMG[i] - harmonic_sum) / (m*T)
-    
-    val = np.mean(dc_estimates)
-    
-    if 'obs_err' in kwargs and kwargs['obs_err'] is not None:
-        errs = kwargs['obs_err'][0]
-        # err_i = errs[i] / (m*T)
-        # err_mean = sqrt(sum(err_i^2)) / N
-        err_mean = np.sqrt(np.sum((np.array(errs) / (m*T))**2)) / np.size(c_times)
-        return val, err_mean
-        
+    C = np.asarray(C, dtype=float)
+    val = 2.0 * np.mean(C) / (m * T)
+    if obs_err is not None:
+        errs = np.asarray(obs_err[0], dtype=float)
+        err = 2.0 * np.sqrt(np.sum(errs ** 2)) / (len(errs) * m * T)
+        return val, err
     return val
+
+
+def recon_S_11_dc(coefs, **kwargs):
+    """Reconstruct S_11(0) from the partner-decoupled FID/CDD3 Ramsey slope.
+
+    Under ['FID','CDD3'] (qubit 1 free, qubit 2 CDD3-decoupled) the single-qubit
+    coefficient C_{1,0} measures the qubit-1 free-induction-decay exponent governed
+    by S_11 alone -- the partner's high-order CDD3 nulls the Ising (S_1212)
+    contribution. So S_11(0) = 2 <C_{1,0}> / (M T) (averaged over the fast partner
+    control times). This replaces the former comb-subtraction estimator, which
+    inherited the S_22/S_1212 harmonic-reconstruction errors and was unreliable
+    (off by several-fold) at DC.
+
+    coefs : [C_1_0_FIDCDD3]    kwargs : m, T, obs_err (optional)
+    """
+    return _ramsey_slope_dc(coefs[0], kwargs['m'], kwargs['T'], kwargs.get('obs_err'))
 
 
 def recon_S_22_dc(coefs, **kwargs):
+    """Reconstruct S_22(0) from the partner-decoupled FID/CDD3 Ramsey slope.
+
+    Symmetric counterpart of ``recon_S_11_dc`` using ['CDD3','FID'] (qubit 2 free,
+    qubit 1 decoupled): S_22(0) = 2 <C_{2,0}> / (M T).
+
+    coefs : [C_2_0_CDD3FID]    kwargs : m, T, obs_err (optional)
     """
-    Reconstruct S_22(0) from C_12_0 with ['CPMG','FID'] pulse sequence.
-
-    Subtracts harmonic contributions of S_11 and S_1212 at CPMG harmonics,
-    then averages over c_times to extract the DC value.
-
-    Parameters
-    ----------
-    coefs : list of array_like
-        Observables (C_12_0_CPMG_FID).
-    **kwargs
-        c_times : array_like
-            Control times used.
-        m : int
-            Number of repetitions.
-        T : float
-            Time per repetition.
-        S_11_k : array_like
-            Already reconstructed S_11 harmonic values.
-        S_1212_k : array_like
-            Already reconstructed S_1212 harmonic values.
-        obs_err : list of array_like, optional
-            Standard errors for the observables.
-
-    Returns
-    -------
-    float or (float, float)
-        Reconstructed DC value S_22(0).
-        If obs_err is provided, returns (S_22_dc, S_22_dc_err).
-    """
-    c_times = kwargs['c_times']
-    m = kwargs['m']
-    T = kwargs['T']
-    S_11_k = kwargs['S_11_k']
-    S_1212_k = kwargs['S_1212_k']
-    C_12_0_CPMG_FID = coefs[0]
-    wk = np.array([2*np.pi*(n+1)/T for n in range(np.size(c_times))])
-    tb = np.linspace(0, T, 10**5)
-    dc_estimates = np.zeros(np.size(c_times))
-    for i in range(np.size(c_times)):
-        y = make_y(tb, ['CPMG', 'FID'], ctime=c_times[i], m=1)
-        harmonic_sum = 0.0
-        for j in range(np.size(c_times)):
-            F_cpmg_sq = np.square(np.absolute(ff(y[0, 0], tb, wk[j])))
-            harmonic_sum += (m/T) * F_cpmg_sq * (S_11_k[j] + 2*S_1212_k[j])
-        dc_estimates[i] = (C_12_0_CPMG_FID[i] - harmonic_sum) / (m*T)
-    
-    val = np.mean(dc_estimates)
-
-    if 'obs_err' in kwargs and kwargs['obs_err'] is not None:
-        errs = kwargs['obs_err'][0]
-        err_mean = np.sqrt(np.sum((np.array(errs) / (m*T))**2)) / np.size(c_times)
-        return val, err_mean
-
-    return val
+    return _ramsey_slope_dc(coefs[0], kwargs['m'], kwargs['T'], kwargs.get('obs_err'))
 
 
 def recon_S_1212_dc(coefs, **kwargs):

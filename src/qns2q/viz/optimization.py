@@ -15,7 +15,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-import plot_utils
+import qns2q.viz.plot_utils as plot_utils
 
 
 def load_plot_config(npz_path, base_path):

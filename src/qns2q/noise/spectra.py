@@ -18,7 +18,7 @@ changes. Cross-spectra are derived from the selected self-spectra.
 import jax.numpy as jnp
 import jax
 
-from run_paths import current_regime, run_folder
+from qns2q.paths import current_regime, run_folder, project_root
 
 
 @jax.jit
@@ -219,8 +219,7 @@ if __name__ == "__main__":
 
     # Save the simulated spectra into the active regime's run folder
     fname = run_folder()
-    parent_dir = os.pardir
-    path = os.path.join(parent_dir, fname)
+    path = os.path.join(project_root(), fname)
     if not os.path.exists(path):
         os.mkdir(path)
 

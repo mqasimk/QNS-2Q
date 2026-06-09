@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from spectra_input import L, Gauss, S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
+from qns2q.noise.spectra import L, Gauss, S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
 
 
 class TestLorentzian:

@@ -37,8 +37,8 @@ def run_folder(regime=None, spam=False):
 
 
 def project_root():
-    """Repo root (parent of ``src/``), resolved from this file's location."""
-    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    """Repo root, resolved from this file's location (src/qns2q/paths.py -> repo root)."""
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def run_path(regime=None, spam=False):

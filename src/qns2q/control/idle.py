@@ -26,8 +26,8 @@ import jax.scipy.signal
 import numpy as np
 import scipy.optimize
 
-from spectra_input import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
-from run_paths import run_folder
+from qns2q.noise.spectra import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
+from qns2q.paths import run_folder, project_root
 
 # Fixed RNG seed for the unseeded np.random restarts (random pulse counts and
 # delay seeding). Pinning it makes the published idling infidelity curves and
@@ -107,8 +107,7 @@ class Config:
         # Paths
         if fname is None:
             fname = run_folder()
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-        self.path = os.path.join(project_root, fname)
+        self.path = os.path.join(project_root(), fname)
         
         if not os.path.exists(self.path):
              raise FileNotFoundError(f"Data directory not found at {self.path}")
