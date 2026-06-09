@@ -30,6 +30,12 @@ from qns2q.noise.spectra import S_11, S_22, S_1212
 from qns2q.model.trajectories import make_noise_mat_arr, solver_prop
 from qns2q.paths import run_folder, project_root
 
+# Seed for reproducible QNS data. The per-shot noise keys in solver_prop are drawn
+# with np.random (trajectories.solver_prop), so seeding here makes the whole
+# experiment stage reproducible -- matching the optimizer/single-qubit scripts,
+# which all use the same constant.
+RANDOM_SEED = 20260608
+
 
 @dataclass
 class QNSExperimentConfig:
@@ -222,6 +228,8 @@ def main():
     """
     Main function to run the QNS experiments.
     """
+    np.random.seed(RANDOM_SEED)
+    print(f"Running QNS experiments [seed={RANDOM_SEED}]...")
     config = QNSExperimentConfig()
     runner = ExperimentRunner(config)
 
