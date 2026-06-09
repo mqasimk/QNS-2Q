@@ -21,8 +21,8 @@ from qns2q.characterize.inversion import (recon_S_11, recon_S_22, recon_S_1_2, r
                                 recon_S_11_dc, recon_S_22_dc, recon_S_1212_dc,
                                 recon_S_1_2_dc, recon_S_1_12_dc, recon_S_2_12_dc,
                                 truncation_bias_estimate)
-from qns2q.characterize.systematics import (comb_inversion_systematic, analytic_spectra,
-                                            selfconsistent_spectra, dc_systematic)
+from qns2q.characterize.systematics import (forward_model_systematic, analytic_spectra,
+                                            dc_systematic)
 from qns2q.noise.spectra import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
 from qns2q.paths import run_folder, project_root
 
@@ -59,6 +59,13 @@ COLORS = {
     "black": "#000000",
     "grey_fill": "#E0E0E0",
 }
+
+# Confidence level (in standard deviations) for the plotted reconstruction error bars.
+# The saved specs.npz keeps 1-sigma semantics (_err/_sys/_errtot); only the *plotted*
+# bars are scaled. 2-sigma bars are the QNS-figure convention: ~95% of points'
+# statistically-consistent bars then cover the theory curve (state "2 sigma" in the
+# paper caption). Set to 1 for 1-sigma bars.
+ERRORBAR_SIGMA = 2
 
 # Subfolder inside each data folder for figures
 FIGURES_SUBDIR = "figures"
@@ -286,15 +293,19 @@ class SpectraReconstructor:
         }
 
     def add_systematic_errors(self):
-        """Fold the deterministic comb-inversion systematic into the error bars.
+        """Fold the deterministic forward-model (comb-inversion) systematic into the bars.
 
-        The Gaussian noise makes the 2nd-cumulant forward map exact, so the only
-        non-statistical error is the harmonic-comb inversion (finite-M comb width,
-        truncation, and the unsampled (0, w_1) band). ``systematics`` quantifies it
-        with zero Monte Carlo. We quote the EXACT systematic (from the analytic
-        ground-truth spectra) in the bars, and additionally report a self-consistent
-        estimate (from the reconstructed comb) to show it is estimable without the
-        truth. Sets ``reconstructed_spectra_sys`` (signed per-point bias) and
+        The simulator's propagator is exact pure dephasing, so the only non-statistical
+        reconstruction error is the harmonic-comb inversion: the single-period comb
+        kernel approximates the full finite-M filter response integrated over the noise
+        synthesis grid. ``forward_model_systematic`` quantifies it with zero Monte Carlo
+        -- it reconstructs the EXACT forward observables of the analytic ground-truth
+        spectra (validated to reproduce the simulated observables within shot noise) and
+        takes the residual vs truth. This supersedes the single-period
+        ``comb_inversion_systematic``, which under-quoted the antisymmetric (CDD3)
+        cross-channel bias ~2x and so left the Im S_1_2 points outside the bars. The
+        w=0 DC point keeps its own Ramsey-slope bias from ``dc_systematic``. Sets
+        ``reconstructed_spectra_sys`` (signed per-point bias) and
         ``reconstructed_spectra_err_total`` (sqrt(stat^2 + sys^2)).
         """
         c = self.config
@@ -302,22 +313,18 @@ class SpectraReconstructor:
         self.reconstructed_spectra_err_total = dict(self.reconstructed_spectra_err)
         try:
             spectra = analytic_spectra(c.gamma, c.gamma_12)
-            sys, chk = comb_inversion_systematic(spectra, c.c_times, c.M, c.T,
-                                                 return_selfcheck=True)
-            worst_chk = max(chk.values())
-            print(f"[systematic] comb-sum self-check max residual = {worst_chk:.2e} "
-                  f"(should be ~0; validates kernels/normalization)")
+            inv_opts = dict(inversion_method=c.inversion_method, reg_lambda=c.reg_lambda,
+                            enforce_nonneg=c.enforce_nonneg)
+            sys = forward_model_systematic(spectra, c.c_times, c.M, c.T, c.t_vec,
+                                           c.gamma, c.gamma_12, c.w_grain, c.wmax,
+                                           inv_opts=inv_opts)
 
             # DC (w=0) point: its own Ramsey-slope bias (FID short-time tail + residual
             # S_1212 leak through the CDD3 partner), computed deterministically.
             dc_bias = dc_systematic(spectra, c.M, c.T)
 
-            recon_comb = {sk: self.reconstructed_spectra[_SYS_TO_SPEC[sk]] for sk in _SYS_TO_SPEC}
-            sys_sc = comb_inversion_systematic(selfconsistent_spectra(self.wk, recon_comb),
-                                               c.c_times, c.M, c.T)
-
-            print("[systematic] folded sigma_sys per spectrum (RMS over harmonics, |DC bias|); "
-                  "self-consistent harmonic estimate in ():")
+            print("[systematic] folded sigma_sys per spectrum (forward-model comb bias; "
+                  "RMS over harmonics, |DC bias|):")
             for sk, rk in _SYS_TO_SPEC.items():
                 ek = _SYS_TO_ERR[sk]
                 sysk = np.concatenate(([0.0], sys[sk]))   # complex for cross, real for self
@@ -326,9 +333,7 @@ class SpectraReconstructor:
                 self.reconstructed_spectra_err_total[ek] = _quad_combine(
                     self.reconstructed_spectra_err[ek], sysk)
                 rms_a = np.sqrt(np.mean(np.abs(sys[sk]) ** 2))
-                rms_sc = np.sqrt(np.mean(np.abs(sys_sc[sk]) ** 2))
-                print(f"    {sk:>6}: harmonic RMS = {rms_a:8.1f}  |DC bias| = {abs(dc_bias[sk]):8.1f}  "
-                      f"(s.c. harmonic {rms_sc:8.1f}, ratio {rms_sc/rms_a if rms_a>0 else float('nan'):.2f})")
+                print(f"    {sk:>6}: harmonic RMS = {rms_a:8.1f}  |DC bias| = {abs(dc_bias[sk]):8.1f}")
         except Exception as e:
             print(f"[systematic] WARNING: systematic-error computation failed ({e}); "
                   f"falling back to statistical-only bars.")
@@ -405,7 +410,7 @@ class SpectraReconstructor:
 
             yerr = None
             if err_key in err_dict:
-                yerr = err_dict[err_key]
+                yerr = ERRORBAR_SIGMA * err_dict[err_key]
 
             ax.errorbar(self.wk / xunits, self.reconstructed_spectra[s_key],
                         yerr=yerr, **eb_self)
@@ -432,8 +437,8 @@ class SpectraReconstructor:
             yerr_im = None
             if err_key in err_dict:
                 err_complex = err_dict[err_key]
-                yerr_re = np.real(err_complex)
-                yerr_im = np.imag(err_complex)
+                yerr_re = ERRORBAR_SIGMA * np.real(err_complex)
+                yerr_im = ERRORBAR_SIGMA * np.imag(err_complex)
 
             ax.plot(w / xunits, np.real(S_theory), **theory_re_kw)
             ax.errorbar(self.wk / xunits, np.real(self.reconstructed_spectra[s_key]),
@@ -470,6 +475,10 @@ class SpectraReconstructor:
         # --- Per-column legends in top panels ---
         axs[0, 0].legend(frameon=False, loc='upper right')
         axs[0, 1].legend(frameon=False, loc='upper right', ncol=2)
+
+        if ERRORBAR_SIGMA != 1:
+            fig.text(0.995, 0.005, rf'error bars: ${ERRORBAR_SIGMA}\sigma$',
+                     ha='right', va='bottom', fontsize=7, color='0.4')
 
         plt.tight_layout(pad=0.3)
         output_dir = self._get_output_dir(RECONSTRUCTION_SUBDIR)
@@ -532,8 +541,8 @@ class SpectraReconstructor:
             yerr_im = None
             if err_key in err_dict:
                 err_complex = err_dict[err_key]
-                yerr_re = np.real(err_complex)
-                yerr_im = np.imag(err_complex)
+                yerr_re = ERRORBAR_SIGMA * np.real(err_complex)
+                yerr_im = ERRORBAR_SIGMA * np.imag(err_complex)
 
             ax.plot(w / xunits, np.real(S_theory), **theory_re_kw)
             ax.errorbar(self.wk / xunits, np.real(self.reconstructed_spectra[s_key]),
@@ -567,6 +576,10 @@ class SpectraReconstructor:
         # Single compact legend inside the top panel (not underneath the figure)
         axs[0].legend(frameon=False, loc='upper right', ncol=2, fontsize=7,
                       handlelength=1.5, columnspacing=1.0, handletextpad=0.4)
+
+        if ERRORBAR_SIGMA != 1:
+            fig.text(0.995, 0.005, rf'error bars: ${ERRORBAR_SIGMA}\sigma$',
+                     ha='right', va='bottom', fontsize=7, color='0.4')
 
         plt.tight_layout(pad=0.3)
         output_dir = self._get_output_dir(RECONSTRUCTION_SUBDIR)
