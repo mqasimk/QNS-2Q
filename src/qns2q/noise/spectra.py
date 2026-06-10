@@ -97,12 +97,16 @@ B_J = 4.484177e-01               # (B_J > A_J*C2_SHARE makes c_{2,12} anti-phase
 DT_SHIFT = 1.5                   # causal lag of e_B's shared part [C, Im parts]
 
 # Class-F lines: GaAs nuclear-difference triplet at B_eff = 600 mT
-# [Malinowski 2017]. Absolute amplitudes (the x8 / x20 peak-over-smooth-total
-# factors are already folded in), qubit-local only.
+# [Malinowski 2017]. Absolute amplitudes (the x3.2 / x8 peak-over-smooth-total
+# factors are already folded in), qubit-local only. 2026-06-10: factors
+# reduced from x8/x20 -- at x20 the comb harmonic ON the line decays to
+# coherence ~1e-4 (unmeasurable); at x8 the at-line coefficient is C ~ 1.8
+# (coherence ~3e-2, measurable at 64k shots). Reserved knob #2 of
+# NOISE_MODEL_SPEC.md; gate-side NT margin to be re-checked.
 _LINE_CENTERS = jnp.array([0.261, 0.273, 0.534])
 _LINE_SIGMA = 0.02
-_LINE_AMP_Q1 = jnp.array([2.528e-03, 2.442e-03, 1.471e-03])
-_LINE_AMP_Q2 = jnp.array([7.043e-03, 6.860e-03, 4.742e-03])
+_LINE_AMP_Q1 = jnp.array([1.011e-03, 9.770e-04, 5.880e-04])
+_LINE_AMP_Q2 = jnp.array([2.817e-03, 2.744e-03, 1.897e-03])
 
 _LINES_ON = (_REGIME != "bland")
 

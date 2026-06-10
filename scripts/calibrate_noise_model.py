@@ -47,8 +47,13 @@ W_SYNTH = 2 * WMAX                        # synthesis band-limit
 # (Malinowski 2017; two near-degenerate + one at twice, positions ∝ B)
 LINE_CENTERS = np.array([0.261, 0.273, 0.534])
 LINE_SIGMA = 0.02
-LINE_FACTOR_Q2 = 20.0        # peak height over the smooth TOTAL S_22 at center
-LINE_FACTOR_Q1 = 8.0
+LINE_FACTOR_Q2 = 8.0         # peak height over the smooth TOTAL S_22 at center
+LINE_FACTOR_Q1 = 3.2
+# (2026-06-10: reduced from 20/8 -- at x20 the comb harmonic ON the line decays
+# to coherence ~1e-4, unmeasurable at any shot count; at x8 the at-line
+# coefficient is C ~ 1.8, coherence ~3e-2, measurable at 64k shots. Reserved
+# knob #2 of NOISE_MODEL_SPEC.md; gate-side NT-margin impact to be re-checked
+# after the reconstruction is nailed.)
 
 
 def plaw(w, g):
