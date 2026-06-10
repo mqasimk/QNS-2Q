@@ -396,17 +396,16 @@ class SpectraReconstructor:
         self.reconstructed_spectra_sys = {}
         self.reconstructed_spectra_err_total = dict(self.reconstructed_spectra_err)
         try:
-            spectra = analytic_spectra(c.gamma, c.gamma_12)
+            spectra = analytic_spectra()
             inv_opts = dict(inversion_method=c.inversion_method, reg_lambda=c.reg_lambda,
                             enforce_nonneg=c.enforce_nonneg)
             sys = forward_model_systematic(spectra, c.c_times, c.M, c.T, c.t_vec,
-                                           c.gamma, c.gamma_12, c.w_grain, c.wmax,
-                                           inv_opts=inv_opts)
+                                           c.w_grain, c.wmax, inv_opts=inv_opts)
 
             # DC (w=0) point: deterministic bias of the multi-time slope fit (tiny where
             # the noise reaches motional narrowing; large = honest inflated bar where it
             # is quasi-static / sub-comb-cusp and only a lower bound -- see dc_reliable).
-            dc_bias = dc_fit_systematic(spectra, self.dc_t_sweep, c.gamma, c.gamma_12)
+            dc_bias = dc_fit_systematic(spectra, self.dc_t_sweep)
 
             print("[systematic] folded sigma_sys per spectrum (forward-model comb bias; "
                   "RMS over harmonics, |DC bias|):")
@@ -481,13 +480,13 @@ class SpectraReconstructor:
 
         complex_spectra = [
             ('S_1_2_k', 'S_1_2_err',
-             lambda w_: S_1_2(w_, self.config.gamma),
+             lambda w_: S_1_2(w_),
              r'$S_{1,2}(\omega)\,\tau$'),
             ('S_1_12_k', 'S_1_12_err',
-             lambda w_: S_1_12(w_, self.config.gamma_12),
+             lambda w_: S_1_12(w_),
              r'$S_{1,12}(\omega)\,\tau$'),
             ('S_2_12_k', 'S_2_12_err',
-             lambda w_: S_2_12(w_, self.config.gamma_12 - self.config.gamma),
+             lambda w_: S_2_12(w_),
              r'$S_{2,12}(\omega)\,\tau$'),
         ]
 
@@ -608,13 +607,13 @@ class SpectraReconstructor:
 
         complex_spectra = [
             ('S_1_2_k', 'S_1_2_err',
-             lambda w_: S_1_2(w_, self.config.gamma),
+             lambda w_: S_1_2(w_),
              r'$S_{1,2}(\omega)\,\tau$'),
             ('S_1_12_k', 'S_1_12_err',
-             lambda w_: S_1_12(w_, self.config.gamma_12),
+             lambda w_: S_1_12(w_),
              r'$S_{1,12}(\omega)\,\tau$'),
             ('S_2_12_k', 'S_2_12_err',
-             lambda w_: S_2_12(w_, self.config.gamma_12 - self.config.gamma),
+             lambda w_: S_2_12(w_),
              r'$S_{2,12}(\omega)\,\tau$'),
         ]
 

@@ -754,9 +754,9 @@ def generate_spectra_overlay_plot():
         "S_11": S_11(w),
         "S_22": S_22(w),
         "S_1212": S_1212(w),
-        "S_1_2": S_1_2(w, gamma),
-        "S_1_12": S_1_12(w, gamma12),
-        "S_2_12": S_2_12(w, gamma12)
+        "S_1_2": S_1_2(w),
+        "S_1_12": S_1_12(w),
+        "S_2_12": S_2_12(w)
     }
 
     # 4. Pre-compute Filter Functions

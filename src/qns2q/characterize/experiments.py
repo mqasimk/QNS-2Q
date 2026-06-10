@@ -229,13 +229,10 @@ class ExperimentRunner:
         return jnp.array(
             make_noise_mat_arr(
                 'make',
-                spec_vec=self.config.spec_vec,
                 t_vec=self.config.t_vec,
                 w_grain=self.config.w_grain,
                 wmax=self.config.wmax,
                 truncate=self.config.truncate,
-                gamma=self.config.gamma,
-                gamma_12=self.config.gamma_12,
                 midpoint=self.config.midpoint))
 
     def run_experiment(self, exp_name: str, pulse_sequence: list,

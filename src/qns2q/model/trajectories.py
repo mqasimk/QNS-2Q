@@ -11,18 +11,30 @@ import qutip as qt
 import jax
 import jax.numpy as jnp
 
+from qns2q.noise import spectra as _model_spectra
+
 
 def make_noise_mat_arr(act, **kwargs):
     """
-    Generate or load matrices for temporally-correlated noise trajectories.
+    Generate or load the component noise-synthesis matrices.
+
+    The noise model is the two-correlated-local-fields construction of
+    ``qns2q.noise.spectra`` (see NOISE_MODEL_SPEC.md): channels are assembled
+    per shot by ``make_channel_trajs`` from five independent component
+    trajectories. This function precomputes the (sine, cosine) synthesis
+    matrices for the five component streams:
+
+        index 0: S_el_A   (electrical field at qubit 1, unshifted)
+        index 1: S_el_B   shifted by dt_shift (the shared part of e_B)
+        index 2: S_el_B   unshifted (the local part of e_B)
+        index 3: S_nuc_1  (qubit-1 local nuclear)
+        index 4: S_nuc_2  (qubit-2 local nuclear)
 
     Parameters
     ----------
     act : str
         Action to perform: 'load', 'make', or 'save'.
     **kwargs
-        spec_vec : list of callable
-            Spectral density functions.
         t_vec : jax.Array
             Time vector for evolution.
         w_grain : int
@@ -31,23 +43,33 @@ def make_noise_mat_arr(act, **kwargs):
             Maximum frequency cutoff.
         truncate : int
             Number of harmonics to include.
-        gamma : float
-            Time shift for qubit 2.
-        gamma_12 : float
-            Time shift for Ising interaction.
+        components : tuple of callable, optional
+            (S_el_A, S_el_B, S_nuc_1, S_nuc_2); defaults to the model's.
+        dt_shift : float, optional
+            Lag of e_B's shared part; defaults to spectra.DT_SHIFT.
 
     Returns
     -------
     jax.Array
-        Array of sine and cosine noise matrices.
+        Array of shape [5][2][n_t][n_w] of sine/cosine synthesis matrices.
     """
-    spec_vec = kwargs.get('spec_vec')
+    if kwargs.get('spec_vec') is not None or kwargs.get('gamma') is not None \
+            or kwargs.get('gamma_12') is not None:
+        raise TypeError(
+            "spec_vec/gamma/gamma_12 were removed: the noise model components "
+            "and cross-spectrum lag now live in qns2q.noise.spectra (see "
+            "NOISE_MODEL_SPEC.md). Pass components=/dt_shift= to override.")
     t_vec = kwargs.get('t_vec')
     w_grain = kwargs.get('w_grain')
     wmax = kwargs.get('wmax')
     truncate = kwargs.get('truncate')
-    gamma = kwargs.get('gamma')
-    gamma_12 = kwargs.get('gamma_12')
+    components = kwargs.get('components')
+    if components is None:
+        components = (_model_spectra.S_el_A, _model_spectra.S_el_B,
+                      _model_spectra.S_nuc_1, _model_spectra.S_nuc_2)
+    dt_shift = kwargs.get('dt_shift')
+    if dt_shift is None:
+        dt_shift = _model_spectra.DT_SHIFT
     # `midpoint=True` samples the noise-synthesis frequency grid at bin midpoints
     # (k+1/2)dw instead of the endpoints k*dw, which excludes the exact w=0 tone.
     # The w=0 tone otherwise injects a spurious *static* offset of variance
@@ -57,13 +79,12 @@ def make_noise_mat_arr(act, **kwargs):
     if act == 'load':
         return np.load('noise_mats.npy', allow_pickle=True)
     elif act == 'make':
-        S_11, C_11 = make_noise_mat(spec_vec[0], t_vec, w_grain=w_grain, wmax=wmax, trunc_n=truncate, gamma=0.,
-                                    midpoint=midpoint)
-        S_22g, C_22g = make_noise_mat(spec_vec[1], t_vec, w_grain=w_grain, wmax=wmax, trunc_n=truncate, gamma=gamma,
-                                      midpoint=midpoint)
-        S_1212g, C_1212g = make_noise_mat(spec_vec[2], t_vec, w_grain=w_grain, wmax=wmax, trunc_n=truncate,
-                                      gamma=gamma_12, midpoint=midpoint)
-        return jnp.array([[S_11, C_11], [S_22g, C_22g], [S_1212g, C_1212g]])
+        s_el_a, s_el_b, s_nuc_1, s_nuc_2 = components
+        mk = lambda spec, shift: make_noise_mat(
+            spec, t_vec, w_grain=w_grain, wmax=wmax, trunc_n=truncate,
+            gamma=shift, midpoint=midpoint)
+        return jnp.array([mk(s_el_a, 0.), mk(s_el_b, dt_shift), mk(s_el_b, 0.),
+                          mk(s_nuc_1, 0.), mk(s_nuc_2, 0.)])
     elif act == 'save':
         mats = make_noise_mat_arr('make', **kwargs)
         np.save('noise_mats.npy', mats)
@@ -188,6 +209,63 @@ def make_noise_traj(S, C, key):
     B = jax.random.normal(key2, (jnp.size(S, 1), 1))
     traj = jnp.ravel(jnp.matmul(S, A) + jnp.matmul(C, B))
     return traj
+
+
+# Mixing constants of the noise model (single source of truth: noise/spectra.py).
+_C_SH = jnp.sqrt(_model_spectra.C2_SHARE)
+_C_LOC = jnp.sqrt(1. - _model_spectra.C2_SHARE)
+_A_J = _model_spectra.A_J
+_B_J = _model_spectra.B_J
+
+
+@jax.jit
+def make_channel_trajs(noise_mats, key):
+    """
+    Assemble the three channel trajectories (zeta_1, zeta_2, zeta_12) for one shot.
+
+    Five independent Gaussian streams drive the component matrices produced by
+    ``make_noise_mat_arr`` ('shared' electrical, local-A, local-B, nuclear-1,
+    nuclear-2); the channels are the linear mixture of NOISE_MODEL_SPEC.md
+    section 5:
+
+        e_A     = sqrt(C2)*g0 + sqrt(1-C2)*g_A
+        e_B     = sqrt(C2)*g0(t + DT_SHIFT) + sqrt(1-C2)*g_B
+        zeta_1  = e_A + n_1
+        zeta_2  = e_B + n_2
+        zeta_12 = A_J*e_A - B_J*e_B
+
+    The same shared draws (stream 0) enter both e_A and e_B, which is what
+    produces the partial inter-channel coherence with the measured (+, +, -)
+    sign pattern.
+
+    Parameters
+    ----------
+    noise_mats : jax.Array
+        [5][2][n_t][n_w] synthesis matrices from `make_noise_mat_arr`.
+    key : jax.Array
+        Pair of integers seeding this shot's ten Gaussian draws.
+
+    Returns
+    -------
+    jax.Array
+        Array [3][n_t]: trajectories for [qubit1, qubit2, Ising].
+    """
+    base = jax.random.fold_in(jax.random.PRNGKey(key[0]), key[1])
+    ks = jax.random.split(base, 10)
+    n_w = jnp.size(noise_mats, 3)
+    draw = lambda k: jax.random.normal(k, (n_w, 1))
+    comp = lambda i, ka, kb: jnp.matmul(noise_mats[i, 0], draw(ka)) \
+        + jnp.matmul(noise_mats[i, 1], draw(kb))
+    g0_a = comp(0, ks[0], ks[1])      # shared stream through the e_A filter
+    h_a = comp(0, ks[2], ks[3])       # local-A stream, same filter
+    g0_b = comp(1, ks[0], ks[1])      # SAME shared stream, shifted e_B filter
+    h_b = comp(2, ks[4], ks[5])       # local-B stream, unshifted e_B filter
+    n_1 = comp(3, ks[6], ks[7])
+    n_2 = comp(4, ks[8], ks[9])
+    e_a = _C_SH*g0_a + _C_LOC*h_a
+    e_b = _C_SH*g0_b + _C_LOC*h_b
+    return jnp.array([jnp.ravel(e_a + n_1), jnp.ravel(e_b + n_2),
+                      jnp.ravel(_A_J*e_a - _B_J*e_b)])
 
 
 
@@ -511,10 +589,8 @@ def single_shot_prop(noise_mats, t_vec, y_uv, rho0, key):
     """
     size = jnp.size(t_vec)
     y_uv = y_uv[:, :, :size]
-    bvec_1 = make_noise_traj(noise_mats[0, 0], noise_mats[0, 1], key)[:size]
-    bvec_2_g = make_noise_traj(noise_mats[1, 0], noise_mats[1, 1], key)[:size]
-    bvec_1212g = make_noise_traj(noise_mats[2, 0], noise_mats[2, 1], key)[:size]
-    H_t = make_Hamiltonian(y_uv, jnp.array([bvec_1, bvec_2_g, bvec_1212g]))
+    b_t = make_channel_trajs(noise_mats, key)[:, :size]
+    H_t = make_Hamiltonian(y_uv, b_t)
     U = make_propagator(H_t, t_vec)
     rho_MT = jnp.matmul(jnp.matmul(U, rho0), U.conjugate().transpose())
     return rho_MT

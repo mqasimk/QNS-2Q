@@ -33,7 +33,7 @@ ALL_KEYS = SELF_KEYS + CROSS_KEYS
 
 @pytest.fixture(scope="module")
 def systematic_result():
-    spectra = analytic_spectra(GAMMA, GAMMA12)
+    spectra = analytic_spectra()
     sys, chk = comb_inversion_systematic(spectra, C_TIMES, M, T,
                                          n_wfine=20001, n_tb=6000, return_selfcheck=True)
     return sys, chk
@@ -60,7 +60,7 @@ def test_output_shapes_and_types(systematic_result):
 def test_systematic_is_finite_and_bounded(systematic_result):
     """The systematic must be finite and a sane fraction of the signal (not blow-up)."""
     sys, _ = systematic_result
-    spectra = analytic_spectra(GAMMA, GAMMA12)
+    spectra = analytic_spectra()
     wk = np.array([2 * np.pi * (j + 1) / T for j in range(TRUNC)])
     for key in ALL_KEYS:
         assert np.all(np.isfinite(sys[key]))
@@ -76,7 +76,7 @@ def test_kernels_cover_all_six_spectra():
 
 def test_dc_systematic_finite_and_bounded():
     """DC bias is finite for all six and a sane fraction (<25%) of the DC value."""
-    spectra = analytic_spectra(GAMMA, GAMMA12)
+    spectra = analytic_spectra()
     bias = dc_systematic(spectra, M, T, n_tb_per_period=1000, n_wfine=60001)
     for key in ALL_KEYS:
         assert np.isfinite(bias[key])
@@ -84,19 +84,25 @@ def test_dc_systematic_finite_and_bounded():
         assert abs(bias[key]) < 0.25 * abs(s0), f"{key} DC bias {bias[key]:.0f} too large"
 
 
-def test_dc_self_spectra_biased_positive_by_ising_leak():
-    """Self-spectra DC bias is positive: the residual S_1212 leak through the partner
-    CDD3 (positive) dominates the small negative FID short-time tail."""
-    spectra = analytic_spectra(GAMMA, GAMMA12)
+def test_dc_self_spectra_leak_bias_small():
+    """Self-spectra DC bias is a sub-percent effect under the anchored model: the
+    residual S_1212 leak through the partner CDD3 is only ~4% of the self DC
+    (S_1212(0)/S_11(0) ~ 0.04, gate-operating-point calibration), so neither it nor
+    the small negative FID short-time tail biases the DC fit appreciably. (Under the
+    pre-2026-06 model the leak was ~80% of the self DC and forced a positive bias;
+    that sign claim was model-specific.)"""
+    spectra = analytic_spectra()
     bias = dc_systematic(spectra, M, T, n_tb_per_period=1000, n_wfine=60001)
-    assert bias['S11'] > 0, "S_11 DC should be biased high (Ising leak)"
-    assert bias['S22'] > 0, "S_22 DC should be biased high (Ising leak)"
+    for key in ('S11', 'S22'):
+        truth = float(np.real(spectra[key](np.array([0.0]))[0]))
+        assert abs(bias[key]) < 0.01 * abs(truth), \
+            f"{key} DC bias {bias[key]:.2e} exceeds 1% of truth {truth:.2e}"
 
 
 def test_selfconsistent_runs_without_truth(systematic_result):
     """The self-consistent estimate (from a reconstructed comb) runs and is finite."""
     sys, _ = systematic_result
-    spectra = analytic_spectra(GAMMA, GAMMA12)
+    spectra = analytic_spectra()
     wk_full = np.concatenate(([0.0], [2 * np.pi * (j + 1) / T for j in range(TRUNC)]))
     # Use the analytic comb as a stand-in "reconstruction" to build the s.c. model.
     recon = {k: np.asarray(spectra[k](wk_full)) for k in ALL_KEYS}
@@ -116,8 +122,8 @@ _T_VEC = np.linspace(0, M * T, M * 300)        # 300 time points per period
 
 @pytest.fixture(scope="module")
 def forward_systematic_result():
-    spectra = analytic_spectra(GAMMA, GAMMA12)
-    return forward_model_systematic(spectra, C_TIMES, M, T, _T_VEC, GAMMA, GAMMA12,
+    spectra = analytic_spectra()
+    return forward_model_systematic(spectra, C_TIMES, M, T, _T_VEC,
                                     _W_GRAIN, _WMAX)
 
 
@@ -141,7 +147,7 @@ def test_forward_systematic_shapes_and_types(forward_systematic_result):
 def test_forward_systematic_finite_and_bounded(forward_systematic_result):
     """Finite, and a sane fraction of the signal (the comb bias never exceeds it)."""
     sys = forward_systematic_result
-    spectra = analytic_spectra(GAMMA, GAMMA12)
+    spectra = analytic_spectra()
     wk = np.array([2 * np.pi * (j + 1) / T for j in range(TRUNC)])
     for key in ALL_KEYS:
         assert np.all(np.isfinite(sys[key]))
@@ -154,8 +160,8 @@ def test_forward_obs_reproduce_comb_kernel_to_leading_order():
     """Sanity on normalization: the deterministic forward observables agree with the
     single-period comb-kernel prediction U @ S to within the comb bias (same scale,
     not off by a factor). Checked on the well-behaved real channel C_12_12_MT_1."""
-    spectra = analytic_spectra(GAMMA, GAMMA12)
-    C = forward_observables(spectra, C_TIMES, M, T, _T_VEC, GAMMA, GAMMA12, _W_GRAIN, _WMAX)
+    spectra = analytic_spectra()
+    C = forward_observables(spectra, C_TIMES, M, T, _T_VEC, _W_GRAIN, _WMAX)
     obs = np.asarray(C['C_12_12_MT_1'])
     assert np.all(np.isfinite(obs))
     # Correlator is a normalized two-qubit coherence exponent -> O(0.1-1), never O(M).
@@ -204,9 +210,9 @@ def test_dc_fit_systematic_recovers_self_and_qq_cross():
     Ising leak through the CDD3 partner (a modest, correctly-quoted systematic), so a
     looser bound applies. (The Ising-coupled DCs may be flagged/large for a quasi-static
     regime; only finiteness is asserted there for regime-robustness.)"""
-    spectra = analytic_spectra(GAMMA, GAMMA12)
+    spectra = analytic_spectra()
     t_sweep = np.arange(1, 11) * T
-    bias = dc_fit_systematic(spectra, t_sweep, GAMMA, GAMMA12)
+    bias = dc_fit_systematic(spectra, t_sweep)
     for key in ALL_KEYS:
         assert np.isfinite(bias[key])
     truth12 = float(np.real(spectra['S12'](np.array([0.0]))[0]))

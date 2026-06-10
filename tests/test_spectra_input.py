@@ -84,8 +84,8 @@ class TestSelfSpectra:
 
     @pytest.mark.parametrize("spectrum_fn", [S_11, S_22, S_1212])
     def test_even_symmetry(self, spectrum_fn):
-        """Self-spectra must be even: S(w) == S(-w)."""
-        w = jnp.linspace(-5e7, 5e7, 301)
+        """Self-spectra must be even: S(w) == S(-w) (tau-unit band scale)."""
+        w = jnp.linspace(-2.0, 2.0, 301)
         vals = spectrum_fn(w)
         np.testing.assert_allclose(np.array(vals), np.array(vals[::-1]), rtol=1e-10)
 
@@ -102,42 +102,35 @@ class TestSelfSpectra:
 
 
 class TestCrossSpectra:
-    """Tests for cross-spectra S_1_2, S_1_12, S_2_12."""
+    """Tests for cross-spectra S_1_2, S_1_12, S_2_12 (no-lag API: phases are
+    internal to the anchored model, see NOISE_MODEL_SPEC.md)."""
+
+    @pytest.mark.parametrize("cross_fn", [S_1_2, S_1_12, S_2_12])
+    def test_hermitian_symmetry(self, cross_fn):
+        """Cross-spectra of real processes: S_ab(-w) == conj(S_ab(w))."""
+        w = jnp.linspace(0.01, 2.0, 101)
+        np.testing.assert_allclose(np.array(cross_fn(-w)),
+                                   np.conj(np.array(cross_fn(w))), rtol=1e-10)
 
     @pytest.mark.parametrize("cross_fn,self_fn1,self_fn2", [
         (S_1_2, S_11, S_22),
         (S_1_12, S_11, S_1212),
         (S_2_12, S_22, S_1212),
     ])
-    def test_gamma_zero_is_real(self, small_frequency_grid, cross_fn, self_fn1, self_fn2):
-        """With gamma=0, cross-spectra should be real-valued."""
-        vals = cross_fn(small_frequency_grid, 0.0)
-        np.testing.assert_allclose(np.imag(np.array(vals)), 0.0, atol=1e-10)
-
-    @pytest.mark.parametrize("cross_fn,self_fn1,self_fn2", [
-        (S_1_2, S_11, S_22),
-        (S_1_12, S_11, S_1212),
-        (S_2_12, S_22, S_1212),
-    ])
-    def test_cauchy_schwarz_gamma_zero(self, small_frequency_grid, cross_fn, self_fn1, self_fn2):
-        """At gamma=0: |S_ab(w)|^2 <= S_aa(w) * S_bb(w) (Cauchy-Schwarz)."""
-        w = small_frequency_grid
-        cross_vals = cross_fn(w, 0.0)
-        s1 = self_fn1(w)
-        s2 = self_fn2(w)
-        lhs = jnp.abs(cross_vals) ** 2
-        rhs = s1 * s2
-        assert jnp.all(lhs <= rhs + 1e-6)
+    def test_cauchy_schwarz(self, cross_fn, self_fn1, self_fn2):
+        """At every w: |S_ab(w)|^2 <= S_aa(w) * S_bb(w) (PSD-matrix positivity)."""
+        w = jnp.linspace(0.0, 2.0, 501)
+        lhs = jnp.abs(cross_fn(w)) ** 2
+        rhs = self_fn1(w) * self_fn2(w)
+        assert jnp.all(lhs <= rhs * (1 + 1e-12) + 1e-30)
 
     @pytest.mark.parametrize("cross_fn", [S_1_2, S_1_12, S_2_12])
     def test_output_shape(self, small_frequency_grid, cross_fn):
-        vals = cross_fn(small_frequency_grid, 1e-7)
+        vals = cross_fn(small_frequency_grid)
         assert vals.shape == small_frequency_grid.shape
 
-    def test_gamma_introduces_imaginary_part(self):
-        """Non-zero gamma should produce complex values."""
-        # tau units: probe where the spectra live (w*tau ~ 0.02..1.25) with a
-        # time shift of a few tau.
-        w = jnp.linspace(0.025, 1.25, 50)  # positive frequencies only
-        vals = S_1_2(w, 4.0)
+    def test_imaginary_part_in_band(self):
+        """The DT_SHIFT lag produces nonzero Im parts inside the comb band."""
+        w = jnp.linspace(0.025, 1.25, 50)
+        vals = S_1_2(w)
         assert jnp.max(jnp.abs(jnp.imag(vals))) > 1e-3 * jnp.max(jnp.abs(vals))

@@ -245,10 +245,11 @@ def dc_systematic(spectra, M, T, dc_cts=None, n_tb_per_period=2000,
 #     C_a_0   = 0.5 (Var Phi_l + Var Phi_12)    (self-l + Ising self)
 #     C_a_b   =      Cov(Phi_l, Phi_12)         (qubit-l <-> Ising cross)
 #
-# Channels: 1 -> (S11, gamma=0, toggle y[0,0]); 2 -> (S22, gamma, y[1,1]);
-#           12 -> (S1212, gamma_12, y[2,2] = y[0,0]*y[1,1]). Cross weight is
-# sqrt(S_a S_b) (the simulator builds b_1,b_2,b_12 from one shared random draw, so
-# the synthesized cross-PSD is exactly sqrt(S_a S_b) e^{-i w (gamma_b-gamma_a)}).
+# Channels: 1 -> (S11, toggle y[0,0]); 2 -> (S22, y[1,1]); 12 -> (S1212, y[2,2] =
+# y[0,0]*y[1,1]). Cross weights use the model's TRUE complex cross-spectra:
+# Cov(Phi_a, Phi_b) = sum_j (dw/pi) Re[S_ab(w_j) ff_a(w_j) conj(ff_b(w_j))], which
+# is exact for the component synthesis of model.trajectories (and reduces to the
+# legacy sqrt(S_a S_b) e^{-i w dgamma} rule for the old shared-draw model).
 
 # observable name -> (kind, [pulse_q1, pulse_q2], l)   -- mirrors experiments.py
 _FWD_OBS = {
@@ -269,7 +270,7 @@ _FWD_OBS = {
 _CH_TOGGLE = {1: (0, 0), 2: (1, 1), 12: (2, 2)}
 
 
-def forward_observables(spectra, c_times, M, T, t_vec, gamma, gamma_12, w_grain, wmax,
+def forward_observables(spectra, c_times, M, T, t_vec, w_grain, wmax,
                         chunk=2000):
     """Exact deterministic 2nd-cumulant value of every harmonic QNS observable.
 
@@ -292,13 +293,17 @@ def forward_observables(spectra, c_times, M, T, t_vec, gamma, gamma_12, w_grain,
     Sw = {1: np.real(np.asarray(spectra['S11'](wj))),
           2: np.real(np.asarray(spectra['S22'](wj))),
           12: np.real(np.asarray(spectra['S1212'](wj)))}
-    gam = {1: 0.0, 2: gamma, 12: gamma_12}
-    phase_shift = {ch: np.exp(1j * wj * gam[ch]) for ch in (1, 2, 12)}
+    Sx = {(1, 2): np.asarray(spectra['S12'](wj)),
+          (1, 12): np.asarray(spectra['S112'](wj)),
+          (2, 12): np.asarray(spectra['S212'](wj))}
 
     def cov(Ga, cha, Gb, chb):
-        # Cov(Phi_a, Phi_b) = sum_j (dw/pi) W_ab(w_j) Re[ G_a(w_j)* G_b(w_j) ]
-        W = Sw[cha] if cha == chb else np.sqrt(Sw[cha] * Sw[chb])
-        return float(np.sum((dw / np.pi) * W * np.real(np.conj(Ga) * Gb)))
+        # Cov(Phi_a, Phi_b) = sum_j (dw/pi) Re[ S_ab(w_j) ff_a(w_j) ff_b(w_j)* ];
+        # for a == b this is the usual (dw/pi) S_aa |ff_a|^2.
+        if cha == chb:
+            return float(np.sum((dw / np.pi) * Sw[cha] * np.real(np.conj(Ga) * Gb)))
+        W = Sx[(cha, chb)]
+        return float(np.sum((dw / np.pi) * np.real(W * Ga * np.conj(Gb))))
 
     out = {k: np.zeros(n) for k in _FWD_OBS}
     for i in range(n):
@@ -312,9 +317,9 @@ def forward_observables(spectra, c_times, M, T, t_vec, gamma, gamma_12, w_grain,
                 if pk not in y_cache:
                     y_cache[pk] = make_y(tb_base, list(pulse), ctime=float(c_times[i]), m=M)
                 toggle = np.asarray(y_cache[pk][_CH_TOGGLE[ch]])
-                # G_a(w) = e^{i w gamma_a} * \int toggle(t) e^{i w t} dt   (full record)
-                ff = _ff_grid(toggle, t_j, wj, +1, chunk=chunk)
-                G_cache[key] = ff * phase_shift[ch]
+                # ff_a(w) = \int toggle(t) e^{i w t} dt   (full record; the
+                # cross-spectrum phases live in S_ab, not in per-channel shifts)
+                G_cache[key] = _ff_grid(toggle, t_j, wj, +1, chunk=chunk)
             return G_cache[key]
 
         for name, (kind, pulse, l) in _FWD_OBS.items():
@@ -332,7 +337,7 @@ def forward_observables(spectra, c_times, M, T, t_vec, gamma, gamma_12, w_grain,
     return out
 
 
-def forward_model_systematic(spectra, c_times, M, T, t_vec, gamma, gamma_12,
+def forward_model_systematic(spectra, c_times, M, T, t_vec,
                              w_grain, wmax, inv_opts=None):
     """Honest comb-inversion systematic for the harmonic reconstruction points.
 
@@ -348,7 +353,7 @@ def forward_model_systematic(spectra, c_times, M, T, t_vec, gamma, gamma_12,
                                               recon_S_1_2, recon_S_1_12, recon_S_2_12)
     opts = dict(inv_opts or {})
     opts['diagnostics'] = False        # never spam diagnostics from inside the systematic
-    C = forward_observables(spectra, c_times, M, T, t_vec, gamma, gamma_12, w_grain, wmax)
+    C = forward_observables(spectra, c_times, M, T, t_vec, w_grain, wmax)
     kw = dict(c_times=np.asarray(c_times), m=M, T=T, **opts)
 
     rec = {
@@ -373,7 +378,7 @@ def forward_model_systematic(spectra, c_times, M, T, t_vec, gamma, gamma_12,
     return sys
 
 
-def dc_fit_systematic(spectra, t_sweep, gamma, gamma_12, n_w=400001, wmax=12.5):
+def dc_fit_systematic(spectra, t_sweep, n_w=400001, wmax=12.5):
     # wmax is an angular-frequency integration cutoff in tau units (rad/tau):
     # 12.5 = the legacy 5e8 rad/s at tau = 25 ns.
     """Deterministic bias of the multi-time DC slope fit, per spectrum.
@@ -385,7 +390,7 @@ def dc_fit_systematic(spectra, t_sweep, gamma, gamma_12, n_w=400001, wmax=12.5):
     tiny (~0.1%); for quasi-static / sub-comb-cusp noise (e.g. a 1/|w| Ising spectrum)
     the linear regime is never reached and the bias is large -- exactly the inflated
     bar the flagged DC point should carry. (FID filter |F(w,t)|^2 = sin^2(wt/2)/(w/2)^2;
-    self C(t)=(1/2pi)int S|F|^2, cross C(t)=(1/pi)int sqrt(Sa Sb)cos(w*dgamma)|F|^2.)
+    self C(t)=(1/2pi)int S|F|^2, cross C(t)=(1/pi)int Re[S_ab(w)]|F|^2.)
     """
     from qns2q.characterize.inversion import (recon_S_11_dc, recon_S_22_dc, recon_S_1212_dc,
                                               recon_S_1_2_dc, recon_S_1_12_dc, recon_S_2_12_dc)
@@ -400,9 +405,9 @@ def dc_fit_systematic(spectra, t_sweep, gamma, gamma_12, n_w=400001, wmax=12.5):
     def c_self(key):
         return (1 / (2 * np.pi)) * np.trapezoid(S[key][None, :] * F2, w, axis=1)
 
-    def c_cross(ka, kb, dgamma):
-        g = np.sqrt(S[ka] * S[kb])
-        return (1 / np.pi) * np.trapezoid((g * np.cos(w * dgamma))[None, :] * F2, w, axis=1)
+    def c_cross(key):
+        g = np.real(np.asarray(spectra[key](w)))
+        return (1 / np.pi) * np.trapezoid(g[None, :] * F2, w, axis=1)
 
     # Residual Ising leak through the CDD3 partner of the self-DC observables: the high-
     # order CDD3 nulls most of S_1212 but not all, biasing C_1_0_FIDCDD3 = Cself(S11) +
@@ -428,9 +433,9 @@ def dc_fit_systematic(spectra, t_sweep, gamma, gamma_12, n_w=400001, wmax=12.5):
     C_10ff = cs11 + cs1212                               # C_1_0_FIDFID = Cself11 + Cself1212
     C_20ff = cs22 + cs1212                               # C_2_0_FIDFID
     C_120 = cs11 + cs22                                  # C_12_0_FID_FID = Cself11 + Cself22
-    C_1212 = c_cross('S11', 'S22', gamma)                # C_12_12_FID
-    C_112 = c_cross('S11', 'S1212', gamma_12)            # C_1_12_FID
-    C_212 = c_cross('S22', 'S1212', gamma_12 - gamma)    # C_2_12_FID
+    C_1212 = c_cross('S12')                              # C_12_12_FID
+    C_112 = c_cross('S112')                              # C_1_12_FID
+    C_212 = c_cross('S212')                              # C_2_12_FID
 
     s11, _, _ = recon_S_11_dc([C_10], t_sweep=t)
     s22, _, _ = recon_S_22_dc([C_20], t_sweep=t)
@@ -446,16 +451,16 @@ def dc_fit_systematic(spectra, t_sweep, gamma, gamma_12, n_w=400001, wmax=12.5):
             'S112': s112 - truth('S112'), 'S212': s212 - truth('S212')}
 
 
-def analytic_spectra(gamma, gamma_12):
+def analytic_spectra():
     """Ground-truth spectrum callables S(w) for the active regime (exact systematic)."""
     from qns2q.noise.spectra import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
     return {
         'S11':   lambda w: np.asarray(S_11(jnp.asarray(w))),
         'S22':   lambda w: np.asarray(S_22(jnp.asarray(w))),
         'S1212': lambda w: np.asarray(S_1212(jnp.asarray(w))),
-        'S12':   lambda w: np.asarray(S_1_2(jnp.asarray(w), gamma)),
-        'S112':  lambda w: np.asarray(S_1_12(jnp.asarray(w), gamma_12)),
-        'S212':  lambda w: np.asarray(S_2_12(jnp.asarray(w), gamma_12 - gamma)),
+        'S12':   lambda w: np.asarray(S_1_2(jnp.asarray(w))),
+        'S112':  lambda w: np.asarray(S_1_12(jnp.asarray(w))),
+        'S212':  lambda w: np.asarray(S_2_12(jnp.asarray(w))),
     }
 
 
