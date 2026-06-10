@@ -74,8 +74,6 @@ class CZOptConfig:
     # These will be loaded from the run files
     Tqns: float = field(init=False)
     mc: int = field(init=False)
-    gamma: float = field(init=False)
-    gamma12: float = field(init=False)
 
     # Calculated properties
     path: str = field(init=False)
@@ -131,8 +129,6 @@ class CZOptConfig:
 
         self.tau = self.Tqns / self.tau_divisor
         self.mc = int(self.params['truncate'])
-        self.gamma = float(self.params['gamma'])
-        self.gamma12 = float(self.params['gamma_12'])
 
         # Frequency Grid
         w_max_sys = 2 * jnp.pi * self.mc / self.Tqns
