@@ -708,6 +708,28 @@ def solver_phase_coeffs_fast(y_uv, noise_mats, t_vec, n_shots):
     return jnp.concatenate(output, axis=0)
 
 
+class PhasedState:
+    """Per-shot diagonal-propagator state: phases u (n_shots, 8) + prep rho (8, 8).
+
+    Equivalent to the dense (n_shots, 8, 8) stack U_s rho U_s^dag (U_s diagonal)
+    but ~24x lighter; `observables.compute_probs_jax` consumes it through an
+    exact quadratic-form fast path (probs = u^dag [ (G^dag M G)^T o rho ] u)."""
+
+    def __init__(self, u, rho):
+        self.u = u
+        self.rho = rho
+
+    @property
+    def shape(self):
+        return (self.u.shape[0], 8, 8)
+
+
+def phased_state(coeffs, rho):
+    """Build the PhasedState for stored per-shot phase coefficients."""
+    u = jnp.exp(-1j*jnp.matmul(jnp.asarray(coeffs), _DIAG_BASIS))
+    return PhasedState(u, jnp.asarray(rho))
+
+
 @jax.jit
 def apply_phase_coeffs(coeffs, rho):
     """Evolve `rho` through stored per-shot phase coefficients.

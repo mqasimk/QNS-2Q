@@ -12,7 +12,7 @@ import qutip as qt
 from joblib import Parallel, delayed
 from qutip_qip.operations import snot
 
-from qns2q.model.trajectories import make_init_state, make_y
+from qns2q.model.trajectories import make_init_state, make_y, PhasedState
 
 
 # --- Helper functions for creating operators ---
@@ -93,7 +93,45 @@ def povms(a_m: np.ndarray, delta: np.ndarray) -> List[qt.Qobj]:
 
 
 @jax.jit
+@jax.jit
+def _probs_from_phases(u, rho, gate, M_ops):
+    """Exact fast path for PhasedState batches (diagonal propagators).
+
+    probs[n, m] = Tr[M_m G (rho o u_n u_n^dag) G^dag]
+                = sum_ab [G^dag M_m G]_ab rho_ba u_nb conj(u_na)
+    -- a quadratic form in the (N, 8) phase vectors; no (N, 8, 8) stacks."""
+    K = jnp.einsum('ia,mij,jb->mab', jnp.conj(gate), M_ops, gate)   # G^dag M G
+    C = jnp.transpose(K, (0, 2, 1)) * rho[None, :, :]               # C[m,b,a] = K[m,a,b] rho[b,a]
+    return jnp.real(jnp.einsum('nb,mba,na->nm', u, C, jnp.conj(u)))
+
+
+# --- Projection (readout-sampling) noise, configured per run -----------------------
+# n_meas = 0 reproduces the historical idealized behavior (exact expectation per
+# noise realization). Finite n_meas draws multinomial outcome counts per shot, so
+# the quoted bars include finite-measurement statistics. The dedicated Generator
+# keeps the legacy np.random stream (noise keys, bootstrap) untouched.
+_PROJECTION = {'n_meas': 0, 'rng': None}
+
+
+def set_projection_sampling(n_meas: int, seed: int = None):
+    _PROJECTION['n_meas'] = int(n_meas) if n_meas else 0
+    _PROJECTION['rng'] = np.random.default_rng(seed) if n_meas else None
+
+
+def _sample_projection(probs: np.ndarray) -> np.ndarray:
+    """Replace exact outcome probabilities by multinomial frequencies."""
+    n = _PROJECTION['n_meas']
+    if not n:
+        return probs
+    p = np.clip(probs, 0.0, None)
+    p = p / np.sum(p, axis=1, keepdims=True)
+    counts = _PROJECTION['rng'].multinomial(n, p)
+    return counts / float(n)
+
+
 def compute_probs_jax(rho_batch, gate, M_ops):
+    if isinstance(rho_batch, PhasedState):
+        return _probs_from_phases(rho_batch.u, rho_batch.rho, gate, M_ops)
     # rho_batch: (N, 8, 8)
     # gate: (8, 8)
     # M_ops: (4, 8, 8) -> [M00, M01, M10, M11]
@@ -198,6 +236,7 @@ def _compute_expectation(gate: qt.Qobj, state: jnp.ndarray, a_m: np.ndarray, del
 
     # Compute probabilities for the entire batch
     probs = compute_probs_jax(state, gate_jax, M_ops)
+    probs = _sample_projection(np.array(probs))
 
     return get_expect_val_from_probs(probs, cm, qubit_idx)
 
@@ -268,7 +307,7 @@ def _compute_expectation_with_stderr(gate: qt.Qobj, state: jnp.ndarray, a_m: np.
 
     # Compute probabilities for the entire batch
     probs = compute_probs_jax(state, gate_jax, M_ops)
-    probs_np = np.array(probs)
+    probs_np = _sample_projection(np.array(probs))
 
     vals = get_expect_val_per_shot(probs_np, cm, qubit_idx)
 
