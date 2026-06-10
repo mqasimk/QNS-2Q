@@ -29,7 +29,7 @@ import pytest
 from qns2q.model.trajectories import (make_noise_mat_arr, make_y, make_init_state,
                                       solver_prop)
 from qns2q.model.observables import e_xx_hat_with_stderr, e_x_hat_with_stderr
-from qns2q.noise.spectra import S_11, S_22, S_1212
+from qns2q.noise.spectra import S_el_A, S_el_B, S_nuc_1, S_nuc_2, DT_SHIFT
 
 SEED = 1234
 K = 10.0               # time-unit rescaling factor
@@ -40,18 +40,18 @@ TRUNCATE = 4
 M = 2
 
 
-def _run_arm(tau, spec_vec):
+def _run_arm(tau, components, dt_shift):
     """One miniature QNS measurement: returns E[X1X2] and E[X1] after a CPMG/CPMG
     block sequence under synthesized noise with a fixed RNG seed."""
     T = 16 * tau
     wmax = 2 * np.pi * TRUNCATE / T
-    gamma, gamma_12 = T / 14, T / 28
     t_b = jnp.linspace(0, T, T_GRAIN)
     t_vec = jnp.linspace(0, M * T, M * T_GRAIN)
 
     noise_mats = jnp.array(make_noise_mat_arr(
-        'make', spec_vec=spec_vec, t_vec=t_vec, w_grain=W_GRAIN, wmax=wmax,
-        truncate=TRUNCATE, gamma=gamma, gamma_12=gamma_12, midpoint=True))
+        'make', t_vec=t_vec, w_grain=W_GRAIN, wmax=wmax,
+        truncate=TRUNCATE, midpoint=True,
+        components=components, dt_shift=dt_shift))
 
     y_uv = jnp.array(make_y(t_b, ['CPMG', 'CPMG'], ctime=T / 2, m=M))
     rho0 = make_init_state(np.array([1., 1.]), np.array([0. + 0j, 0. + 0j]),
@@ -68,11 +68,14 @@ def _run_arm(tau, spec_vec):
 
 def test_observables_invariant_under_time_rescaling():
     tau1 = 2.5e-8
-    exx1, ex11 = _run_arm(tau1, [S_11, S_22, S_1212])
+    comps = (S_el_A, S_el_B, S_nuc_1, S_nuc_2)
+    exx1, ex11 = _run_arm(tau1, comps, DT_SHIFT * tau1 / 2.5e-8)
 
-    # tau -> K*tau with the consistently rescaled spectra S'(w) = S(K*w)/K.
-    spec_scaled = [lambda w, f=f: f(K * w) / K for f in (S_11, S_22, S_1212)]
-    exx2, ex12 = _run_arm(K * tau1, spec_scaled)
+    # tau -> K*tau with consistently rescaled components S'(w) = S(K*w)/K and a
+    # rescaled cross-spectrum lag dt' = K*dt (the mixing constants C2_SHARE, A_J,
+    # B_J are dimensionless and invariant).
+    comps_scaled = tuple(lambda w, f=f: f(K * w) / K for f in comps)
+    exx2, ex12 = _run_arm(K * tau1, comps_scaled, K * DT_SHIFT * tau1 / 2.5e-8)
 
     npt.assert_allclose(exx2, exx1, rtol=1e-10)
     npt.assert_allclose(ex12, ex11, rtol=1e-10)

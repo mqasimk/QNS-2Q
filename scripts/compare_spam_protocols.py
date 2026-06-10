@@ -48,9 +48,9 @@ def truth_fns(gamma, gamma_12):
         'S11': lambda w: np.real(np.asarray(S_11(w))),
         'S22': lambda w: np.real(np.asarray(S_22(w))),
         'S1212': lambda w: np.real(np.asarray(S_1212(w))),
-        'S12': lambda w: np.asarray(S_1_2(w, gamma)),
-        'S112': lambda w: np.asarray(S_1_12(w, gamma_12)),
-        'S212': lambda w: np.asarray(S_2_12(w, gamma_12 - gamma)),
+        'S12': lambda w: np.asarray(S_1_2(w)),
+        'S112': lambda w: np.asarray(S_1_12(w)),
+        'S212': lambda w: np.asarray(S_2_12(w)),
     }
 
 

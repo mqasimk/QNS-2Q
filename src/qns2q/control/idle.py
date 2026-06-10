@@ -214,15 +214,15 @@ class Config:
         # Off-diagonal elements
         if self.include_cross_spectra:
             # 1-2
-            s12 = combine(self.specs["S12"], S_1_2, self.gamma)
+            s12 = combine(self.specs["S12"], S_1_2)
             SMat = SMat.at[1, 2].set(s12)
             SMat = SMat.at[2, 1].set(jnp.conj(s12))
             # 1-12 (Index 1-3)
-            s112 = combine(self.specs["S112"], S_1_12, self.gamma12)
+            s112 = combine(self.specs["S112"], S_1_12)
             SMat = SMat.at[1, 3].set(s112)
             SMat = SMat.at[3, 1].set(jnp.conj(s112))
             # 2-12 (Index 2-3)
-            s212 = combine(self.specs["S212"], S_2_12, self.gamma12 - self.gamma)
+            s212 = combine(self.specs["S212"], S_2_12)
             SMat = SMat.at[2, 3].set(s212)
             SMat = SMat.at[3, 2].set(jnp.conj(s212))
         
@@ -240,14 +240,14 @@ class Config:
         # Off-diagonal elements
         if self.include_cross_spectra:
             # 1-2
-            SMat_ideal = SMat_ideal.at[1, 2].set(S_1_2(self.w_ideal, self.gamma))
-            SMat_ideal = SMat_ideal.at[2, 1].set(jnp.conj(S_1_2(self.w_ideal, self.gamma)))
+            SMat_ideal = SMat_ideal.at[1, 2].set(S_1_2(self.w_ideal))
+            SMat_ideal = SMat_ideal.at[2, 1].set(jnp.conj(S_1_2(self.w_ideal)))
             # 1-12 (Index 1-3)
-            SMat_ideal = SMat_ideal.at[1, 3].set(S_1_12(self.w_ideal, self.gamma12))
-            SMat_ideal = SMat_ideal.at[3, 1].set(jnp.conj(S_1_12(self.w_ideal, self.gamma12)))
+            SMat_ideal = SMat_ideal.at[1, 3].set(S_1_12(self.w_ideal))
+            SMat_ideal = SMat_ideal.at[3, 1].set(jnp.conj(S_1_12(self.w_ideal)))
             # 2-12 (Index 2-3)
-            SMat_ideal = SMat_ideal.at[2, 3].set(S_2_12(self.w_ideal, self.gamma12 - self.gamma))
-            SMat_ideal = SMat_ideal.at[3, 2].set(jnp.conj(S_2_12(self.w_ideal, self.gamma12 - self.gamma)))
+            SMat_ideal = SMat_ideal.at[2, 3].set(S_2_12(self.w_ideal))
+            SMat_ideal = SMat_ideal.at[3, 2].set(jnp.conj(S_2_12(self.w_ideal)))
         
         return SMat_ideal
 
