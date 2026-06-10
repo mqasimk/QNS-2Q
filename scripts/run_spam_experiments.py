@@ -29,7 +29,7 @@ import numpy as np
 import jax.numpy as jnp
 
 from qns2q.characterize.experiments import QNSExperimentConfig, main
-from qns2q.paths import run_folder
+from qns2q.paths import run_folder, project_root
 
 # Injected (true) SPAM parameters. alpha_M = a + b - 1, delta = a - b, so
 # qubit 1: alpha_M = 0.97, delta = +0.03; qubit 2: alpha_M = 0.95, delta = -0.02.
@@ -86,18 +86,38 @@ def build_config(protocol: str, reduced: bool, strong: bool = False,
     return QNSExperimentConfig(**common)
 
 
+def dataset_path():
+    """The phase dataset lives with the (SPAM-free) reference arm."""
+    return os.path.join(project_root(),
+                        run_folder(spam=True, protocol='reference'),
+                        'phases.npz')
+
+
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:]]
     reduced = '--reduced' in args
     medium = '--medium' in args
     tuned = '--tuned' in args
     strong = '--strong' in args
+    # --record: run this arm with a PhaseRecorder and save the per-shot phase
+    #   dataset alongside it (use with the reference arm: the noise is
+    #   protocol- and SPAM-strength-independent, so ONE recording serves every
+    #   subsequent arm and strength).
+    # --replay: skip noise synthesis and replay the recorded dataset through
+    #   this arm's preps + estimators (~minutes instead of ~40 at --tuned).
+    record = '--record' in args
+    replay = '--replay' in args
     args = [a for a in args if not a.startswith('--')]
     protocol = args[0] if args else 'mitigated'
     if protocol not in ('raw', 'mitigated', 'robust', 'reference'):
         raise SystemExit(f"Unknown protocol {protocol!r}; "
                          "expected raw|mitigated|robust|reference")
+    if record and replay:
+        raise SystemExit("--record and --replay are mutually exclusive")
     config = build_config(protocol, reduced, strong, medium, tuned)
     print(f"[spam] protocol={protocol} reduced={reduced} medium={medium} "
-          f"tuned={tuned} strong={strong} -> {config.fname}")
-    main(config)
+          f"tuned={tuned} strong={strong} record={record} replay={replay} "
+          f"-> {config.fname}")
+    main(config,
+         record_to=dataset_path() if record else None,
+         replay_from=dataset_path() if replay else None)

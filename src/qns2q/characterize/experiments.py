@@ -29,7 +29,8 @@ from qns2q.model.observables import (make_c_12_0_mt, make_c_12_12_mt, make_c_a_0
 from qns2q.characterize.spam import (estimate_spam, make_c_12_0_mt_robust,
                                      make_c_12_12_mt_robust, make_c_a_0_mt_robust)
 from qns2q.noise.spectra import S_11, S_22, S_1212
-from qns2q.model.trajectories import make_noise_mat_arr, solver_prop
+from qns2q.model.trajectories import (make_noise_mat_arr, solver_prop,
+                                      solver_phase_coeffs, apply_phase_coeffs)
 from qns2q.paths import run_folder, project_root
 
 # Seed for reproducible QNS data. The per-shot noise keys in solver_prop are drawn
@@ -201,16 +202,23 @@ class ExperimentRunner:
     Runs a series of QNS experiments based on a given configuration.
     """
 
-    def __init__(self, config: QNSExperimentConfig):
+    def __init__(self, config: QNSExperimentConfig, solver=None,
+                 make_mats: bool = True):
         """
         Initializes the ExperimentRunner.
 
         Args:
             config: The configuration for the experiments.
+            solver: Solver callable with `solver_prop`'s signature; defaults to
+                the real trajectory solver. The record/replay SPAM pipeline
+                passes a `PhaseRecorder` / `PhaseReplayer` here.
+            make_mats: Skip the (expensive) noise-matrix build when False --
+                a replaying runner never touches them.
         """
         self.config = config
+        self.solver = solver_prop if solver is None else solver
         self.path = self._setup_output_directory()
-        self.noise_mats = self._make_noise_mats()
+        self.noise_mats = self._make_noise_mats() if make_mats else None
         self.results = {}
 
     def _setup_output_directory(self):
@@ -279,7 +287,7 @@ class ExperimentRunner:
                 f"{self.config.spam_protocol!r}: {exp_type}")
         exp_func = exp_map[exp_type]
         return exp_func(
-            solver_prop,
+            self.solver,
             pulse_sequence,
             t_vec,
             c_times,
@@ -380,7 +388,91 @@ class ExperimentRunner:
         print(f"Results saved to {self.path}")
 
 
-def main(config=None):
+class PhaseRecorder:
+    """Solver wrapper that records each call's per-shot phase coefficients.
+
+    The dephasing propagators are diagonal, so three numbers per shot
+    (C_a = int 0.5 y_a b_a dt, a in {1, 2, 12}) determine the evolution of ANY
+    initial state. Recording them once makes every further SPAM-protocol arm a
+    cheap replay: the arms differ only in the prepared state and in estimator
+    post-processing, never in the noise. The recorder consumes np.random
+    exactly like `solver_prop`, so the recording run doubles as a normal
+    (typically SPAM-free reference) arm.
+    """
+
+    def __init__(self):
+        self.calls = []
+        self.t_lens = []
+
+    def __call__(self, y_uv, noise_mats, t_vec, rho, n_shots):
+        coeffs = solver_phase_coeffs(y_uv, noise_mats, t_vec, n_shots)
+        self.calls.append(np.asarray(coeffs))
+        self.t_lens.append(int(np.size(t_vec)))
+        return apply_phase_coeffs(coeffs, jnp.asarray(rho))
+
+
+class PhaseReplayer:
+    """Solver wrapper that replays a recorded phase dataset call-by-call.
+
+    The experiment suite is a deterministic sequence of solver calls (identical
+    across the non-robust protocols), so a simple call-order FIFO suffices;
+    each call's shot count and time-grid length are checked against the
+    recording. Replay arms skip noise-matrix construction and trajectory
+    synthesis entirely (~minutes instead of ~40 per arm at the tuned config).
+    """
+
+    def __init__(self, calls, t_lens):
+        self.calls = list(calls)
+        self.t_lens = list(t_lens)
+        self.i = 0
+
+    def __call__(self, y_uv, noise_mats, t_vec, rho, n_shots):
+        if self.i >= len(self.calls):
+            raise RuntimeError("phase dataset exhausted: the replayed suite "
+                               "issued more solver calls than were recorded")
+        coeffs = self.calls[self.i]
+        if coeffs.shape[0] != n_shots or self.t_lens[self.i] != int(np.size(t_vec)):
+            raise RuntimeError(
+                f"phase-dataset call {self.i} mismatch: recorded "
+                f"(n_shots={coeffs.shape[0]}, n_t={self.t_lens[self.i]}) vs "
+                f"requested (n_shots={n_shots}, n_t={int(np.size(t_vec))}) -- "
+                "the replay config must match the recording config")
+        self.i += 1
+        return apply_phase_coeffs(jnp.asarray(coeffs), jnp.asarray(rho))
+
+
+# Config fields that must match between a recording and a replay for the
+# stored phases to describe the same experiment suite.
+_DATASET_META_FIELDS = ('T', 'M', 't_grain', 'truncate', 'w_grain', 'n_shots',
+                        'midpoint')
+
+
+def save_phase_dataset(path, recorder, config):
+    """Persist a PhaseRecorder's calls (+ the grid metadata) to ``path``."""
+    payload = {f'call_{i:04d}': c for i, c in enumerate(recorder.calls)}
+    payload['n_calls'] = np.array(len(recorder.calls))
+    payload['t_lens'] = np.array(recorder.t_lens, dtype=int)
+    for f in _DATASET_META_FIELDS:
+        payload[f'meta_{f}'] = np.array(getattr(config, f))
+    payload['meta_seed'] = np.array(RANDOM_SEED)
+    np.savez(path, **payload)
+    print(f"Phase dataset saved to {path} ({len(recorder.calls)} calls)")
+
+
+def load_phase_dataset(path, config):
+    """Load a phase dataset and validate it against ``config``'s grid."""
+    d = np.load(path)
+    for f in _DATASET_META_FIELDS:
+        rec, cur = d[f'meta_{f}'], np.array(getattr(config, f))
+        if not np.array_equal(rec, cur):
+            raise ValueError(f"phase dataset {path} was recorded with {f}={rec} "
+                             f"but the replay config has {f}={cur}")
+    n = int(d['n_calls'])
+    calls = [d[f'call_{i:04d}'] for i in range(n)]
+    return PhaseReplayer(calls, d['t_lens'])
+
+
+def main(config=None, record_to=None, replay_from=None):
     """
     Main function to run the QNS experiments.
 
@@ -390,12 +482,28 @@ def main(config=None):
         Experiment configuration. Defaults to ``QNSExperimentConfig()``; pass a custom
         instance (e.g. a reduced t_grain/n_shots) to regenerate a run without editing
         this module.
+    record_to : str, optional
+        Path to write a phase dataset (run the suite with a PhaseRecorder).
+    replay_from : str, optional
+        Path of a phase dataset to replay instead of synthesizing noise.
     """
     np.random.seed(RANDOM_SEED)
     print(f"Running QNS experiments [seed={RANDOM_SEED}]...")
     config = QNSExperimentConfig() if config is None else config
     print(f"SPAM protocol: {config.spam_protocol}")
-    runner = ExperimentRunner(config)
+    if (record_to or replay_from) and config.spam_protocol == 'robust':
+        raise ValueError("record/replay covers the non-robust suite only (the "
+                         "robust protocol runs different experiments)")
+    solver = None
+    if record_to is not None:
+        solver = PhaseRecorder()
+        print(f"[dataset] recording phase coefficients -> {record_to}")
+    elif replay_from is not None:
+        solver = load_phase_dataset(replay_from, config)
+        print(f"[dataset] replaying phase coefficients <- {replay_from} "
+              f"({len(solver.calls)} calls)")
+    runner = ExperimentRunner(config, solver=solver,
+                              make_mats=replay_from is None)
 
     if config.spam_protocol == 'robust':
         # SPAM-robust protocol: two-qubit (twisted+wrung) and single-qubit
@@ -473,6 +581,11 @@ def main(config=None):
         runner.run_dc_sweep(exp_name, pulse_sequence, exp_type, dc_m_sweep, dc_ct, **kwargs)
 
     runner.save_results()
+    if record_to is not None:
+        save_phase_dataset(record_to, solver, config)
+    if replay_from is not None and solver.i != len(solver.calls):
+        print(f"[dataset] WARNING: replay consumed {solver.i} of "
+              f"{len(solver.calls)} recorded calls")
 
 
 if __name__ == "__main__":

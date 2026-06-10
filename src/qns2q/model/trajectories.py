@@ -596,6 +596,65 @@ def single_shot_prop(noise_mats, t_vec, y_uv, rho0, key):
     return rho_MT
 
 
+# Diagonal phase basis of the dephasing Hamiltonian: H(t) is diagonal in the
+# 8-dim (2 qubits + aux) computational basis with diag(H) = sum_a C'_a(t) d_a,
+# d_a = diag(Z_a (x) 1). The full propagator is then U = exp(-i sum_a C_a d_a)
+# with C_a = int 0.5 y_a(t) b_a(t) dt -- three numbers per shot determine the
+# entire evolution. This is what makes the record/replay SPAM pipeline cheap.
+_PAULI_Z_DIAG = np.array([1., -1.])
+_DIAG_BASIS = jnp.array([
+    np.kron(np.kron(_PAULI_Z_DIAG, np.ones(2)), np.ones(2)),   # Z1
+    np.kron(np.kron(np.ones(2), _PAULI_Z_DIAG), np.ones(2)),   # Z2
+    np.kron(np.kron(_PAULI_Z_DIAG, _PAULI_Z_DIAG), np.ones(2)),  # Z1Z2
+])
+
+
+@jax.jit
+def single_shot_phase_coeffs(noise_mats, t_vec, y_uv, key):
+    """Per-shot dephasing phase coefficients C_a = int 0.5 y_a b_a dt, a in
+    {1, 2, 12}. Identical trajectory draw to `single_shot_prop` (same key ->
+    same noise); the propagator is U = exp(-i C . _DIAG_BASIS)."""
+    size = jnp.size(t_vec)
+    y_uv = y_uv[:, :, :size]
+    b_t = make_channel_trajs(noise_mats, key)[:, :size]
+    integrand = 0.5*jnp.stack([y_uv[0, 0]*b_t[0], y_uv[1, 1]*b_t[1],
+                               y_uv[2, 2]*b_t[2]])
+    return jax.scipy.integrate.trapezoid(integrand, t_vec, axis=1)
+
+
+def solver_phase_coeffs(y_uv, noise_mats, t_vec, n_shots):
+    """Phase-coefficient counterpart of `solver_prop`: returns (n_shots, 3).
+
+    Mirrors `solver_prop`'s chunking and np.random key draws exactly, so a run
+    that records phases consumes the same RNG stream (and therefore the same
+    noise realizations) as a legacy run."""
+    y_uv = jnp.array(y_uv)
+    output = []
+    slice_size = 2000
+    n_slices = int(np.ceil(n_shots / slice_size))
+    for i in range(n_slices):
+        current_slice_size = min(slice_size, n_shots - i * slice_size)
+        n_arr = jnp.array(np.random.randint(0, 10000, (current_slice_size, 2)))
+        result = jax.vmap(single_shot_phase_coeffs,
+                          in_axes=[None, None, None, 0])(noise_mats, t_vec, y_uv, n_arr)
+        output.append(result)
+    return jnp.concatenate(output, axis=0)
+
+
+@jax.jit
+def apply_phase_coeffs(coeffs, rho):
+    """Evolve `rho` through stored per-shot phase coefficients.
+
+    Returns the (n_shots, 8, 8) stack of U_s rho U_s^dag with the diagonal
+    U_s = exp(-i coeffs_s . _DIAG_BASIS) -- the exact replay of what
+    `solver_prop` would have produced for these noise realizations, for ANY
+    initial state (the SPAM-protocol arms differ only in rho and in estimator
+    post-processing, so one recorded dataset serves them all)."""
+    p = jnp.matmul(coeffs, _DIAG_BASIS)            # (n_shots, 8)
+    u = jnp.exp(-1j*p)
+    return u[:, :, None]*rho[None, :, :]*jnp.conj(u)[:, None, :]
+
+
 def solver_prop(y_uv, noise_mats, t_vec, rho, n_shots):
     """
     Solve for the average density matrix across multiple noise shots.
