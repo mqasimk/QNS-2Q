@@ -23,7 +23,7 @@ from qns2q.characterize.inversion import (recon_S_11, recon_S_22, recon_S_1_2, r
                                 regress_observables_over_M,
                                 truncation_bias_estimate)
 from qns2q.characterize.systematics import (forward_model_systematic, analytic_spectra,
-                                            dc_fit_systematic)
+                                            dc_fit_systematic, selfconsistent_spectra)
 from qns2q.noise.spectra import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
 from qns2q.paths import run_folder, project_root
 
@@ -145,6 +145,11 @@ class SpectraReconConfig:
     # Fold the deterministic comb-inversion systematic into the quoted error bars
     # (see characterize.systematics). True for honest, n_shots-independent error bars.
     compute_systematic: bool = True
+    # Bias-corrected unfolding: subtract the SELF-CONSISTENT comb-inversion bias
+    # (forward model built from the reconstructed spectra alone -- no ground-truth
+    # knowledge, so it is experimentally legitimate) and quote the iteration
+    # residual as the remaining systematic. Two fixed-point iterations.
+    unfold_bias: bool = True
     params: Dict[str, Any] = field(init=False)
     t_vec: np.ndarray = field(init=False)
     w_grain: int = field(init=False)
@@ -376,6 +381,67 @@ class SpectraReconstructor:
             "S_2_12_err": np.concatenate(([S_2_12_dc_err + 0j], S_2_12_err)),
         }
 
+    def unfold_comb_bias(self):
+        """Self-consistent comb-bias correction (unfolding).
+
+        The comb-delta inversion carries a deterministic bias (truncation +
+        finite-M tooth width + neighbor leakage). ``forward_model_systematic``
+        computes that bias exactly for ANY spectra; feeding it the
+        RECONSTRUCTED spectra (``selfconsistent_spectra`` -- piecewise-linear,
+        no truth knowledge) predicts the bias of this very reconstruction,
+        which is then subtracted. One refinement iteration follows; the quoted
+        systematic becomes the iteration increment |b2 - b1| (the fixed-point
+        convergence scale) instead of the full bias.
+        """
+        c = self.config
+        inv_opts = dict(inversion_method=c.inversion_method, reg_lambda=c.reg_lambda,
+                        enforce_nonneg=c.enforce_nonneg)
+        n_h = len(c.c_times)
+        wk_full = np.concatenate(([0.0],
+                                  [2*np.pi*(j + 1)/c.T for j in range(n_h)]))
+        raw0, nan_mask = {}, {}
+        for sk, rk in _SYS_TO_SPEC.items():
+            arr = np.asarray(self.reconstructed_spectra[rk])
+            nan_mask[sk] = ~np.isfinite(arr)
+            # Robust-protocol-inaccessible spectra are NaN; the robust protocol
+            # ASSUMES S_l,12 = 0, so its self-consistent forward model uses 0.
+            raw0[sk] = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+
+        def bias_of(recon):
+            sc = selfconsistent_spectra(wk_full, recon)
+            b = forward_model_systematic(sc, c.c_times, c.M, c.T, c.t_vec,
+                                         c.w_grain, c.wmax, inv_opts=inv_opts)
+            dcb = dc_fit_systematic(sc, self.dc_t_sweep)
+            out = {}
+            for sk in _SYS_TO_SPEC:
+                full = np.concatenate(([dcb[sk]], np.asarray(b[sk])))
+                if not getattr(self, 'dc_reliable', {}).get(sk, True):
+                    full[0] = 0.0          # flagged DC points are not corrected
+                out[sk] = full
+            return out
+
+        b1 = bias_of(raw0)
+        recon1 = {sk: raw0[sk] - b1[sk] for sk in raw0}
+        b2 = bias_of(recon1)
+
+        self._unfold_residual = {}
+        print("[unfold] self-consistent comb-bias correction "
+              "(applied bias RMS -> residual RMS, harmonics):")
+        for sk, rk in _SYS_TO_SPEC.items():
+            corrected = raw0[sk] - b2[sk]
+            corrected[nan_mask[sk]] = np.nan
+            self.reconstructed_spectra[rk] = corrected
+            db = b2[sk] - b1[sk]
+            if np.iscomplexobj(db) or np.iscomplexobj(b2[sk]):
+                resid = np.abs(np.real(db)) + 1j*np.abs(np.imag(db))
+            else:
+                resid = np.abs(db)
+            self._unfold_residual[sk] = resid
+            rms_b = np.sqrt(np.nanmean(np.abs(b2[sk][1:])**2))
+            rms_r = np.sqrt(np.nanmean(np.abs(resid[1:])**2))
+            print(f"    {sk:>6}: {rms_b:10.3e} -> {rms_r:10.3e}")
+        self._unfolded = True
+
     def add_systematic_errors(self):
         """Fold the deterministic forward-model (comb-inversion) systematic into the bars.
 
@@ -396,16 +462,23 @@ class SpectraReconstructor:
         self.reconstructed_spectra_sys = {}
         self.reconstructed_spectra_err_total = dict(self.reconstructed_spectra_err)
         try:
-            spectra = analytic_spectra()
-            inv_opts = dict(inversion_method=c.inversion_method, reg_lambda=c.reg_lambda,
-                            enforce_nonneg=c.enforce_nonneg)
-            sys = forward_model_systematic(spectra, c.c_times, c.M, c.T, c.t_vec,
-                                           c.w_grain, c.wmax, inv_opts=inv_opts)
+            if getattr(self, '_unfolded', False):
+                # Unfolded reconstruction: the bias has been subtracted; quote the
+                # fixed-point iteration increment as the residual systematic.
+                sys = {sk: self._unfold_residual[sk][1:] for sk in _SYS_TO_SPEC}
+                dc_bias = {sk: float(np.real(self._unfold_residual[sk][0]))
+                           for sk in _SYS_TO_SPEC}
+            else:
+                spectra = analytic_spectra()
+                inv_opts = dict(inversion_method=c.inversion_method, reg_lambda=c.reg_lambda,
+                                enforce_nonneg=c.enforce_nonneg)
+                sys = forward_model_systematic(spectra, c.c_times, c.M, c.T, c.t_vec,
+                                               c.w_grain, c.wmax, inv_opts=inv_opts)
 
-            # DC (w=0) point: deterministic bias of the multi-time slope fit (tiny where
-            # the noise reaches motional narrowing; large = honest inflated bar where it
-            # is quasi-static / sub-comb-cusp and only a lower bound -- see dc_reliable).
-            dc_bias = dc_fit_systematic(spectra, self.dc_t_sweep)
+                # DC (w=0) point: deterministic bias of the multi-time slope fit (tiny
+                # where the noise reaches motional narrowing; large = honest inflated bar
+                # where it is quasi-static / sub-comb-cusp -- see dc_reliable).
+                dc_bias = dc_fit_systematic(spectra, self.dc_t_sweep)
 
             print("[systematic] folded sigma_sys per spectrum (forward-model comb bias; "
                   "RMS over harmonics, |DC bias|):")
@@ -723,6 +796,8 @@ class SpectraReconstructor:
         """Runs the full reconstruction pipeline."""
         self.load_observables()
         self.reconstruct()
+        if self.config.compute_systematic and self.config.unfold_bias:
+            self.unfold_comb_bias()
         if self.config.compute_systematic:
             self.add_systematic_errors()
         else:

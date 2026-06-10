@@ -30,7 +30,8 @@ from qns2q.characterize.spam import (estimate_spam, make_c_12_0_mt_robust,
                                      make_c_12_12_mt_robust, make_c_a_0_mt_robust)
 from qns2q.noise.spectra import S_11, S_22, S_1212
 from qns2q.model.trajectories import (make_noise_mat_arr, solver_prop,
-                                      solver_phase_coeffs_fast, apply_phase_coeffs)
+                                      solver_phase_coeffs_fast, phased_state)
+from qns2q.model import observables as _observables
 from qns2q.paths import run_folder, project_root
 
 # Seed for reproducible QNS data. The per-shot noise keys in solver_prop are drawn
@@ -119,6 +120,11 @@ class QNSExperimentConfig:
     b2: jnp.float64 = 1.
     spMit: bool = False
     spam_protocol: str = 'none'
+    # Projection (readout-sampling) noise: number of projective measurements per
+    # noise realization. 0 = exact expectation values (the historical idealized
+    # behavior: bars quote noise-ensemble sampling error only). Finite n_meas
+    # adds multinomial readout statistics per shot on top.
+    n_meas: int = 0
     spam_split_error: float = 0.0
     m_sweep_robust: tuple = ()
     # Bin-midpoint noise-synthesis grid: excludes the spurious w=0 static tone that
@@ -408,7 +414,7 @@ class PhaseRecorder:
         coeffs = solver_phase_coeffs_fast(y_uv, noise_mats, t_vec, n_shots)
         self.calls.append(np.asarray(coeffs))
         self.t_lens.append(int(np.size(t_vec)))
-        return apply_phase_coeffs(coeffs, jnp.asarray(rho))
+        return phased_state(coeffs, rho)
 
 
 class PhaseReplayer:
@@ -438,7 +444,7 @@ class PhaseReplayer:
                 f"requested (n_shots={n_shots}, n_t={int(np.size(t_vec))}) -- "
                 "the replay config must match the recording config")
         self.i += 1
-        return apply_phase_coeffs(jnp.asarray(coeffs), jnp.asarray(rho))
+        return phased_state(coeffs, rho)
 
 
 # Config fields that must match between a recording and a replay for the
@@ -491,6 +497,9 @@ def main(config=None, record_to=None, replay_from=None):
     print(f"Running QNS experiments [seed={RANDOM_SEED}]...")
     config = QNSExperimentConfig() if config is None else config
     print(f"SPAM protocol: {config.spam_protocol}")
+    _observables.set_projection_sampling(config.n_meas, seed=RANDOM_SEED + 7919)
+    if config.n_meas:
+        print(f"Projection noise: n_meas = {config.n_meas} measurements/realization")
     if (record_to or replay_from) and config.spam_protocol == 'robust':
         raise ValueError("record/replay covers the non-robust suite only (the "
                          "robust protocol runs different experiments)")
