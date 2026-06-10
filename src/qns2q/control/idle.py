@@ -132,8 +132,6 @@ class Config:
                   f"SI-era data (expected tau-unit T ~ 160). Regenerate the "
                   f"spectra for this folder before trusting the optimization.")
         self.mc = int(self.params['truncate'])
-        self.gamma = jnp.float64(self.params['gamma'])
-        self.gamma12 = jnp.float64(self.params['gamma_12'])
         self.include_cross_spectra = include_cross_spectra
         
         # Optimization Parameters
