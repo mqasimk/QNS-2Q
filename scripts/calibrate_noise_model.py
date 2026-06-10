@@ -14,7 +14,9 @@ Construction (tau units, two-sided spectra, synthesis convention
   cross(e_A, e_B) = C2_SHARE * sqrt(S_el_A S_el_B) * exp(-i w DT_SHIFT)
 
 Targets:
-  T2* (chi(T2*) = 1 under FID) = 260 tau per qubit          [purified 28Si]
+  T2* (chi(T2*) = 1 under FID) = 800 tau per qubit          [purified 28Si,
+      Yoneda 2018 (20 us at the 25 ns anchor); retargeted from 260 tau after
+      the 2026-06-10 acceptance-gate run -- see NOISE_MODEL_SPEC.md sec. 6]
   electrical fraction at W_MID: f1 = 0.88, f2 = 0.80        [qubit 2 extra nuclear]
   S_1212 / sqrt(S_11 S_22) at W_MID = 0.10                  [gate-operating-point J noise]
   in-band coherence pattern (+, +, -)                       [Yoneda 2023]
@@ -30,7 +32,7 @@ G_EL1, G_EL2, G_NUC = 0.7, 0.4, 1.2
 C2_SHARE = 0.8
 DT_SHIFT = 1.5
 BJ_OVER_AJ = 1.05            # b_J > a_J * C2 makes c_{2,12} anti-phase
-T2_TARGET = 260.0
+T2_TARGET = 800.0
 F_EL1, F_EL2 = 0.88, 0.80
 R_1212 = 0.10                # S_1212 / sqrt(S_11 S_22) at W_MID
 W_MID = 0.35
@@ -126,7 +128,7 @@ def main():
                                        lambda w: s_el_a(w) + s_n1_f(w),
                                        lambda w: s_el_b(w) + s_n2_f(w),
                                        s_n1_f, s_n2_f)):
-        t = np.linspace(1, 600, 600)
+        t = np.linspace(1, 1100, 1100)
         chi1 = np.array([chi(s11v, ti, 40001) for ti in t])
         chi2 = np.array([chi(s22v, ti, 40001) for ti in t])
         t2_1 = t[np.argmin(np.abs(chi1 - 1))]

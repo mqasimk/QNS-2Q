@@ -29,8 +29,11 @@ Spectral shapes (broken-power-law exponents measured in-band, 10 kHz-1 MHz):
   S_1212: in-band ratio S_1212/sqrt(S_11 S_22) = 0.10 at w~ = 0.35 -- gate-
   operating-point exchange noise [Dial et al., PRL 110, 146804 (2013)]
   IR cutoff W_IR regularizes S(0) (finite for the FID-slope DC protocol).
-Amplitudes solve T2*(FID) = 260 tau per qubit (purified-28Si target, 6.5 us at
-the 25 ns anchor; Rojas-Arias et al., PRApplied 20, 054024 (2023)).
+Amplitudes solve T2*(FID) = 800 tau per qubit (purified-28Si target, 20 us at
+the 25 ns anchor; Yoneda et al., Nat. Nanotech. 13, 102 (2018)). Retargeted
+from the initial 260 tau (PRApplied 20, 054024 devices) after the 2026-06-10
+acceptance-gate run: at 260 tau the 320-640 tau gate times sit at 1.4-2.8 T2*
+(bare gate unrescuable, DC fit below the shot floor); see NOISE_MODEL_SPEC.md.
 
 Two regimes, selected at import by ``QNS2Q_REGIME`` (see ``qns2q.paths``):
 
@@ -82,14 +85,14 @@ W_IR = 0.02                      # IR cutoff [C, constrained by the DC protocol]
 _G_EL_1, _G_EL_2 = 0.7, 0.4      # in-band charge-noise exponents [M, npj 2025]
 _G_NUC = 1.2                     # local nuclear slope [M, sub-Hz hyperfine]
 
-A_EL_1 = 3.560544e-04            # amplitudes: T2*(FID) = 260 tau per qubit with
-A_EL_2 = 5.243307e-04            # electrical fractions 0.88 / 0.80 at w~ = 0.35
-A_NUC_1 = 2.874769e-05
-A_NUC_2 = 5.667167e-05
+A_EL_1 = 1.067936e-04            # amplitudes: T2*(FID) = 800 tau per qubit with
+A_EL_2 = 1.565736e-04            # electrical fractions 0.88 / 0.80 at w~ = 0.35
+A_NUC_1 = 8.622470e-06
+A_NUC_2 = 1.692308e-05
 
 C2_SHARE = 0.8                   # shared fraction of the electrical noise power
-A_J = 4.269373e-01               # J difference-coupling weights; B_J/A_J = 1.05
-B_J = 4.482842e-01               # (B_J > A_J*C2_SHARE makes c_{2,12} anti-phase);
+A_J = 4.270645e-01               # J difference-coupling weights; B_J/A_J = 1.05
+B_J = 4.484177e-01               # (B_J > A_J*C2_SHARE makes c_{2,12} anti-phase);
                                  # overall scale sets S_1212/sqrt(S11 S22) = 0.10
 DT_SHIFT = 1.5                   # causal lag of e_B's shared part [C, Im parts]
 
@@ -98,8 +101,8 @@ DT_SHIFT = 1.5                   # causal lag of e_B's shared part [C, Im parts]
 # factors are already folded in), qubit-local only.
 _LINE_CENTERS = jnp.array([0.261, 0.273, 0.534])
 _LINE_SIGMA = 0.02
-_LINE_AMP_Q1 = jnp.array([8.428e-03, 8.143e-03, 4.905e-03])
-_LINE_AMP_Q2 = jnp.array([2.3587e-02, 2.2973e-02, 1.5878e-02])
+_LINE_AMP_Q1 = jnp.array([2.528e-03, 2.442e-03, 1.471e-03])
+_LINE_AMP_Q2 = jnp.array([7.043e-03, 6.860e-03, 4.742e-03])
 
 _LINES_ON = (_REGIME != "bland")
 

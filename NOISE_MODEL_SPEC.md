@@ -1,6 +1,6 @@
 # Noise-model spec: experimentally-anchored two-qubit dephasing spectra
 
-**Status: DRAFT — awaiting QK review, then Lorenza sign-off (one-pager to be distilled from this). No code implements this yet.**
+**Status: IMPLEMENTED (2026-06-10, user-approved; QNS-2Q commits `ac4e359`+) with the T₂* = 800τ recalibration. Lorenza one-pager still to be distilled; knobs 1–4 of §8 remain hers to adjust.**
 
 Replaces both synthetic noise classes in `src/qns2q/noise/spectra.py` with spectra
 composed of experimentally measured ingredients, per the 2026-06-10 decisions:
@@ -43,10 +43,12 @@ idealization is a stated approximation either way).
   (avoids one-sided/two-sided and angular-frequency convention traps; conversions only
   appear in the paper as "for a representative τ = 25 ns this corresponds to …").
 - **Headline calibration: purified-²⁸Si coherence, natural-Si correlation structure [C]:**
-  target T₂*(1), T₂*(2) ≈ **260τ** (6.5 µs at the anchor, PRApplied purified devices;
-  Yoneda 2018's 20 µs ≈ 800τ noted as the optimistic end). Bare gate at the 320τ sweet
-  spot then sits at ≈1.2 T₂* — FID baseline fails without saturating, consistent with
-  current regenerated dynamics (FID ≈ 0.15 at 320τ).
+  target T₂*(1), T₂*(2) = **800τ** (20 µs at the anchor; Yoneda et al., Nat. Nanotech.
+  13, 102 (2018)). **Decision 2026-06-10 (user):** retargeted from the initial 260τ
+  (PRApplied 20, 054024 devices, 6.5 µs) after the first acceptance-gate run — at 260τ
+  the paper's 320–640τ gate times sit at 1.4–2.8 T₂* (bare gate unrescuable even by NT,
+  no sweet-spot regime) and the DC slope fit falls below the 4000-shot floor
+  (coherence(1600τ) ≈ 0.001). At 800τ: χ(320τ) = 0.38 per qubit, coherence(1600τ) = 0.13.
 - Band check: comb harmonics ω̃_k = 2πk/160, k = 1…20 → ω̃ ∈ [0.039, 0.785]
   (0.25–5 MHz at the anchor). The npj/Dial measured window (10 kHz–1 MHz) covers the
   lower ~half of the band; the upper half extrapolates the same power law **[E]**.
@@ -69,7 +71,7 @@ Components:
   the FID-slope DC protocol. Start at ω̃_ir = 0.02 (half the first harmonic); final value
   fixed by the DC linear-regime gate (§6-ii) — same analysis that weakened the old bland
   model (n_shots floor + ≥95% linearity over the fit window).
-- **A_1, A_2:** set by the T₂* = 260τ target per qubit. Qubit asymmetry (γ₁ ≠ γ₂,
+- **A_1, A_2:** set by the T₂* target per qubit (800τ — see §2). Qubit asymmetry (γ₁ ≠ γ₂,
   A_1 ≠ A_2) is itself a measured feature [M].
 - **N_l(ω̃):** local (uncorrelated) nuclear component, smooth steeper power law,
   weighted heavier on qubit 2 [M — Yoneda's qubit B carried excess uncorrelated nuclear
@@ -198,4 +200,4 @@ both classes, SPAM arms re-run), captions + `tab:fidelity_summary` re-transcribe
 2. Line placement (B_eff = 600 mT proposed) and line-height factor (×10–30).
 3. In-band coherence level carried from the ≲Hz measurements (0.7/0.8/−0.5 proposed).
 4. The causal lag δt̃ (Im-part generator): 1–2τ proposed, 0 = all-real fallback.
-5. Headline T₂* calibration: purified (260τ) vs natural (40τ) — purified proposed.
+5. Headline T₂* calibration — **settled 2026-06-10: 800τ** (Yoneda 2018 purified; 260τ variant rejected by the gate run, natural-Si 40τ available as a strong-noise aside).
