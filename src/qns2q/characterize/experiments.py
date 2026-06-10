@@ -30,7 +30,7 @@ from qns2q.characterize.spam import (estimate_spam, make_c_12_0_mt_robust,
                                      make_c_12_12_mt_robust, make_c_a_0_mt_robust)
 from qns2q.noise.spectra import S_11, S_22, S_1212
 from qns2q.model.trajectories import (make_noise_mat_arr, solver_prop,
-                                      solver_phase_coeffs, apply_phase_coeffs)
+                                      solver_phase_coeffs_fast, apply_phase_coeffs)
 from qns2q.paths import run_folder, project_root
 
 # Seed for reproducible QNS data. The per-shot noise keys in solver_prop are drawn
@@ -405,7 +405,7 @@ class PhaseRecorder:
         self.t_lens = []
 
     def __call__(self, y_uv, noise_mats, t_vec, rho, n_shots):
-        coeffs = solver_phase_coeffs(y_uv, noise_mats, t_vec, n_shots)
+        coeffs = solver_phase_coeffs_fast(y_uv, noise_mats, t_vec, n_shots)
         self.calls.append(np.asarray(coeffs))
         self.t_lens.append(int(np.size(t_vec)))
         return apply_phase_coeffs(coeffs, jnp.asarray(rho))

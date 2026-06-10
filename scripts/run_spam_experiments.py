@@ -55,7 +55,8 @@ SPAM_TRUE_STRONG = dict(
 
 
 def build_config(protocol: str, reduced: bool, strong: bool = False,
-                 medium: bool = False, tuned: bool = False) -> QNSExperimentConfig:
+                 medium: bool = False, tuned: bool = False,
+                 fine: bool = False) -> QNSExperimentConfig:
     if protocol == 'reference':
         # SPAM-free reference arm at the same (reduced) statistics: isolates the
         # SPAM-specific reconstruction bias from the comb/truncation systematics.
@@ -83,6 +84,12 @@ def build_config(protocol: str, reduced: bool, strong: bool = False,
         # statistical bars (which dominate the small channels at the Class-F
         # lines) tighten by sqrt(2) vs --medium.
         common.update(dict(t_grain=800, w_grain=350, truncate=20, n_shots=8000))
+    elif fine:
+        # Fine preset (2026-06-10): for use with --record/--replay. The
+        # filter-vector phase solver makes shots nearly free, so this restores
+        # the full grids AND takes 8x the tuned shots -- statistical bars
+        # tighten ~2.8x vs --tuned, sqrt(16)=4x vs --medium.
+        common.update(dict(t_grain=1000, w_grain=500, truncate=20, n_shots=64000))
     return QNSExperimentConfig(**common)
 
 
@@ -98,6 +105,7 @@ if __name__ == "__main__":
     reduced = '--reduced' in args
     medium = '--medium' in args
     tuned = '--tuned' in args
+    fine = '--fine' in args
     strong = '--strong' in args
     # --record: run this arm with a PhaseRecorder and save the per-shot phase
     #   dataset alongside it (use with the reference arm: the noise is
@@ -114,10 +122,10 @@ if __name__ == "__main__":
                          "expected raw|mitigated|robust|reference")
     if record and replay:
         raise SystemExit("--record and --replay are mutually exclusive")
-    config = build_config(protocol, reduced, strong, medium, tuned)
+    config = build_config(protocol, reduced, strong, medium, tuned, fine)
     print(f"[spam] protocol={protocol} reduced={reduced} medium={medium} "
-          f"tuned={tuned} strong={strong} record={record} replay={replay} "
-          f"-> {config.fname}")
+          f"tuned={tuned} fine={fine} strong={strong} record={record} "
+          f"replay={replay} -> {config.fname}")
     main(config,
          record_to=dataset_path() if record else None,
          replay_from=dataset_path() if replay else None)

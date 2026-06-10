@@ -642,6 +642,73 @@ def solver_phase_coeffs(y_uv, noise_mats, t_vec, n_shots):
 
 
 @jax.jit
+def _filter_vectors(noise_mats, t_vec, y_uv):
+    """Per-call filter vectors F[a, comp, sin/cos, w] = int 0.5 y_a(t) Mat(t, w) dt.
+
+    The phase coefficients are LINEAR in the Gaussian draws, so the entire
+    (t x w) trajectory synthesis can be contracted against the control toggles
+    ONCE per call; every shot then costs ten dot products of length n_w instead
+    of six (t x w) matvecs (~1000x less). The einsum reproduces the trapezoid
+    integral exactly on the uniform time grid."""
+    size = jnp.size(t_vec)
+    y = y_uv[:, :, :size]
+    ys = jnp.stack([y[0, 0], y[1, 1], y[2, 2]])          # (3, t)
+    mats = noise_mats[:, :, :size, :]                     # (5, 2, t, w)
+    dt = t_vec[1] - t_vec[0]
+    wt = jnp.full(size, dt).at[0].set(0.5*dt).at[-1].set(0.5*dt)
+    return jnp.einsum('at,cstw->acsw', 0.5*ys*wt[None, :], mats)
+
+
+@jax.jit
+def _shot_coeffs_from_filters(F, key):
+    """One shot's (3,) phase coefficients from precomputed filter vectors.
+
+    Identical RNG scheme to `make_channel_trajs` (same fold_in/split and the
+    same per-stream normal draws), so the same key yields the same noise
+    realization as the trajectory-level path, up to float reassociation."""
+    base = jax.random.fold_in(jax.random.PRNGKey(key[0]), key[1])
+    ks = jax.random.split(base, 10)
+    n_w = jnp.size(F, 3)
+    draw = lambda k: jax.random.normal(k, (n_w, 1))[:, 0]
+
+    def comp(a, c, ka, kb):
+        return jnp.dot(F[a, c, 0], draw(ka)) + jnp.dot(F[a, c, 1], draw(kb))
+
+    # streams: ks[0:2] shared, ks[2:4] local-A, ks[4:6] local-B, ks[6:8] n1,
+    # ks[8:10] n2; components: 0 = el_A, 1 = el_B shifted, 2 = el_B, 3 = n1,
+    # 4 = n2 (the make_noise_mat_arr ordering).
+    def channel_parts(a):
+        e_a = _C_SH*comp(a, 0, ks[0], ks[1]) + _C_LOC*comp(a, 0, ks[2], ks[3])
+        e_b = _C_SH*comp(a, 1, ks[0], ks[1]) + _C_LOC*comp(a, 2, ks[4], ks[5])
+        return e_a, e_b
+
+    e_a1, _ = channel_parts(0)
+    _, e_b2 = channel_parts(1)
+    e_a12, e_b12 = channel_parts(2)
+    c1 = e_a1 + comp(0, 3, ks[6], ks[7])
+    c2 = e_b2 + comp(1, 4, ks[8], ks[9])
+    c12 = _A_J*e_a12 - _B_J*e_b12
+    return jnp.stack([c1, c2, c12])
+
+
+def solver_phase_coeffs_fast(y_uv, noise_mats, t_vec, n_shots):
+    """Filter-vector phase solver: same statistics (and same per-key noise
+    realizations, to float reassociation) as `solver_phase_coeffs` at ~1000x
+    less per-shot compute. Used by the recording SPAM pipeline; shots are no
+    longer the runtime budget."""
+    F = _filter_vectors(noise_mats, jnp.asarray(t_vec), jnp.array(y_uv))
+    output = []
+    slice_size = 20000
+    n_slices = int(np.ceil(n_shots / slice_size))
+    for i in range(n_slices):
+        current_slice_size = min(slice_size, n_shots - i * slice_size)
+        n_arr = jnp.array(np.random.randint(0, 10000, (current_slice_size, 2)))
+        output.append(jax.vmap(_shot_coeffs_from_filters,
+                               in_axes=[None, 0])(F, n_arr))
+    return jnp.concatenate(output, axis=0)
+
+
+@jax.jit
 def apply_phase_coeffs(coeffs, rho):
     """Evolve `rho` through stored per-shot phase coefficients.
 
