@@ -35,7 +35,8 @@ def gate_qns():
     print(f"[gate iii / {regime}] specs.npz keys: {sorted(specs.files)}")
     truth = analytic_spectra()
     wk = np.asarray(specs['wk']) if 'wk' in specs.files else None
-    print(f"[gate iii / {regime}] reconstruction vs analytic truth:")
+    print(f"[gate iii / {regime}] reconstruction vs analytic truth "
+          f"(pull = |rec - truth| / sigma_tot):")
     for key in ('S11', 'S22', 'S1212', 'S12', 'S112', 'S212'):
         if key not in specs.files or wk is None:
             print(f"  {key}: MISSING from specs.npz")
@@ -44,7 +45,16 @@ def gate_qns():
         tr = np.asarray(truth[key](wk))
         scale = np.median(np.abs(tr)) + 1e-30
         rel = np.abs(rec - tr) / (np.abs(tr) + 0.05 * scale)
-        print(f"  {key}: median rel dev {np.median(rel):6.1%}   max {np.max(rel):6.1%}")
+        line = f"  {key}: median rel dev {np.median(rel):6.1%}  max {np.max(rel):6.1%}"
+        err_key = f"{key}_errtot" if f"{key}_errtot" in specs.files else (
+            f"{key}_err" if f"{key}_err" in specs.files else None)
+        if err_key is not None:
+            sig = np.abs(np.asarray(specs[err_key])) + 1e-30
+            pull = np.abs(rec - tr) / sig
+            frac2 = np.mean(pull <= 2.0)
+            line += (f"   median pull {np.median(pull):5.2f}  max {np.max(pull):6.1f}"
+                     f"  within-2sigma {frac2:5.1%}")
+        print(line)
     print(f"[gate iii / {regime}] done")
 
 

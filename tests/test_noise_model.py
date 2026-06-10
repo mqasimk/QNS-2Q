@@ -1,7 +1,7 @@
 """Invariants of the experimentally-anchored noise model (NOISE_MODEL_SPEC.md).
 
 Covers the spec's acceptance gates that are cheap enough for CI:
-  (i)  T2* calibration target (260 tau, window 230-290) per qubit;
+  (i)  T2* calibration target (800 tau, window 720-880) per qubit;
   (ii) PSD-matrix positivity over the band;
   (iii) the synthesized trajectories reproduce the analytic covariances,
         including the measured (+, +, -) coherence sign pattern;
@@ -40,12 +40,12 @@ def _chi(spec, t, n=40001):
 
 
 def test_t2_calibration_target():
-    """chi(T2*) = 1 at T2* = 260 tau (window 230-290) for both qubits."""
+    """chi(T2*) = 1 at T2* = 800 tau (window 720-880) for both qubits."""
     for spec in (sp.S_11, sp.S_22):
-        t = np.linspace(100, 500, 401)
+        t = np.linspace(400, 1200, 801)
         chi = np.array([_chi(spec, ti) for ti in t])
         t2 = t[np.argmin(np.abs(chi - 1))]
-        assert 230 <= t2 <= 290, f"T2* = {t2} tau outside the calibration window"
+        assert 720 <= t2 <= 880, f"T2* = {t2} tau outside the calibration window"
 
 
 def test_psd_matrix_positive_over_band():
