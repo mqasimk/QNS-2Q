@@ -54,7 +54,8 @@ SPAM_TRUE_STRONG = dict(
 )
 
 
-def build_config(protocol: str, reduced: bool, strong: bool = False) -> QNSExperimentConfig:
+def build_config(protocol: str, reduced: bool, strong: bool = False,
+                 medium: bool = False, tuned: bool = False) -> QNSExperimentConfig:
     if protocol == 'reference':
         # SPAM-free reference arm at the same (reduced) statistics: isolates the
         # SPAM-specific reconstruction bias from the comb/truncation systematics.
@@ -69,20 +70,34 @@ def build_config(protocol: str, reduced: bool, strong: bool = False) -> QNSExper
     if reduced:
         # Light validation config: same physics, coarser grids and fewer shots.
         common.update(dict(M=8, t_grain=600, truncate=10, w_grain=200,
-                           n_shots=1000))
+                           n_shots=2000))
+    elif medium:
+        # Medium config: full harmonic count at moderate statistics (~7x cheaper
+        # than the full paper config per point).
+        common.update(dict(t_grain=1000, truncate=20, n_shots=4000))
+    elif tuned:
+        # Tuned comparison config (2026-06-10): doubles the shots and funds it
+        # by trimming grid overhead (t_grain 1000->800, w_grain 500->350; both
+        # validated headroom: dt = 0.2 tau << 1/wmax, dw = 2.2e-3 << line sigma
+        # 0.02). Same wk grid as medium/full (truncate 20). ~37 min/arm; the
+        # statistical bars (which dominate the small channels at the Class-F
+        # lines) tighten by sqrt(2) vs --medium.
+        common.update(dict(t_grain=800, w_grain=350, truncate=20, n_shots=8000))
     return QNSExperimentConfig(**common)
 
 
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:]]
     reduced = '--reduced' in args
+    medium = '--medium' in args
+    tuned = '--tuned' in args
     strong = '--strong' in args
     args = [a for a in args if not a.startswith('--')]
     protocol = args[0] if args else 'mitigated'
     if protocol not in ('raw', 'mitigated', 'robust', 'reference'):
         raise SystemExit(f"Unknown protocol {protocol!r}; "
                          "expected raw|mitigated|robust|reference")
-    config = build_config(protocol, reduced, strong)
-    print(f"[spam] protocol={protocol} reduced={reduced} strong={strong} "
-          f"-> {config.fname}")
+    config = build_config(protocol, reduced, strong, medium, tuned)
+    print(f"[spam] protocol={protocol} reduced={reduced} medium={medium} "
+          f"tuned={tuned} strong={strong} -> {config.fname}")
     main(config)
