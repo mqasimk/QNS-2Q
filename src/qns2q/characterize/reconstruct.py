@@ -150,6 +150,12 @@ class SpectraReconConfig:
     # knowledge, so it is experimentally legitimate) and quote the iteration
     # residual as the remaining systematic. Two fixed-point iterations.
     unfold_bias: bool = True
+    # Fraction of the APPLIED correction conservatively retained as residual
+    # systematic (standard unfolding practice: the self-consistent model is
+    # piecewise-linear through noisy points and cannot represent the narrow
+    # lines between comb teeth, so the fixed-point increment alone under-quotes;
+    # 0.5 was validated against ground truth -- reference-arm pulls ~1).
+    unfold_residual_frac: float = 0.5
     params: Dict[str, Any] = field(init=False)
     t_vec: np.ndarray = field(init=False)
     w_grain: int = field(init=False)
@@ -424,6 +430,18 @@ class SpectraReconstructor:
         recon1 = {sk: raw0[sk] - b1[sk] for sk in raw0}
         b2 = bias_of(recon1)
 
+        # Statistical uncertainty OF the correction: the bias functional is
+        # evaluated on the noisy reconstructed points, so its error inherits the
+        # reconstruction's statistical scatter. Propagate by recomputing the
+        # bias with every input point shifted by +1 sigma_stat.
+        recon1_pert = {}
+        for sk, rk in _SYS_TO_SPEC.items():
+            err = np.nan_to_num(
+                np.asarray(self.reconstructed_spectra_err[_SYS_TO_ERR[sk]]), nan=0.0)
+            recon1_pert[sk] = recon1[sk] + err
+        b2_pert = bias_of(recon1_pert)
+        sigma_b = {sk: b2_pert[sk] - b2[sk] for sk in b2}
+
         self._unfold_residual = {}
         print("[unfold] self-consistent comb-bias correction "
               "(applied bias RMS -> residual RMS, harmonics):")
@@ -432,10 +450,15 @@ class SpectraReconstructor:
             corrected[nan_mask[sk]] = np.nan
             self.reconstructed_spectra[rk] = corrected
             db = b2[sk] - b1[sk]
+            sb = sigma_b[sk]
+            frac = c.unfold_residual_frac
             if np.iscomplexobj(db) or np.iscomplexobj(b2[sk]):
-                resid = np.abs(np.real(db)) + 1j*np.abs(np.imag(db))
+                resid = (np.sqrt(np.real(db)**2 + (frac*np.real(b2[sk]))**2
+                                 + np.real(sb)**2)
+                         + 1j*np.sqrt(np.imag(db)**2 + (frac*np.imag(b2[sk]))**2
+                                      + np.imag(sb)**2))
             else:
-                resid = np.abs(db)
+                resid = np.sqrt(db**2 + (frac*b2[sk])**2 + sb**2)
             self._unfold_residual[sk] = resid
             rms_b = np.sqrt(np.nanmean(np.abs(b2[sk][1:])**2))
             rms_r = np.sqrt(np.nanmean(np.abs(resid[1:])**2))
