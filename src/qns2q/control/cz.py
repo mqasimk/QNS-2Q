@@ -30,6 +30,7 @@ import numpy as np
 import scipy.optimize
 
 from qns2q.noise.spectra import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
+from qns2q.control.tails import tail_extend_interp_complex
 from qns2q.paths import run_folder, project_root
 
 
@@ -130,9 +131,14 @@ class CZOptConfig:
         self.tau = self.Tqns / self.tau_divisor
         self.mc = int(self.params['truncate'])
 
-        # Frequency Grid
+        # Frequency Grid. The predicted-side grid must reach the pulse-spacing
+        # Nyquist pi/tau (= 4*w_max_sys for the T=160/truncate=20 comb): short
+        # optimized sequences put their filter passband ABOVE the comb's last
+        # tooth, and a grid stopping at 2*w_max_sys silently ignored that band
+        # (85% of the true NT gate error at Tg=80tau). The time-domain overlap
+        # cost is unchanged (its dt is pinned to tau/4 via pad_factor).
         w_max_sys = 2 * jnp.pi * self.mc / self.Tqns
-        self.w_max = 2 * w_max_sys
+        self.w_max = 8 * w_max_sys
         self.N_w = 20000
         self.w = jnp.linspace(0, self.w_max, self.N_w)
         self.w_ideal = jnp.linspace(0, 2 * self.w_max, 2 * self.N_w)
@@ -150,14 +156,18 @@ class CZOptConfig:
         self._calculate_T2()
 
     def _build_interpolated_spectra(self):
-        """Constructs the matrix of interpolated spectra from QNS data."""
+        """Constructs the matrix of interpolated spectra from QNS data.
+
+        Beyond the comb's last tooth each component is extended with a power
+        law fitted to the top teeth (control.tails) instead of right=0 -- the
+        zero extension let the optimizer park its filter weight in the
+        unmeasured band as if it were noise-free."""
         # 4x4 Matrix: Indices 0, 1, 2, 3 correspond to Null, 1, 2, 12
         SMat = jnp.zeros((4, 4, self.w.size), dtype=jnp.complex128)
         w0 = jnp.array([0.0])
-        
+
         def interp_c(fp):
-            return (jnp.interp(self.w, self.wkqns, jnp.real(fp), right=0.) +
-                   1j * jnp.interp(self.w, self.wkqns, jnp.imag(fp), right=0.))
+            return tail_extend_interp_complex(self.w, self.wkqns, fp)
 
         def combine(spec_data, dc_func, *args):
             interp = interp_c(spec_data)
@@ -561,9 +571,15 @@ def calculate_cz_fidelity(I_matrix, J, M, dc_12):
     p1q = jnp.array([[[1, 0], [0, 1]], [[0, 1], [1, 0]], [[0, -1j], [1j, 0]], [[1, 0], [0, -1]]])
     p2q = jnp.array([jnp.kron(p1q[i], p1q[j]) for i in range(4) for j in range(4)])
     
-    def lambda_element(Oi, Oj):
-        val_CO = jnp.zeros((4, 4), dtype=jnp.complex128)
-        
+    # Every operator in the exponent is DIAGONAL (the z2q are Z (x) Z products),
+    # so the 4x4 expm reduces to an elementwise exp of its diagonal; and the
+    # exponent depends on Oi only, so G is computed once per Oi rather than once
+    # per (Oi, Oj) pair. 16 length-4 vector exps replace 256 matrix exponentials
+    # per fidelity evaluation -- an exact rewrite of the same map.
+    z2q_diag = jnp.diagonal(z2q, axis1=1, axis2=2)
+
+    def g_diag(Oi):
+        val = jnp.zeros(4, dtype=jnp.complex128)
         for i in range(3):
             for j in range(3):
                 idx_i = i + 1
@@ -577,21 +593,14 @@ def calculate_cz_fidelity(I_matrix, J, M, dc_12):
                 # and every (a, b) pair contributes (no gating by sgn(O, a, b)).
                 coeff = -0.5 * (sgn(Oi, idx_i, 0) - 1.0)
 
-                val_CO += coeff * I_matrix[idx_i, idx_j] * (z2q[idx_i] @ z2q[idx_j])
-        
-        rot_val = (1.0 - sgn(Oi, 1, 2)) * M * J * dc_12
-        rot_op = rot_val * z2q[3]
-        
-        # Note: For M=1, expm spectral radius is bounded ~O(100). For M>1,
-        # the argument scales linearly with M and may require Pade scaling.
-        G = jax.scipy.linalg.expm(-1j * rot_op - val_CO)
-        
-        return jnp.real(jnp.trace(Oi @ G @ Oj) * 0.25)
+                val += coeff * I_matrix[idx_i, idx_j] * (z2q_diag[idx_i] * z2q_diag[idx_j])
 
-    # Vectorize over all pairs of Pauli matrices
-    lambda_map = jax.vmap(jax.vmap(lambda_element, in_axes=(None, 0)), in_axes=(0, None))
-    
-    R_noisy = lambda_map(p2q, p2q)
+        rot_val = (1.0 - sgn(Oi, 1, 2)) * M * J * dc_12
+        return jnp.exp(-1j * rot_val * z2q_diag[3] - val)
+
+    G_diag = jax.vmap(g_diag)(p2q)                                  # (16, 4)
+    # tr(Oi @ diag(g) @ Oj) = sum_{a,b} Oi[a,b] g[b] Oj[b,a]
+    R_noisy = jnp.real(jnp.einsum('iab,ib,jba->ij', p2q, G_diag, p2q) * 0.25)
     
     # Fidelity = Tr(R_ideal.T @ R_noisy) / 16
     R_ideal = zzPTM()

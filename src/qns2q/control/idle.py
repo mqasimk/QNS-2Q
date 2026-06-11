@@ -27,6 +27,7 @@ import numpy as np
 import scipy.optimize
 
 from qns2q.noise.spectra import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
+from qns2q.control.tails import tail_extend_interp_complex
 from qns2q.paths import run_folder, project_root
 
 # Fixed RNG seed for the unseeded np.random restarts (random pulse counts and
@@ -169,8 +170,10 @@ class Config:
         # Start from 0 to include DC component
         # Extend frequency range to ensure fine time resolution for correlation
         w_max_sys = 2 * jnp.pi * self.mc / self.Tqns
-        # Multiplier to ensure dt is small enough (e.g. ~10-100ns)
-        self.w_max = 2 * w_max_sys
+        # Reach the pulse-spacing Nyquist pi/tau (4*w_max_sys for the
+        # T=160/truncate=20 comb): optimized sequences put filter weight above
+        # the comb's last tooth; a shorter grid silently ignored that band.
+        self.w_max = 8 * w_max_sys
         self.N_w = 20000
         
         self.w = jnp.linspace(0, self.w_max, self.N_w)
@@ -193,10 +196,10 @@ class Config:
         w0 = jnp.array([0.0])
         
         def interp_c(fp):
-            """Interpolates complex data."""
-            # Use right=0. to assume noise decays to zero at high frequencies beyond data
-            return (jnp.interp(self.w, self.wkqns, jnp.real(fp), right=0.) +
-                   1j * jnp.interp(self.w, self.wkqns, jnp.imag(fp), right=0.))
+            """Interpolates complex data; power-law tail beyond the last
+            tooth (control.tails) instead of right=0, which let the optimizer
+            treat the unmeasured band as noise-free."""
+            return tail_extend_interp_complex(self.w, self.wkqns, fp)
 
         def combine(spec_data, dc_func, *args):
             """Interpolates and inserts exact DC value."""
