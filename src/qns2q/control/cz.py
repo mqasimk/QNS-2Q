@@ -29,7 +29,8 @@ import jax.scipy.signal
 import numpy as np
 import scipy.optimize
 
-from qns2q.noise.spectra import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
+from qns2q.noise.spectra import (S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12,
+                                 MODEL_VERSION)
 from qns2q.control.tails import tail_extend_interp_complex
 from qns2q.paths import run_folder, project_root
 
@@ -70,6 +71,10 @@ class CZOptConfig:
     include_cross_spectra: bool = True
     tau_divisor: int = 160
     use_simulated: bool = False
+    # 'interp' = linear interpolation through the comb teeth (+ tails);
+    # 'selfconsistent' = the unfold model's line/tail/head-aware spectra
+    # (OPT-SPECTRAL-MODEL).
+    spectral_model: str = "interp"
     max_pulses: int = 150
     
     # These will be loaded from the run files
@@ -117,6 +122,21 @@ class CZOptConfig:
              if bad_dc:
                  print(f"[cz] NOTE: flagged (undetermined) DC points in specs: "
                        f"{', '.join(k[:-len('_dc_ok')] for k in bad_dc)}")
+
+        # OPT-PROVENANCE: spectra generated under a different noise model than
+        # the current one make the ideal benchmark (SMat_ideal, built from the
+        # CURRENT model) a mixed-model comparison -- the trap behind
+        # CA-REPRO-NUMBERS.
+        mv = None
+        for src_ in (self.specs, self.params):
+            if 'model_version' in src_:
+                mv = str(src_['model_version'])
+                break
+        self.model_version = mv if mv is not None else 'unknown'
+        if self.model_version != MODEL_VERSION:
+            print(f"[cz] WARNING: spectra model_version={self.model_version!r} "
+                  f"!= current noise model {MODEL_VERSION!r}; the ideal "
+                  f"benchmark uses the CURRENT model -- regenerate Stage 1/2.")
 
         self.Tqns = float(self.params['T'])
 
@@ -190,15 +210,38 @@ class CZOptConfig:
                   "the analytic-model DC (legacy behavior). Regenerate Stage 2 "
                   "for a measured DC point.")
 
-        def interp_c(fp):
-            return tail_extend_interp_complex(self.w, self.wkqns, fp)
+        use_sc = (self.spectral_model == 'selfconsistent')
+        if use_sc and self.use_simulated:
+            raise ValueError("spectral_model='selfconsistent' models a "
+                             "reconstructed comb; simulated_spectra.npz "
+                             "already IS the analytic model")
+        if use_sc:
+            # OPT-SPECTRAL-MODEL: each channel from the same line/tail/head-
+            # aware model the unfold bias correction uses (characterize.
+            # systematics.selfconsistent_spectra): Gaussian lines at the
+            # experimentally-known nuclear-difference centers (heights
+            # NNLS-fitted from the comb, S11/S22 only), power-law tails,
+            # saturated power-law head below tooth 1. Assumption-light --
+            # everything is the reconstructed data or an experimental prior,
+            # so the blind protocol is preserved. NaN (unreconstructed)
+            # channels are zero-filled here; the cross() drop below still
+            # excludes them from the SMat.
+            from qns2q.characterize.systematics import selfconsistent_spectra
+            from qns2q.noise.spectra import line_priors
+            sc_recon = {k: np.nan_to_num(np.asarray(self.specs[k]))
+                        for k in ('S11', 'S22', 'S1212', 'S12', 'S112', 'S212')}
+            sc_fns = selfconsistent_spectra(np.asarray(self.wkqns), sc_recon,
+                                            lines=line_priors())
+            w_np = np.asarray(self.w)
 
-        def combine(spec_data, dc_func, *args):
-            interp = interp_c(spec_data)
+        def combine(key, dc_func):
+            if use_sc:
+                return jnp.asarray(np.asarray(sc_fns[key](w_np), dtype=complex))
+            interp = tail_extend_interp_complex(self.w, self.wkqns,
+                                                self.specs[key])
             if grid_has_dc:
                 return interp
-            dc_val = dc_func(w0, *args)[0]
-            return interp.at[0].set(dc_val)
+            return interp.at[0].set(dc_func(w0)[0])
         
         # Diagonal elements. NaN here means corrupted data, not a protocol
         # limitation -- fail loudly.
@@ -206,9 +249,9 @@ class CZOptConfig:
             if np.any(np.isnan(np.asarray(self.specs[key]))):
                 raise ValueError(f"self-spectrum {key} contains NaN -- "
                                  f"corrupted specs.npz?")
-        SMat = SMat.at[1, 1].set(combine(self.specs["S11"], S_11))
-        SMat = SMat.at[2, 2].set(combine(self.specs["S22"], S_22))
-        SMat = SMat.at[3, 3].set(combine(self.specs["S1212"], S_1212))
+        SMat = SMat.at[1, 1].set(combine("S11", S_11))
+        SMat = SMat.at[2, 2].set(combine("S22", S_22))
+        SMat = SMat.at[3, 3].set(combine("S1212", S_1212))
 
         # Off-diagonal elements. A channel the protocol could not reconstruct
         # (robust: all-NaN S112/S212) is dropped from this CHARACTERIZED model
@@ -229,7 +272,7 @@ class CZOptConfig:
                           f"from the characterized gate model; the ideal "
                           f"benchmark retains it.")
                     return None
-                return combine(data, dc_func)
+                return combine(key, dc_func)
 
             for r, c, key, fn in ((1, 2, "S12", S_1_2),
                                   (1, 3, "S112", S_1_12),
@@ -272,7 +315,7 @@ class CZOptConfig:
         self.T2q1 = 2.0 / S11_0 if S11_0 > 0 else jnp.inf
         self.T2q2 = 2.0 / S22_0 if S22_0 > 0 else jnp.inf
         
-        print(f"Calculated T2 times (Ideal): Q1={self.T2q1:.2e} s, Q2={self.T2q2:.2e} s")
+        print(f"Calculated T2 times (Ideal): Q1={self.T2q1:.2e} tau, Q2={self.T2q2:.2e} tau")
 
 # ==============================================================================
 # Sequence Generation Utilities
@@ -1133,13 +1176,18 @@ def run_optimization(config):
         'min_gate_time': min_gate_time,
         'seed': RANDOM_SEED,
         # Frequency grid kept for reference; the full-resolution SMat is omitted
-        # (the plot scripts recompute spectra from spectra_input, so saving the
-        # 4x4x20000 matrix here is ~5 MB of dead weight per file).
+        # (the plot scripts recompute spectra from the analytic noise model
+        # (qns2q.noise.spectra), so saving the 4x4x20000 matrix here is ~5 MB
+        # of dead weight per file).
         'w': np.array(config.w),
         'w_max': float(config.w_max),
         'M': M,
         'Tg': T_seq_best_known if T_seq_best_known is not None else T_seq_best_opt,
         'gate_type': 'cz',
+        # OPT-PROVENANCE: noise-model version the input spectra were generated
+        # under (the viz overlays warn when it differs from the current model).
+        'model_version': config.model_version,
+        'spectral_model': config.spectral_model,
     }
 
     if best_known_seq_overall is not None:
@@ -1198,9 +1246,16 @@ if __name__ == '__main__':
                              "a protocol cannot reconstruct, e.g. robust "
                              "S112/S212, are auto-dropped from the "
                              "characterized model alone)")
+    parser.add_argument('--spectral-model', choices=('interp', 'selfconsistent'),
+                        default='interp',
+                        help="characterized-SMat construction: linear interp "
+                             "through the teeth (+tails), or the unfold "
+                             "model's line/tail/head-aware spectra "
+                             "(OPT-SPECTRAL-MODEL)")
     cli = parser.parse_args()
     fname = cli.folder or (run_folder(spam=True, protocol=cli.protocol)
                            if cli.protocol else run_folder())
     config = CZOptConfig(fname=fname, use_simulated=cli.simulated,
-                         include_cross_spectra=not cli.no_cross)
+                         include_cross_spectra=not cli.no_cross,
+                         spectral_model=cli.spectral_model)
     run_optimization(config)

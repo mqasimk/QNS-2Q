@@ -394,6 +394,11 @@ class ExperimentRunner:
             params_to_save['est_products'] = est.products
             params_to_save['est_cm'] = est.cm
         params_to_save['tau'] = self.config.tau
+        # OPT-PROVENANCE: stamp the noise-model version the world was
+        # synthesized under; propagated into specs.npz and the gate outputs so
+        # downstream consumers can detect mixed-model states.
+        from qns2q.noise.spectra import MODEL_VERSION
+        params_to_save['model_version'] = MODEL_VERSION
         np.savez(
             os.path.join(self.path, "params.npz"),
             **params_to_save)

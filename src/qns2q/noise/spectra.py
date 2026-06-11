@@ -220,6 +220,12 @@ def S_2_12(w):
 
 
 if __name__ == "__main__":
+    # float64 for the saved file: this block runs in its own process, so
+    # enabling x64 here cannot perturb the record/replay pipeline numerics.
+    # Layout note: the grid is two-sided [-wmax, wmax] (41 points, w=0 at the
+    # CENTER, index 0 = -wmax) -- consumers that look for a DC sample at wk[0]
+    # correctly treat this file as DC-less (OPT-MISC-0611).
+    jax.config.update("jax_enable_x64", True)
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
