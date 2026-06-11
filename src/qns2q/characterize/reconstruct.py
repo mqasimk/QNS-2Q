@@ -290,6 +290,12 @@ class SpectraReconConfig:
                       f"overlays/systematics assume tau-unit data -- regenerate "
                       f"Stage 1 (scripts/run_experiments.py) for this folder.")
 
+        # Noise-synthesis half-band override (the simulated world spans twice
+        # this; 0.0 = legacy formula wmax). Needed by the echo-DC mirror so it
+        # integrates over the band the run's world actually populates.
+        self.synth_wmax = (float(np.asarray(self.params['synth_wmax']))
+                           if 'synth_wmax' in self.params else 0.0)
+
         # Optional SPAM-protocol metadata (absent in legacy / NoSPAM runs).
         self.spam_protocol = (str(self.params['spam_protocol'])
                               if 'spam_protocol' in self.params else 'none')
@@ -509,7 +515,7 @@ class SpectraReconstructor:
             dcb = dc_fit_systematic(sc, self.dc_t_sweep,
                                     s1212_echo_ct=getattr(self, 'dc_echo_ct', None),
                                     s1212_echo_obs_err=getattr(self, 'dc_echo_obs_err', None),
-                                    s1212_echo_wmax=self.config.wmax)
+                                    s1212_echo_wmax=2 * (self.config.synth_wmax or self.config.wmax))
             out = {}
             for sk in _SYS_TO_SPEC:
                 full = np.concatenate(([dcb[sk]], np.asarray(b[sk])))
@@ -596,7 +602,7 @@ class SpectraReconstructor:
                 dc_bias = dc_fit_systematic(spectra, self.dc_t_sweep,
                                             s1212_echo_ct=getattr(self, 'dc_echo_ct', None),
                                             s1212_echo_obs_err=getattr(self, 'dc_echo_obs_err', None),
-                                            s1212_echo_wmax=self.config.wmax)
+                                            s1212_echo_wmax=2 * (self.config.synth_wmax or self.config.wmax))
 
             print("[systematic] folded sigma_sys per spectrum (forward-model comb bias; "
                   "RMS over harmonics, |DC bias|):")

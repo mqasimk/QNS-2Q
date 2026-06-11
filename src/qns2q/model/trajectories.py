@@ -181,7 +181,17 @@ def make_noise_mat(spec, t_vec, **kwargs):
         w = jnp.linspace(0, 2 * wmax, size_w)
     Sf = jax.vmap(jax.vmap(sinM, in_axes=(None, 0, None, None, None)), in_axes=(None, None, 0, None, None))
     Cf = jax.vmap(jax.vmap(cosM, in_axes=(None, 0, None, None, None)), in_axes=(None, None, 0, None, None))
-    return Sf(spec, w, t_vec, dw, gamma), Cf(spec, w, t_vec, dw, gamma)
+    # Build in time-blocks: the fused full-grid build materializes ~3x the
+    # [n_t x size_w] output and OOMs a 12 GB GPU at Nyquist-band grids. The
+    # matrices are elementwise in (t, w), so block-row concatenation is exact.
+    n_t = int(jnp.size(t_vec))
+    blk = 2048
+    blocks_s, blocks_c = [], []
+    for s in range(0, n_t, blk):
+        tb = t_vec[s:s + blk]
+        blocks_s.append(Sf(spec, w, tb, dw, gamma))
+        blocks_c.append(Cf(spec, w, tb, dw, gamma))
+    return jnp.concatenate(blocks_s, axis=0), jnp.concatenate(blocks_c, axis=0)
 
 
 @jax.jit
