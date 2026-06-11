@@ -130,6 +130,13 @@ class QNSExperimentConfig:
     # Bin-midpoint noise-synthesis grid: excludes the spurious w=0 static tone that
     # otherwise biases DC-sensitive observables by O(dw). Default True for new runs.
     midpoint: bool = True
+    # Half-band override for the noise synthesis: the simulated world spans
+    # [0, 2*synth_wmax] at resolution dw = synth_wmax/w_grain (make_noise_mat
+    # convention). 0.0 = legacy behavior, half-band = wmax = 2*pi*truncate/T.
+    # Set pi/2 to give a run a full control-Nyquist world [0, pi/tau] regardless
+    # of its own comb reach (the two-scale Nyquist protocol needs the fine- and
+    # high-band runs to live in the SAME world).
+    synth_wmax: float = 0.0
     T: jnp.float64 = 160*tau
     gamma: jnp.float64 = T / 14
     gamma_12: jnp.float64 = T / 28
@@ -245,7 +252,7 @@ class ExperimentRunner:
                 'make',
                 t_vec=self.config.t_vec,
                 w_grain=self.config.w_grain,
-                wmax=self.config.wmax,
+                wmax=self.config.synth_wmax or self.config.wmax,
                 truncate=self.config.truncate,
                 midpoint=self.config.midpoint))
 
@@ -450,7 +457,7 @@ class PhaseReplayer:
 # Config fields that must match between a recording and a replay for the
 # stored phases to describe the same experiment suite.
 _DATASET_META_FIELDS = ('T', 'M', 't_grain', 'truncate', 'w_grain', 'n_shots',
-                        'midpoint')
+                        'midpoint', 'synth_wmax')
 
 
 def save_phase_dataset(path, recorder, config):
@@ -469,6 +476,8 @@ def load_phase_dataset(path, config):
     """Load a phase dataset and validate it against ``config``'s grid."""
     d = np.load(path)
     for f in _DATASET_META_FIELDS:
+        if f'meta_{f}' not in d.files:
+            continue  # dataset predates this meta field (defaults applied)
         rec, cur = d[f'meta_{f}'], np.array(getattr(config, f))
         if not np.array_equal(rec, cur):
             raise ValueError(f"phase dataset {path} was recorded with {f}={rec} "
@@ -564,7 +573,10 @@ def main(config=None, record_to=None, replay_from=None):
     # measurement time if the spectra change -- no per-spectrum tuning. The self
     # observables decouple the Ising with a fast partner CDD3 (dc_ct); for the
     # pulse-free FID/FID cross observables dc_ct is immaterial.
-    dc_ct = config.T / 8
+    # Floor at 8 tau: the CDD3 partner toggles at ct/8, so any shorter cycle
+    # violates the minimal pulse spacing tau (bites for short-T runs, e.g. the
+    # T=40 high-band comb of the two-scale Nyquist protocol).
+    dc_ct = max(config.T / 8, 8.0)
     dc_m_sweep = range(1, config.M + 1)
     dc_experiments = [
         # Self-DC: partner CDD3 nulls the Ising -> qubit-a FID governed by S_aa alone.
@@ -599,7 +611,8 @@ def main(config=None, record_to=None, replay_from=None):
     # per-qubit pulse spacing >= 1.25 tau) parks the echo passband (w ~ pi/ct) above
     # the QNS band where the S_1212 weight is small; the residual mixed-filter
     # pickup is a deterministic systematic mirrored by the DC forward model.
-    dc_echo_ct = config.T / 64
+    # Floor at 2 tau: CDD1/CPMG toggle at ct/2, the minimal legal pulse spacing.
+    dc_echo_ct = max(config.T / 64, 2.0)
     for exp_name, pulse_sequence in (('C_1_0_CDD1CDD1', ['CDD1', 'CDD1']),
                                      ('C_1_0_CDD1CPMG', ['CDD1', 'CPMG'])):
         runner.run_dc_sweep(exp_name, pulse_sequence, 'C_a_0', dc_m_sweep,
