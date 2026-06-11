@@ -86,10 +86,18 @@ def with_cross_only(SMat, keep_pairs):
 
 
 def main():
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--folder', default=None,
+                    help="run folder supplying the reconstruction for the "
+                         "knowledge-subset blocks AND receiving the output "
+                         "npz (default: the active regime's NoSPAM folder)")
+    a = ap.parse_args()
     results = []
 
-    # ---- Ask 2: spectral-knowledge subsets (NoSPAM reconstruction) ----
-    cfg = cz.CZOptConfig(use_simulated=False, gate_time_factors=[])
+    # ---- Ask 2: spectral-knowledge subsets ----
+    cfg = cz.CZOptConfig(fname=a.folder, use_simulated=False,
+                         gate_time_factors=[])
     full = cfg.SMat
     variants = [
         ("all-6", full),
@@ -110,8 +118,7 @@ def main():
                                    gate_time_factors=[])
             results.append(run_block(cfg_a, f"arm-{arm}", Tg))
 
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
-                       "DraftRun_NoSPAM_featured", "report_ask_experiments.npz")
+    out = os.path.join(cfg.path, "report_ask_experiments.npz")
     np.savez(out, results=np.array(results, dtype=object),
              seed=cz.RANDOM_SEED)
     print(f"saved {out}", flush=True)
