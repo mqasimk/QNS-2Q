@@ -105,7 +105,12 @@ class QNSExperimentConfig:
     # noise/spectra.py). The legacy SI anchor was tau = 25 ns.
     tau: jnp.float64 = 1.0
     M: jnp.int64 = 10
-    t_grain: jnp.int64 = 3000
+    # 1600 (2026-06-11 decision): the repeat-heavy CA-REPRO/arm workflow needs
+    # cheaper full runs; dt = T/1600 = 0.1 tau still gives 10 samples per
+    # minimum pulse separation (the old 3000 ran > 1.6 h per Stage 1). SPAM
+    # presets (run_spam_experiments --reduced/--medium/--tuned/--fine) pin
+    # their own values and are unaffected.
+    t_grain: jnp.int64 = 1600
     truncate: jnp.int64 = 20
     w_grain: jnp.int64 = 500
     spec_vec: list = field(default_factory=lambda: [S_11, S_22, S_1212])
@@ -140,7 +145,9 @@ class QNSExperimentConfig:
     T: jnp.float64 = 160*tau
     gamma: jnp.float64 = T / 14
     gamma_12: jnp.float64 = T / 28
-    n_shots: jnp.int64 = 10000
+    # 4000 (2026-06-11 decision, with t_grain=1600): matches the medium-preset
+    # statistics; the repeat plan buys precision through repeats, not shots.
+    n_shots: jnp.int64 = 4000
     fname: str = field(default_factory=run_folder)
     parent_dir: str = os.pardir
 
