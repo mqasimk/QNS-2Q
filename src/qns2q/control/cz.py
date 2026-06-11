@@ -702,8 +702,9 @@ def use_comb_approximation(M, T_seq):
 
     The comb samples S at delta teeth; the TRUE M-fold filter tooth has width
     ~ 2pi/(M*T_seq). When that width is comparable to the nuclear-line width
-    sigma the comb mis-weights the lines (OPT-COMB-M16 diagnostic,
-    scripts/diag_comb_vs_folded.py: 8-14% at Tg = 320 tau / M = 16). Smooth
+    sigma the comb mis-weights the lines (OPT-COMB-M16 diagnostic + boundary
+    sweep, scripts/diag_comb_vs_folded.py: 8-14% at Tg = 320 tau / M = 16,
+    3-7% at 640, up to 3.2% at 1280; <= 1.7% past 2pi/Tg < sigma/8). Smooth
     (bland) spectra keep the legacy speed cutoff M > 10. (CZ currently runs
     M = 1, so this is future-proofing kept in lockstep with idle.py.)"""
     if M <= 10:
@@ -712,7 +713,7 @@ def use_comb_approximation(M, T_seq):
     if pri is None:
         return True
     _, sigma = pri
-    return 2 * np.pi / (M * T_seq) < sigma / 4
+    return 2 * np.pi / (M * T_seq) < sigma / 8
 
 
 # ==============================================================================
@@ -948,11 +949,15 @@ def evaluate_known_sequences_with_T(config, M, T_seq, pLib):
 
 def calculate_infidelity(seq, config, M, T_seq, use_ideal=False):
     if seq is None: return 1.0
-    
+
     SMat = config.SMat_ideal if use_ideal else config.SMat
     w_grid = config.w_ideal if use_ideal else config.w
-    
-    use_comb = use_comb_approximation(M, T_seq)
+
+    # use_ideal=True is the published-number path (the true-infidelity
+    # benchmark of the blind winner): always take the exact folded evaluator
+    # there, so quoted numbers carry NO comb approximation. The comb remains a
+    # search-side speed optimization only (OPT-COMB-M16 hardening).
+    use_comb = (not use_ideal) and use_comb_approximation(M, T_seq)
     
     if use_comb:
         w0 = 2 * jnp.pi / T_seq
