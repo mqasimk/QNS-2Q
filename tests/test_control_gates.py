@@ -144,6 +144,8 @@ def test_use_comb_crossover_respects_lines():
         pytest.skip("bland regime: no lines, legacy M cutoff applies")
     assert not idle.use_comb_approximation(8, 1000.0)   # legacy M <= 10 cutoff
     assert not idle.use_comb_approximation(16, 20.0)    # Tg=320: 8-14% error regime
+    assert not idle.use_comb_approximation(16, 80.0)    # Tg=1280: up to 3.2% (boundary sweep)
+    assert idle.use_comb_approximation(16, 160.0)       # Tg=2560: <= 1.7% measured
     assert idle.use_comb_approximation(128, 80.0)       # Tg=10240: <= 0.3%
     assert (cz.use_comb_approximation(16, 20.0)
             == idle.use_comb_approximation(16, 20.0))
