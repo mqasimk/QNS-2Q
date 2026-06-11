@@ -106,6 +106,30 @@ def main():
             row += f"  {np.median(rel):6.2%} / {np.median(pull):4.2f} / {np.mean(pull <= 2):4.0%} |"
         print(row)
 
+    # ---- DC (w=0) table ------------------------------------------------------------
+    # The medians above dilute the w=0 point ~1:25; SPAM bias concentrates there
+    # (the harmonic estimators self-cancel static SPAM), so quote DC explicitly.
+    print("\nDC (w=0) points -- fitted S(0) / pull vs truth ('!' = flagged not-determined):")
+    print(header)
+    for key in keys:
+        tr0 = float(np.real(truth[key](np.array([0.0]))[0]))
+        row = f"{key:>8} |"
+        for a, d in arms.items():
+            rec_arr = np.asarray(d[key]) if key in d.files else None
+            if rec_arr is None or np.all(rec_arr == 0) or np.all(np.isnan(rec_arr)):
+                row += f" {'n/a (not accessible)':>26} |"
+                continue
+            v0 = float(np.real(rec_arr[0]))
+            if not np.isfinite(v0):
+                row += f" {'n/a (no DC observable)':>26} |"
+                continue
+            sig_re, _ = _sig_parts(d[f'{key}_errtot'])
+            pull0 = abs(v0 - tr0) / (float(sig_re[0]) + 1e-30)
+            ok = bool(np.asarray(d[f'{key}_dc_ok'])) if f'{key}_dc_ok' in d.files else True
+            cell = f"{v0:9.2e} / pull {pull0:6.2f}{'!' if not ok else ' '}"
+            row += f" {cell:>26} |"
+        print(row + f"   truth {tr0:9.2e}")
+
     # ---- figure 1: overlay with error bars ----------------------------------------
     fig, axs = plt.subplots(3, 3, figsize=(13.5, 10.5), sharex=True)
     dw = (wk[1] - wk[0]) if len(wk) > 1 else 0.02

@@ -589,6 +589,23 @@ def main(config=None, record_to=None, replay_from=None):
     for exp_name, pulse_sequence, exp_type, kwargs in dc_experiments:
         runner.run_dc_sweep(exp_name, pulse_sequence, exp_type, dc_m_sweep, dc_ct, **kwargs)
 
+    # Ising self-DC, direct (double echo): simultaneous CDD1 on both qubits echoes
+    # Phi_1 (y_1 balanced) while y_12 = y_1*y_2 = +1 keeps FULL DC weight; the
+    # CDD1/CPMG reference has the SAME y_1 filter (Var Phi_1 cancels exactly in the
+    # difference) but a fast-toggled y_12 with no DC weight. The difference therefore
+    # isolates Var Phi_12 at FIRST order -- unlike the FF combination above, which
+    # extracts it as a ~25x-smaller difference of single-qubit variances and is
+    # statistically swamped at realistic shots. The fast cycle (T/64 = 2.5 tau;
+    # per-qubit pulse spacing >= 1.25 tau) parks the echo passband (w ~ pi/ct) above
+    # the QNS band where the S_1212 weight is small; the residual mixed-filter
+    # pickup is a deterministic systematic mirrored by the DC forward model.
+    dc_echo_ct = config.T / 64
+    for exp_name, pulse_sequence in (('C_1_0_CDD1CDD1', ['CDD1', 'CDD1']),
+                                     ('C_1_0_CDD1CPMG', ['CDD1', 'CPMG'])):
+        runner.run_dc_sweep(exp_name, pulse_sequence, 'C_a_0', dc_m_sweep,
+                            dc_echo_ct, l=1)
+    runner.results['dc_echo_ct'] = dc_echo_ct
+
     runner.save_results()
     if record_to is not None:
         save_phase_dataset(record_to, solver, config)

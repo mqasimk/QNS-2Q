@@ -10,6 +10,7 @@ import matplotlib
 matplotlib.use('Agg')
 
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Dict, Any
 
@@ -19,6 +20,7 @@ import matplotlib.ticker as ticker
 
 from qns2q.characterize.inversion import (recon_S_11, recon_S_22, recon_S_1_2, recon_S_12_12, recon_S_1_12, recon_S_2_12,
                                 recon_S_11_dc, recon_S_22_dc, recon_S_1212_dc,
+                                recon_S_1212_dc_echo,
                                 recon_S_1_2_dc, recon_S_1_12_dc, recon_S_2_12_dc,
                                 regress_observables_over_M,
                                 truncation_bias_estimate)
@@ -33,6 +35,7 @@ _SYS_TO_SPEC = {'S11': 'S_11_k', 'S22': 'S_22_k', 'S1212': 'S_12_12_k',
                 'S12': 'S_1_2_k', 'S112': 'S_1_12_k', 'S212': 'S_2_12_k'}
 _SYS_TO_ERR = {'S11': 'S_11_err', 'S22': 'S_22_err', 'S1212': 'S_12_12_err',
                'S12': 'S_1_2_err', 'S112': 'S_1_12_err', 'S212': 'S_2_12_err'}
+_SPEC_TO_SYS = {v: k for k, v in _SYS_TO_SPEC.items()}
 
 
 def _quad_combine(stat, sys):
@@ -73,16 +76,80 @@ FIGURES_SUBDIR = "figures"
 RECONSTRUCTION_SUBDIR = os.path.join(FIGURES_SUBDIR, "reconstruction")
 
 
-def _set_asinh_scale(ax, all_y):
+def _set_asinh_scale(ax, scale_y, ylim_data=None):
     """asinh y-scale with a data-driven linear width, ignoring non-finite entries
-    (e.g. spectra not accessible under the SPAM-robust protocol)."""
-    all_y = np.asarray(all_y)
-    finite = all_y[np.isfinite(all_y) & (all_y != 0)]
+    (e.g. spectra not accessible under the SPAM-robust protocol).
+
+    The linear width is the median |finite nonzero| of ``scale_y``. For the
+    SPAM-arm figures pass the (arm-independent) theory curve so the asinh warp
+    matches across arms, plus ``ylim_data`` -- the cross-arm envelope -- to pin
+    identical explicit y-limits (padded in asinh space) instead of per-arm
+    autoscaling."""
+    scale_y = np.asarray(scale_y)
+    finite = scale_y[np.isfinite(scale_y) & (scale_y != 0)]
     scale = float(np.median(np.abs(finite))) if finite.size else 1.0
     ax.set_yscale('asinh', linear_width=scale)
     linthresh = 10 ** np.ceil(np.log10(scale))
     ax.yaxis.set_major_locator(ticker.SymmetricalLogLocator(linthresh=linthresh, base=10))
     ax.yaxis.set_minor_locator(ticker.NullLocator())
+    if ylim_data is not None:
+        yd = np.asarray(np.real(ylim_data), dtype=float)
+        yd = yd[np.isfinite(yd)]
+        if yd.size:
+            g = np.arcsinh(yd / scale)
+            pad = 0.05 * max(float(g.max() - g.min()), 1.0)
+            ax.set_ylim(scale * np.sinh(g.min() - pad), scale * np.sinh(g.max() + pad))
+
+
+# Arms sharing per-panel figure axes. The robust arm is deliberately excluded:
+# its current data is from a different run (weaker SPAM, 4k shots vs 64k), so
+# its blown-up error bars would stretch every panel; it keeps per-run
+# autoscaling until it is regenerated on the same replay as the other arms.
+_SHARED_AXIS_ARMS = ('reference', 'raw', 'mitigated')
+
+
+def _sibling_spam_envelopes(data_folder):
+    """Per-spectrum y-envelopes (points +/- the plotted ERRORBAR_SIGMA bars) of
+    the _SHARED_AXIS_ARMS' saved reconstructions, keyed like _SYS_TO_SPEC.
+
+    Those arms are compared side by side, so their figures must share per-panel
+    axes. Returns {} unless ``data_folder`` is itself one of the shared arms
+    (``DraftRun_SPAM_<regime>_<protocol>``) -- NoSPAM and robust runs keep the
+    legacy per-run autoscaling. Arms whose specs.npz does not exist yet are
+    skipped, so after generating fresh data rerun the reconstruct stage once per
+    arm after all arms exist to converge the shared limits."""
+    name = os.path.basename(os.path.normpath(data_folder))
+    m = re.match(r'^(DraftRun_SPAM_\w+?)_(raw|mitigated|robust|reference)$', name)
+    if not m or m.group(2) not in _SHARED_AXIS_ARMS:
+        return {}
+    parent = os.path.dirname(os.path.normpath(data_folder))
+    env = {k: [] for k in _SYS_TO_SPEC}
+    for protocol in _SHARED_AXIS_ARMS:
+        spec_path = os.path.join(project_root(), parent,
+                                 f'{m.group(1)}_{protocol}', 'specs.npz')
+        if not os.path.exists(spec_path):
+            continue
+        d = np.load(spec_path)
+        for key in env:
+            if key not in d.files:
+                continue
+            val = np.asarray(d[key])
+            if not np.any(np.isfinite(val)) or np.all(val == 0):
+                continue  # arm cannot access this spectrum (e.g. robust S_l,12)
+            err_key = next((k for k in (f'{key}_errtot', f'{key}_err')
+                            if k in d.files), None)
+            bars = (ERRORBAR_SIGMA * np.asarray(d[err_key]) if err_key
+                    else np.zeros_like(val))
+            # A flagged DC point carries a deliberately inflated bar (the spectrum's
+            # own scale); letting it set the shared limits would squash the harmonic
+            # structure in every arm's panel.
+            if f'{key}_dc_ok' in d.files and not bool(np.asarray(d[f'{key}_dc_ok'])):
+                val, bars = val[1:], bars[1:]
+            parts = (np.real, np.imag) if np.iscomplexobj(val) else (np.real,)
+            for part in parts:
+                v, b = part(val), np.abs(part(bars))
+                env[key] += [v - b, v + b]
+    return {k: np.concatenate(v) for k, v in env.items() if v}
 
 
 def setup_pub_rcparams(font_scale='compact'):
@@ -339,25 +406,47 @@ class SpectraReconstructor:
 
         S_11_dc, S_11_dc_err = call_recon_dc(recon_S_11_dc, ['C_1_0_FIDCDD3'], 'S11')
         S_22_dc, S_22_dc_err = call_recon_dc(recon_S_22_dc, ['C_2_0_CDD3FID'], 'S22')
-        S_1212_dc, S_1212_dc_err = call_recon_dc(recon_S_1212_dc,
+        if all(k in obs for k in ('C_1_0_CDD1CDD1', 'C_1_0_CDD1CPMG')):
+            # Double-echo estimator: direct first-order Var Phi_12 (see
+            # inversion.recon_S_1212_dc_echo). The echo cycle time AND the data's
+            # per-point errors are needed by the DC forward-model mirror in the
+            # systematics/unfold stage (the mirror must window the exact curves
+            # the same SNR-based way the data fit does).
+            self.dc_echo_ct = float(np.asarray(obs['dc_echo_ct']))
+            self.dc_echo_obs_err = get_errs(['C_1_0_CDD1CDD1', 'C_1_0_CDD1CPMG'])
+            S_1212_dc, S_1212_dc_err = call_recon_dc(
+                recon_S_1212_dc_echo, ['C_1_0_CDD1CDD1', 'C_1_0_CDD1CPMG'], 'S1212')
+        else:
+            # Legacy FF combination for runs predating the double-echo observables.
+            self.dc_echo_ct = None
+            self.dc_echo_obs_err = None
+            S_1212_dc, S_1212_dc_err = call_recon_dc(recon_S_1212_dc,
                                     ['C_1_0_FIDFID', 'C_2_0_FIDFID', 'C_12_0_FID_FID'], 'S1212')
         S_1_2_dc, S_1_2_dc_err = call_recon_dc(recon_S_1_2_dc, ['C_12_12_FID'], 'S12')
         S_1_12_dc, S_1_12_dc_err = call_recon_dc(recon_S_1_12_dc, ['C_1_12_FID'], 'S112')
         S_2_12_dc, S_2_12_dc_err = call_recon_dc(recon_S_2_12_dc, ['C_2_12_FID'], 'S212')
 
-        # Flagged (not-determined) DC points can fit to an unphysical negative S(0) when
-        # the signal is swamped; clamp to a non-negative floor (the first harmonic value)
-        # so downstream consumers see a sane spectrum. The dc_reliable flag + inflated bar
-        # carry the (large) uncertainty.
+        # SELF spectra: a flagged (not-determined) DC can fit to an unphysical negative
+        # S(0) when the signal is swamped; clamp to a non-negative floor (the first
+        # harmonic value) so downstream consumers see a sane spectrum. The dc_reliable
+        # flag + inflated bar carry the (large) uncertainty.
         def _floor_dc(val, reliable, harm0):
             val, harm0 = float(np.real(val)), float(np.real(harm0))
             return val if (reliable or val >= harm0) else harm0
+        # CROSS spectra: S(0) may be legitimately negative / insignificant -- keep the
+        # fitted value (flag + bar carry the uncertainty; flooring would fabricate the
+        # plotted point and mask e.g. the raw-arm SPAM bias). Substitute the first
+        # harmonic only when there is no fit at all (the robust protocol omits the DC
+        # observables) so downstream interpolation stays finite.
+        def _fallback_dc(val, harm0):
+            val = float(np.real(val))
+            return val if np.isfinite(val) else float(np.real(harm0))
         S_11_dc = _floor_dc(S_11_dc, self.dc_reliable['S11'], S_11_k[0])
         S_22_dc = _floor_dc(S_22_dc, self.dc_reliable['S22'], S_22_k[0])
         S_1212_dc = _floor_dc(S_1212_dc, self.dc_reliable['S1212'], S_12_12_k[0])
-        S_1_2_dc = _floor_dc(S_1_2_dc, self.dc_reliable['S12'], S_1_2_k[0])
-        S_1_12_dc = _floor_dc(S_1_12_dc, self.dc_reliable['S112'], S_1_12_k[0])
-        S_2_12_dc = _floor_dc(S_2_12_dc, self.dc_reliable['S212'], S_2_12_k[0])
+        S_1_2_dc = _fallback_dc(S_1_2_dc, S_1_2_k[0])
+        S_1_12_dc = _fallback_dc(S_1_12_dc, S_1_12_k[0])
+        S_2_12_dc = _fallback_dc(S_2_12_dc, S_2_12_k[0])
 
         print(f"DC values (reliable?): S_11(0)={S_11_dc:.3e}({self.dc_reliable['S11']}), "
               f"S_22(0)={S_22_dc:.3e}({self.dc_reliable['S22']}), "
@@ -417,7 +506,10 @@ class SpectraReconstructor:
             sc = selfconsistent_spectra(wk_full, recon)
             b = forward_model_systematic(sc, c.c_times, c.M, c.T, c.t_vec,
                                          c.w_grain, c.wmax, inv_opts=inv_opts)
-            dcb = dc_fit_systematic(sc, self.dc_t_sweep)
+            dcb = dc_fit_systematic(sc, self.dc_t_sweep,
+                                    s1212_echo_ct=getattr(self, 'dc_echo_ct', None),
+                                    s1212_echo_obs_err=getattr(self, 'dc_echo_obs_err', None),
+                                    s1212_echo_wmax=self.config.wmax)
             out = {}
             for sk in _SYS_TO_SPEC:
                 full = np.concatenate(([dcb[sk]], np.asarray(b[sk])))
@@ -501,7 +593,10 @@ class SpectraReconstructor:
                 # DC (w=0) point: deterministic bias of the multi-time slope fit (tiny
                 # where the noise reaches motional narrowing; large = honest inflated bar
                 # where it is quasi-static / sub-comb-cusp -- see dc_reliable).
-                dc_bias = dc_fit_systematic(spectra, self.dc_t_sweep)
+                dc_bias = dc_fit_systematic(spectra, self.dc_t_sweep,
+                                            s1212_echo_ct=getattr(self, 'dc_echo_ct', None),
+                                            s1212_echo_obs_err=getattr(self, 'dc_echo_obs_err', None),
+                                            s1212_echo_wmax=self.config.wmax)
 
             print("[systematic] folded sigma_sys per spectrum (forward-model comb bias; "
                   "RMS over harmonics, |DC bias|):")
@@ -546,6 +641,9 @@ class SpectraReconstructor:
         # Quote the honest combined bars (statistical (+) systematic) when available.
         err_dict = getattr(self, 'reconstructed_spectra_err_total',
                            getattr(self, 'reconstructed_spectra_err', {}))
+        # Shared per-panel axes across the SPAM-protocol sibling arms ({} for
+        # NoSPAM runs, which keep the legacy per-run autoscaling).
+        shared_env = _sibling_spam_envelopes(self.config.data_folder)
 
         w = np.linspace(0, self.config.wmax, self.config.w_grain)
         # tau units: w is already the dimensionless angular frequency w*tau and
@@ -601,12 +699,27 @@ class SpectraReconstructor:
             if err_key in err_dict:
                 yerr = ERRORBAR_SIGMA * err_dict[err_key]
 
-            ax.errorbar(self.wk / xunits, self.reconstructed_spectra[s_key],
-                        yerr=yerr, **eb_self)
+            own = self.reconstructed_spectra[s_key]
+            dc_ok = getattr(self, 'dc_reliable', {}).get(_SPEC_TO_SYS[s_key], True)
+            i0 = 0 if dc_ok else 1
+            ax.errorbar(self.wk[i0:] / xunits, own[i0:],
+                        yerr=None if yerr is None else yerr[i0:], **eb_self)
+            if not dc_ok:
+                # Hollow marker: the S(0) slope fit is flagged not-determined; the
+                # inflated bar (excluded from the axis limits) carries the uncertainty.
+                ax.errorbar(self.wk[:1] / xunits, own[:1],
+                            yerr=None if yerr is None else np.abs(yerr[:1]),
+                            **dict(eb_self, mfc='white', label='_nolegend_'))
             ax.set_ylabel(ylabel)
 
-            all_y = np.concatenate([theory_fn(w), self.reconstructed_spectra[s_key]])
-            _set_asinh_scale(ax, all_y)
+            if _SPEC_TO_SYS[s_key] in shared_env:
+                bars = np.abs(yerr) if yerr is not None else 0.0
+                env = np.concatenate([theory_fn(w), [0.0], (own - bars)[i0:],
+                                      (own + bars)[i0:],
+                                      shared_env[_SPEC_TO_SYS[s_key]]])
+                _set_asinh_scale(ax, theory_fn(w), ylim_data=env)
+            else:
+                _set_asinh_scale(ax, np.concatenate([theory_fn(w), own[i0:]]))
             ax.grid(True, which='major', zorder=0)
             ax.grid(False, which='minor')
             ax.text(0.03, 0.92, panel_labels[row][0], transform=ax.transAxes,
@@ -617,6 +730,11 @@ class SpectraReconstructor:
         for row, (s_key, err_key, theory_fn, ylabel) in enumerate(complex_spectra):
             ax = axs[row, 1]
             S_theory = theory_fn(w)
+            own = self.reconstructed_spectra[s_key]
+            # All-NaN marks a spectrum the protocol cannot access; suppress the
+            # point series entirely (np.imag of a real NaN array is 0, which
+            # would otherwise draw a spurious marker row at y=0).
+            accessible = bool(np.any(np.isfinite(own)))
 
             yerr_re = None
             yerr_im = None
@@ -626,19 +744,39 @@ class SpectraReconstructor:
                 yerr_im = ERRORBAR_SIGMA * np.imag(err_complex)
 
             ax.plot(w / xunits, np.real(S_theory), **theory_re_kw)
-            ax.errorbar(self.wk / xunits, np.real(self.reconstructed_spectra[s_key]),
-                        yerr=yerr_re, **eb_re)
-
             ax.plot(w / xunits, np.imag(S_theory), **theory_im_kw)
-            ax.errorbar(self.wk / xunits, np.imag(self.reconstructed_spectra[s_key]),
-                        yerr=yerr_im, **eb_im)
+            dc_ok = getattr(self, 'dc_reliable', {}).get(_SPEC_TO_SYS[s_key], True)
+            i0 = 0 if dc_ok else 1
+            if accessible:
+                ax.errorbar(self.wk[i0:] / xunits, np.real(own)[i0:],
+                            yerr=None if yerr_re is None else np.abs(yerr_re)[i0:],
+                            **eb_re)
+                ax.errorbar(self.wk[i0:] / xunits, np.imag(own)[i0:],
+                            yerr=None if yerr_im is None else np.abs(yerr_im)[i0:],
+                            **eb_im)
+                if not dc_ok:
+                    # Hollow markers: the S(0) slope fit is flagged not-determined;
+                    # the inflated bar (excluded from the limits) carries it.
+                    for vals, ye, eb in ((np.real(own), yerr_re, eb_re),
+                                         (np.imag(own), yerr_im, eb_im)):
+                        ax.errorbar(self.wk[:1] / xunits, vals[:1],
+                                    yerr=None if ye is None else np.abs(ye)[:1],
+                                    **dict(eb, mfc='white', label='_nolegend_'))
 
             ax.set_ylabel(ylabel)
 
-            all_y = np.concatenate([np.real(S_theory), np.imag(S_theory),
-                                    np.real(self.reconstructed_spectra[s_key]),
-                                    np.imag(self.reconstructed_spectra[s_key])])
-            _set_asinh_scale(ax, all_y)
+            th_parts = np.concatenate([np.real(S_theory), np.imag(S_theory)])
+            if _SPEC_TO_SYS[s_key] in shared_env:
+                bre = np.abs(yerr_re) if yerr_re is not None else 0.0
+                bim = np.abs(yerr_im) if yerr_im is not None else 0.0
+                env = np.concatenate([th_parts,
+                                      (np.real(own) - bre)[i0:], (np.real(own) + bre)[i0:],
+                                      (np.imag(own) - bim)[i0:], (np.imag(own) + bim)[i0:],
+                                      shared_env[_SPEC_TO_SYS[s_key]]])
+                _set_asinh_scale(ax, th_parts, ylim_data=env)
+            else:
+                _set_asinh_scale(ax, np.concatenate([th_parts, np.real(own)[i0:],
+                                                     np.imag(own)[i0:]]))
             ax.grid(True, which='major', zorder=0)
             ax.grid(False, which='minor')
             ax.text(0.03, 0.92, panel_labels[row][1], transform=ax.transAxes,
@@ -686,6 +824,9 @@ class SpectraReconstructor:
         # Quote the honest combined bars (statistical (+) systematic) when available.
         err_dict = getattr(self, 'reconstructed_spectra_err_total',
                            getattr(self, 'reconstructed_spectra_err', {}))
+        # Shared per-panel axes across the SPAM-protocol sibling arms ({} for
+        # NoSPAM runs, which keep the legacy per-run autoscaling).
+        shared_env = _sibling_spam_envelopes(self.config.data_folder)
 
         w = np.linspace(0, self.config.wmax, self.config.w_grain)
         # tau units: w is already the dimensionless angular frequency w*tau and
@@ -720,6 +861,11 @@ class SpectraReconstructor:
         for row, (s_key, err_key, theory_fn, ylabel) in enumerate(complex_spectra):
             ax = axs[row]
             S_theory = theory_fn(w)
+            own = self.reconstructed_spectra[s_key]
+            # All-NaN marks a spectrum the protocol cannot access; suppress the
+            # point series entirely (np.imag of a real NaN array is 0, which
+            # would otherwise draw a spurious marker row at y=0).
+            accessible = bool(np.any(np.isfinite(own)))
 
             yerr_re = None
             yerr_im = None
@@ -729,19 +875,39 @@ class SpectraReconstructor:
                 yerr_im = ERRORBAR_SIGMA * np.imag(err_complex)
 
             ax.plot(w / xunits, np.real(S_theory), **theory_re_kw)
-            ax.errorbar(self.wk / xunits, np.real(self.reconstructed_spectra[s_key]),
-                        yerr=yerr_re, **eb_re)
-
             ax.plot(w / xunits, np.imag(S_theory), **theory_im_kw)
-            ax.errorbar(self.wk / xunits, np.imag(self.reconstructed_spectra[s_key]),
-                        yerr=yerr_im, **eb_im)
+            dc_ok = getattr(self, 'dc_reliable', {}).get(_SPEC_TO_SYS[s_key], True)
+            i0 = 0 if dc_ok else 1
+            if accessible:
+                ax.errorbar(self.wk[i0:] / xunits, np.real(own)[i0:],
+                            yerr=None if yerr_re is None else np.abs(yerr_re)[i0:],
+                            **eb_re)
+                ax.errorbar(self.wk[i0:] / xunits, np.imag(own)[i0:],
+                            yerr=None if yerr_im is None else np.abs(yerr_im)[i0:],
+                            **eb_im)
+                if not dc_ok:
+                    # Hollow markers: the S(0) slope fit is flagged not-determined;
+                    # the inflated bar (excluded from the limits) carries it.
+                    for vals, ye, eb in ((np.real(own), yerr_re, eb_re),
+                                         (np.imag(own), yerr_im, eb_im)):
+                        ax.errorbar(self.wk[:1] / xunits, vals[:1],
+                                    yerr=None if ye is None else np.abs(ye)[:1],
+                                    **dict(eb, mfc='white', label='_nolegend_'))
 
             ax.set_ylabel(ylabel)
 
-            all_y = np.concatenate([np.real(S_theory), np.imag(S_theory),
-                                    np.real(self.reconstructed_spectra[s_key]),
-                                    np.imag(self.reconstructed_spectra[s_key])])
-            _set_asinh_scale(ax, all_y)
+            th_parts = np.concatenate([np.real(S_theory), np.imag(S_theory)])
+            if _SPEC_TO_SYS[s_key] in shared_env:
+                bre = np.abs(yerr_re) if yerr_re is not None else 0.0
+                bim = np.abs(yerr_im) if yerr_im is not None else 0.0
+                env = np.concatenate([th_parts,
+                                      (np.real(own) - bre)[i0:], (np.real(own) + bre)[i0:],
+                                      (np.imag(own) - bim)[i0:], (np.imag(own) + bim)[i0:],
+                                      shared_env[_SPEC_TO_SYS[s_key]]])
+                _set_asinh_scale(ax, th_parts, ylim_data=env)
+            else:
+                _set_asinh_scale(ax, np.concatenate([th_parts, np.real(own)[i0:],
+                                                     np.imag(own)[i0:]]))
             ax.grid(True, which='major', zorder=0)
             ax.grid(False, which='minor')
             ax.text(0.03, 0.92, panel_labels[row], transform=ax.transAxes,
@@ -783,6 +949,10 @@ class SpectraReconstructor:
             S12=self.reconstructed_spectra['S_1_2_k'], S1212=self.reconstructed_spectra['S_12_12_k'],
             S112=self.reconstructed_spectra['S_1_12_k'], S212=self.reconstructed_spectra['S_2_12_k'],
         )
+        # Per-spectrum DC determination flags (False = the w=0 slope fit is flagged
+        # not-determined; consumers should treat wk[0] as a bound, not a measurement).
+        save_dict.update({f'{sk}_dc_ok': bool(getattr(self, 'dc_reliable', {}).get(sk, True))
+                          for sk in _SYS_TO_SPEC})
         # S*_err = STATISTICAL error (unchanged semantics, backward-compatible).
         if hasattr(self, 'reconstructed_spectra_err'):
             save_dict.update(dict(
