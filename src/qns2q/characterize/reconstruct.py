@@ -219,9 +219,10 @@ class SpectraReconConfig:
     unfold_bias: bool = True
     # Fraction of the APPLIED correction conservatively retained as residual
     # systematic (standard unfolding practice: the self-consistent model is
-    # piecewise-linear through noisy points and cannot represent the narrow
-    # lines between comb teeth, so the fixed-point increment alone under-quotes;
-    # 0.5 was validated against ground truth -- reference-arm pulls ~1).
+    # built from noisy points, so the fixed-point increment alone under-quotes
+    # its error). With the line+tail-aware model (2026-06-11) the retained
+    # fraction covers the fitted line-height/tail-exponent error; 0.5 was
+    # validated against ground truth -- reference-arm pulls ~1.
     unfold_residual_frac: float = 0.5
     params: Dict[str, Any] = field(init=False)
     t_vec: np.ndarray = field(init=False)
@@ -295,6 +296,11 @@ class SpectraReconConfig:
         # integrates over the band the run's world actually populates.
         self.synth_wmax = (float(np.asarray(self.params['synth_wmax']))
                            if 'synth_wmax' in self.params else 0.0)
+        # Noise-synthesis grid convention (midpoint tones exclude w=0; legacy
+        # endpoint grids include it). Together with synth_wmax/wmax + w_grain
+        # this defines the world's exact tone grid for the DC mirrors.
+        self.midpoint = (bool(np.asarray(self.params['midpoint']))
+                         if 'midpoint' in self.params else False)
 
         # Optional SPAM-protocol metadata (absent in legacy / NoSPAM runs).
         self.spam_protocol = (str(self.params['spam_protocol'])
@@ -318,6 +324,16 @@ class SpectraReconstructor:
         """Loads the observables array from the data folder."""
         path = os.path.join(project_root(), self.config.data_folder, "results.npz")
         self.observables = np.load(path)
+
+    def _world_grid(self):
+        """(half_band, w_grain, midpoint) of the run's noise-synthesis tone grid.
+
+        The DC mirrors must quadrature over the world's actual tones (see
+        ``systematics._world_w_grid``); a continuous-trapezoid mirror truncates
+        the (0, w_min) DC cusp and integrates band the world never populated.
+        """
+        c = self.config
+        return (float(c.synth_wmax or c.wmax), int(c.w_grain), bool(c.midpoint))
 
     def reconstruct(self):
         """Reconstructs the spectra from the loaded observables."""
@@ -398,6 +414,22 @@ class SpectraReconstructor:
         t_sweep = obs['dc_t_sweep']
         self.dc_t_sweep = t_sweep
         self.dc_reliable = {}
+
+        # Per-time errors of the DC-sweep observables, for the DC forward-model
+        # mirror (systematics.dc_fit_systematic): with errors the data fit is a
+        # statistically-windowed, 1/sigma^2-weighted estimator, and the mirror
+        # must run the SAME estimator on its exact curves to quote its bias.
+        self.dc_fid_obs_err = {}
+        if has_errors:
+            for sk, key in (('S11', 'C_1_0_FIDCDD3'), ('S22', 'C_2_0_CDD3FID'),
+                            ('S12', 'C_12_12_FID'), ('S112', 'C_1_12_FID'),
+                            ('S212', 'C_2_12_FID')):
+                if key + '_err' in obs:
+                    self.dc_fid_obs_err[sk] = np.asarray(obs[key + '_err'])
+            legacy_keys = ('C_1_0_FIDFID', 'C_2_0_FIDFID', 'C_12_0_FID_FID')
+            if all(k + '_err' in obs for k in legacy_keys):
+                self.dc_fid_obs_err['S1212'] = [np.asarray(obs[k + '_err'])
+                                                for k in legacy_keys]
 
         def call_recon_dc(func, keys, sk, **kwargs):
             if any(k not in obs for k in keys):
@@ -488,13 +520,17 @@ class SpectraReconstructor:
         The comb-delta inversion carries a deterministic bias (truncation +
         finite-M tooth width + neighbor leakage). ``forward_model_systematic``
         computes that bias exactly for ANY spectra; feeding it the
-        RECONSTRUCTED spectra (``selfconsistent_spectra`` -- piecewise-linear,
-        no truth knowledge) predicts the bias of this very reconstruction,
-        which is then subtracted. One refinement iteration follows; the quoted
+        RECONSTRUCTED spectra (``selfconsistent_spectra`` -- de-lined
+        piecewise-linear background + Gaussian lines at the experimentally-
+        known nuclear-difference centers + fitted power-law tails; no truth
+        knowledge) predicts the bias of this very reconstruction, which is
+        then subtracted. One refinement iteration follows; the quoted
         systematic becomes the iteration increment |b2 - b1| (the fixed-point
         convergence scale) instead of the full bias.
         """
+        from qns2q.noise.spectra import line_priors
         c = self.config
+        lines = line_priors()
         inv_opts = dict(inversion_method=c.inversion_method, reg_lambda=c.reg_lambda,
                         enforce_nonneg=c.enforce_nonneg)
         n_h = len(c.c_times)
@@ -509,13 +545,15 @@ class SpectraReconstructor:
             raw0[sk] = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
 
         def bias_of(recon):
-            sc = selfconsistent_spectra(wk_full, recon)
+            sc = selfconsistent_spectra(wk_full, recon, lines=lines)
             b = forward_model_systematic(sc, c.c_times, c.M, c.T, c.t_vec,
                                          c.w_grain, c.wmax, inv_opts=inv_opts)
             dcb = dc_fit_systematic(sc, self.dc_t_sweep,
                                     s1212_echo_ct=getattr(self, 'dc_echo_ct', None),
                                     s1212_echo_obs_err=getattr(self, 'dc_echo_obs_err', None),
-                                    s1212_echo_wmax=2 * (self.config.synth_wmax or self.config.wmax))
+                                    s1212_echo_wmax=2 * (self.config.synth_wmax or self.config.wmax),
+                                    fid_obs_err=getattr(self, 'dc_fid_obs_err', None),
+                                    world_grid=self._world_grid())
             out = {}
             for sk in _SYS_TO_SPEC:
                 full = np.concatenate(([dcb[sk]], np.asarray(b[sk])))
@@ -602,7 +640,9 @@ class SpectraReconstructor:
                 dc_bias = dc_fit_systematic(spectra, self.dc_t_sweep,
                                             s1212_echo_ct=getattr(self, 'dc_echo_ct', None),
                                             s1212_echo_obs_err=getattr(self, 'dc_echo_obs_err', None),
-                                            s1212_echo_wmax=2 * (self.config.synth_wmax or self.config.wmax))
+                                            s1212_echo_wmax=2 * (self.config.synth_wmax or self.config.wmax),
+                                            fid_obs_err=getattr(self, 'dc_fid_obs_err', None),
+                                            world_grid=self._world_grid())
 
             print("[systematic] folded sigma_sys per spectrum (forward-model comb bias; "
                   "RMS over harmonics, |DC bias|):")
