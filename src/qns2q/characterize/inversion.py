@@ -578,7 +578,8 @@ def recon_S_2_12(coefs, **kwargs):
 
 # --- DC reconstruction functions from FID experiments ---
 
-def _ramsey_fit_dc(C, t, factor, obs_err=None, c_max=3.0, c_min=0.05, curv_tol=0.30):
+def _ramsey_fit_dc(C, t, factor, obs_err=None, c_max=3.0, c_min=0.05, curv_tol=0.30,
+                   selfspec=True):
     """Strong-noise-robust zero-frequency S(0) from the FID/Ramsey decay slope.
 
     The decay exponent ``C(t)`` of the partner-decoupled FID (self) or the cross
@@ -590,9 +591,22 @@ def _ramsey_fit_dc(C, t, factor, obs_err=None, c_max=3.0, c_min=0.05, curv_tol=0
     so ``S(0) = factor * slope``. The legacy single-point estimator ``2<C(MT)>/(MT)``
     fails for strong noise because the coherence at the full record MT is fully decayed
     (C >> 1, below the shot-noise floor). Here the slope is fit over the window where
-    ``C(t)`` is both MEASURABLE (``c_min < C < c_max``) and LINEAR, selected
-    ADAPTIVELY -- so the effective measurement time tracks the noise strength with no
-    per-spectrum tuning (change the spectra and the window moves itself).
+    ``C(t)`` is both MEASURABLE and LINEAR, selected ADAPTIVELY -- so the effective
+    measurement time tracks the noise strength with no per-spectrum tuning (change the
+    spectra and the window moves itself).
+
+    Window and reliability criteria adapt to whether per-point errors are known:
+
+    - measurable: with ``obs_err`` the criterion is statistical, ``C > 2 sigma_C``
+      (an absolute floor would discard the perfectly informative low-C points of
+      weak cross channels); without errors (exact forward-model curves) the legacy
+      absolute floor ``c_min`` applies. ``C < c_max`` guards saturation either way.
+    - curvature: with ``obs_err`` the quadratic coefficient must be statistically
+      significant (>2 sigma) AND practically large to flag -- a magnitude-only test
+      trips on noise for low-SNR channels; exact curves keep the magnitude test.
+    - sign: self-spectra flag a non-positive S(0) as undetermined (S >= 0 is
+      physical); cross-spectra DC may be legitimately negative, so only the
+      ``|S0| < 2 sigma`` significance test applies (set ``selfspec=False``).
 
     Parameters
     ----------
@@ -602,14 +616,17 @@ def _ramsey_fit_dc(C, t, factor, obs_err=None, c_max=3.0, c_min=0.05, curv_tol=0
         2 for self-spectra, 1 for cross-spectra.
     obs_err : array_like, optional
         Per-time standard error of ``C(t_k)``; propagated to the slope error.
+    selfspec : bool
+        True for the three self-spectra (nonnegativity enforced in the flag).
 
     Returns
     -------
     (S0, S0_err, reliable)
         ``reliable=False`` when the decay has not reached the linear regime within the
         measurable window (quasi-static / sub-comb-cusp noise -- detected as significant
-        curvature) or the sweep does not bracket the window: ``S0`` is then only a lower
-        bound and should be quoted with an inflated systematic bar.
+        curvature), the sweep does not bracket the window, or the slope is
+        insignificant: ``S0`` is then only a lower bound (self) or indeterminate
+        (cross) and should be quoted with an inflated systematic bar.
     """
     C = np.asarray(C, dtype=float)
     t = np.asarray(t, dtype=float)
@@ -617,9 +634,13 @@ def _ramsey_fit_dc(C, t, factor, obs_err=None, c_max=3.0, c_min=0.05, curv_tol=0
     C, t = C[order], t[order]
     e = None if obs_err is None else np.asarray(obs_err, dtype=float)[order]
 
-    meas = (C > c_min) & (C < c_max)
+    # Measurable window: statistically resolved (or above the absolute floor when
+    # no errors are known) but not saturated.
+    lo = c_min if e is None else 2.0 * e
+    meas = (C > lo) & (C < c_max)
     # Sweep brackets the window only if it is neither all-decayed nor all-tiny.
-    covered = bool(meas.sum() >= 2 and C[0] < c_max and C[-1] > c_min)
+    lo_last = c_min if e is None else 2.0 * e[-1]
+    covered = bool(meas.sum() >= 2 and C[0] < c_max and C[-1] > lo_last)
     if meas.sum() < 2:                       # degrade gracefully: use the un-saturated tail
         meas = C < c_max
         if meas.sum() < 2:
@@ -628,7 +649,7 @@ def _ramsey_fit_dc(C, t, factor, obs_err=None, c_max=3.0, c_min=0.05, curv_tol=0
     tm, Cm = t[meas], C[meas]
     em = None if e is None else e[meas]
     lin = tm >= 0.4 * tm.max()               # linear regime = upper part of measurable window
-    if lin.sum() < 2:
+    if lin.sum() < 3:                        # too few late points: keep the whole window
         lin = np.ones(tm.size, dtype=bool)
 
     x, y = tm[lin], Cm[lin]
@@ -640,14 +661,27 @@ def _ramsey_fit_dc(C, t, factor, obs_err=None, c_max=3.0, c_min=0.05, curv_tol=0
     S0_err = float(factor * np.sqrt(1.0 / Sxx)) if em is not None else 0.0
 
     reliable = covered
-    if meas.sum() >= 3:                      # curvature -> not yet linear (quasi-static)
+    if em is None and meas.sum() >= 3:       # curvature -> not yet linear (quasi-static)
         c2, c1, _ = np.polyfit(tm, Cm, 2)
         if abs(c2 * tm.max() ** 2) > curv_tol * abs(c1 * tm.max()):
             reliable = False
-    # An unphysical (negative) or statistically-insignificant slope means the signal is
-    # swamped (e.g. a strong-noise cross channel whose self-decay dwarfs the cross term):
-    # not determined -> flag so the figure quotes an inflated bar.
-    if S0 <= 0 or (S0_err > 0 and S0 < 2.0 * S0_err):
+    elif em is not None and meas.sum() >= 4:
+        # Noise-aware curvature: weighted quadratic fit; flag only when c2 is both
+        # statistically significant and practically large vs the fitted slope.
+        X = np.vander(tm, 3)                 # columns t^2, t, 1
+        Wd = 1.0 / np.maximum(em, 1e-12) ** 2
+        cov = np.linalg.inv((X.T * Wd) @ X)
+        beta = cov @ ((X.T * Wd) @ Cm)
+        c2, sig_c2 = beta[0], np.sqrt(cov[0, 0])
+        if (abs(c2) > 2.0 * sig_c2
+                and abs(c2 * tm.max() ** 2) > curv_tol * abs(slope * tm.max())):
+            reliable = False
+    # An undetermined slope means the signal is swamped (e.g. a strong-noise cross
+    # channel whose self-decay dwarfs the cross term): not determined -> flag so the
+    # figure quotes an inflated bar. Nonpositivity flags self-spectra only.
+    if selfspec and S0 <= 0:
+        reliable = False
+    if S0_err > 0 and abs(S0) < 2.0 * S0_err:
         reliable = False
     return float(S0), S0_err, bool(reliable)
 
@@ -688,20 +722,48 @@ def recon_S_1_2_dc(coefs, **kwargs):
 
     coefs : [C_12_12_FID over the time sweep]    kwargs : t_sweep, obs_err (optional)
     """
-    return _ramsey_fit_dc(coefs[0], kwargs['t_sweep'], 1.0, _dc_obs_err(kwargs))
+    return _ramsey_fit_dc(coefs[0], kwargs['t_sweep'], 1.0, _dc_obs_err(kwargs),
+                          selfspec=False)
 
 
 def recon_S_1_12_dc(coefs, **kwargs):
     """Reconstruct S_1_12(0) from C_a_b(l=1) FID/FID: S_1_12(0) = slope of C_1_12(t).
     Returns (S0, S0_err, reliable). (For quasi-static Ising noise the linear regime is
     not reached and ``reliable`` is False -- the value is then a lower bound.)"""
-    return _ramsey_fit_dc(coefs[0], kwargs['t_sweep'], 1.0, _dc_obs_err(kwargs))
+    return _ramsey_fit_dc(coefs[0], kwargs['t_sweep'], 1.0, _dc_obs_err(kwargs),
+                          selfspec=False)
 
 
 def recon_S_2_12_dc(coefs, **kwargs):
     """Reconstruct S_2_12(0) from C_a_b(l=2) FID/FID: S_2_12(0) = slope of C_2_12(t).
     Returns (S0, S0_err, reliable)."""
-    return _ramsey_fit_dc(coefs[0], kwargs['t_sweep'], 1.0, _dc_obs_err(kwargs))
+    return _ramsey_fit_dc(coefs[0], kwargs['t_sweep'], 1.0, _dc_obs_err(kwargs),
+                          selfspec=False)
+
+
+def recon_S_1212_dc_echo(coefs, **kwargs):
+    """Reconstruct the Ising self-DC S_1212(0) from the double-echo difference.
+
+    Simultaneous CDD1 on both qubits echoes the single-qubit phase (y_1 balanced)
+    while y_12 = y_1*y_2 = +1 retains FULL DC weight; the CDD1/CPMG reference has
+    the SAME y_1 filter but a fast-toggled, balanced y_12. Their difference is
+    (1/2)Var Phi_12 at first order: Var Phi_1 cancels EXACTLY (identical y_1
+    filter), so -- unlike recon_S_1212_dc's FID/FID combination, which extracts
+    Var Phi_12 as a ~25x-smaller difference of single-qubit variances -- the
+    subtraction terms are echo-small and the estimator is not statistically
+    swamped. The residual mixed-filter (CDD1xCPMG) pickup of S_1212 is a
+    deterministic systematic mirrored/corrected by the DC forward model.
+
+    coefs : [C_1_0_CDD1CDD1, C_1_0_CDD1CPMG] over the time sweep.
+    kwargs : t_sweep, obs_err (optional).  Returns (S0, S0_err, reliable).
+    """
+    cb, cr = (np.asarray(x, dtype=float) for x in coefs)
+    oe = kwargs.get('obs_err')
+    err = None
+    if oe is not None:
+        eb, er = (np.asarray(oe[i], dtype=float) for i in range(2))
+        err = np.sqrt(eb ** 2 + er ** 2)
+    return _ramsey_fit_dc(cb - cr, kwargs['t_sweep'], 2.0, err)
 
 
 def recon_S_1212_dc(coefs, **kwargs):

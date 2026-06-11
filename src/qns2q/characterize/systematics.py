@@ -378,7 +378,37 @@ def forward_model_systematic(spectra, c_times, M, T, t_vec,
     return sys
 
 
-def dc_fit_systematic(spectra, t_sweep, n_w=400001, wmax=12.5):
+_ECHO_DC_FILTER_CACHE = {}
+
+
+def _echo_dc_filters(t_tuple, ct, n_wl=80001, wmax=12.5):
+    """|F(w,t_k)|^2 grids for the double-echo Ising-DC observables.
+
+    Cached: the filters depend only on the sweep times and echo cycle time, not on
+    the spectra, and the self-consistent unfold evaluates the same mirror
+    repeatedly. Returns (wl, |F1_CDD1|^2, |F12_CDD1xCDD1|^2, |F12_CDD1xCPMG|^2),
+    each (n_t, n_wl); the y_1 filter is identical in both arms by construction."""
+    key = (t_tuple, float(ct), n_wl, wmax)
+    if key in _ECHO_DC_FILTER_CACHE:
+        return _ECHO_DC_FILTER_CACHE[key]
+    from qns2q.model.trajectories import make_y
+    wl = np.linspace(wmax / n_wl, wmax, n_wl)
+    F1sq, F12b_sq, F12r_sq = [], [], []
+    for tk in t_tuple:
+        n_tb = max(4000, int(40 * tk / ct))
+        tb = np.linspace(0.0, float(tk), n_tb)
+        yb = make_y(tb, ['CDD1', 'CDD1'], ctime=ct, m=1)
+        yr = make_y(tb, ['CDD1', 'CPMG'], ctime=ct, m=1)
+        F1sq.append(np.abs(_ff_grid(np.asarray(yb[0, 0]), jnp.asarray(tb), wl, +1)) ** 2)
+        F12b_sq.append(np.abs(_ff_grid(np.asarray(yb[2, 2]), jnp.asarray(tb), wl, +1)) ** 2)
+        F12r_sq.append(np.abs(_ff_grid(np.asarray(yr[2, 2]), jnp.asarray(tb), wl, +1)) ** 2)
+    out = (wl, np.array(F1sq), np.array(F12b_sq), np.array(F12r_sq))
+    _ECHO_DC_FILTER_CACHE[key] = out
+    return out
+
+
+def dc_fit_systematic(spectra, t_sweep, n_w=400001, wmax=12.5, s1212_echo_ct=None,
+                      s1212_echo_obs_err=None, s1212_echo_wmax=None):
     # wmax is an angular-frequency integration cutoff in tau units (rad/tau):
     # 12.5 = the legacy 5e8 rad/s at tau = 25 ns.
     """Deterministic bias of the multi-time DC slope fit, per spectrum.
@@ -391,8 +421,27 @@ def dc_fit_systematic(spectra, t_sweep, n_w=400001, wmax=12.5):
     the linear regime is never reached and the bias is large -- exactly the inflated
     bar the flagged DC point should carry. (FID filter |F(w,t)|^2 = sin^2(wt/2)/(w/2)^2;
     self C(t)=(1/2pi)int S|F|^2, cross C(t)=(1/pi)int Re[S_ab(w)]|F|^2.)
+
+    ``s1212_echo_ct``: when the run carries the double-echo Ising-DC observables
+    (C_1_0_CDD1CDD1 / C_1_0_CDD1CPMG at echo cycle time ct), pass that ct so the
+    S1212 bias mirrors ``recon_S_1212_dc_echo`` (dominant systematic: the
+    reference arm's mixed-filter S_1212 pickup) instead of the legacy FF combo.
+    ``s1212_echo_obs_err``: the run's per-point error arrays [err_both, err_ref]
+    for those observables. The echo signal sits far below the absolute c_min
+    floor of the no-error fit path, so the mirror MUST window the exact curves
+    the same (SNR-based) way the data fit does -- without this the mirror quotes
+    the bias of a different estimator (validated: -27% phantom bias at 16k
+    shots where the data fit is accurate to ~1%).
+    ``s1212_echo_wmax``: the run's noise-synthesis cutoff (params wmax =
+    2*pi*truncate/T). The echo and mixed-filter passbands sit ABOVE that cutoff,
+    where the simulated world has no spectral weight at all -- integrating the
+    mirror to the generic 12.5 charges the reference arm for pickup that does
+    not exist in the run (validated: -23% phantom bias). A real experiment
+    re-acquires that term as a genuine out-of-band systematic to be quoted from
+    a spectral-tail assumption.
     """
     from qns2q.characterize.inversion import (recon_S_11_dc, recon_S_22_dc, recon_S_1212_dc,
+                                              recon_S_1212_dc_echo,
                                               recon_S_1_2_dc, recon_S_1_12_dc, recon_S_2_12_dc)
     t = np.asarray(t_sweep, dtype=float)
     w = np.linspace(wmax / n_w, wmax, n_w)
@@ -439,7 +488,22 @@ def dc_fit_systematic(spectra, t_sweep, n_w=400001, wmax=12.5):
 
     s11, _, _ = recon_S_11_dc([C_10], t_sweep=t)
     s22, _, _ = recon_S_22_dc([C_20], t_sweep=t)
-    s1212, _, _ = recon_S_1212_dc([C_10ff, C_20ff, C_120], t_sweep=t)
+    if s1212_echo_ct is not None:
+        # Mirror the double-echo estimator: exact C_1_0 curves under
+        # ['CDD1','CDD1'] and ['CDD1','CPMG'] (partner-averaged, so variances add
+        # and the S_1_12 cross term cancels), then the same difference fit.
+        wle, F1sq, F12b_sq, F12r_sq = _echo_dc_filters(
+            tuple(float(x) for x in t), float(s1212_echo_ct),
+            wmax=float(s1212_echo_wmax) if s1212_echo_wmax else wmax)
+        S11_e = np.real(np.asarray(spectra['S11'](wle)))
+        S1212_e = np.real(np.asarray(spectra['S1212'](wle)))
+        v1_e = (1 / (2 * np.pi)) * np.trapezoid(S11_e[None, :] * F1sq, wle, axis=1)
+        C_eb = v1_e + (1 / (2 * np.pi)) * np.trapezoid(S1212_e[None, :] * F12b_sq, wle, axis=1)
+        C_er = v1_e + (1 / (2 * np.pi)) * np.trapezoid(S1212_e[None, :] * F12r_sq, wle, axis=1)
+        s1212, _, _ = recon_S_1212_dc_echo([C_eb, C_er], t_sweep=t,
+                                           obs_err=s1212_echo_obs_err)
+    else:
+        s1212, _, _ = recon_S_1212_dc([C_10ff, C_20ff, C_120], t_sweep=t)
     s12, _, _ = recon_S_1_2_dc([C_1212], t_sweep=t)
     s112, _, _ = recon_S_1_12_dc([C_112], t_sweep=t)
     s212, _, _ = recon_S_2_12_dc([C_212], t_sweep=t)
