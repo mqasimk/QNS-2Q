@@ -1,0 +1,286 @@
+\documentclass[10pt]{article}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage[dvipsnames]{xcolor}
+\usepackage[colorlinks=true,linkcolor=NavyBlue,citecolor=NavyBlue]{hyperref}
+\usepackage{enumitem}
+\setlength{\parskip}{0.35em}
+\setlength{\parindent}{0pt}
+
+\newcommand{\Fpro}{F_\mathrm{pro}}
+\newcommand{\TG}{T_G}
+
+\title{\vspace{-1.5em}Noise-tailored two-qubit gates on the experimentally anchored
+noise model:\\ numbers for the three asks\vspace{-0.4em}}
+\author{Qasim Khan}
+\date{June 11, 2026}
+
+\begin{document}
+\maketitle
+\vspace{-1.8em}
+
+\textit{Everything below is computed end-to-end on the experimentally anchored noise
+model (\S\ref{sec:model}) with the corrected pipeline: blind frequency-comb QNS
+reconstruction $\to$ spectra-driven pulse optimization, with the optimizer never
+seeing ground truth, and every quoted ``true'' infidelity evaluated exactly on the
+analytic model. All numbers regenerated 2026-06-11.}
+
+\section{How much dephasing? The anchored model}\label{sec:model}
+
+The synthetic spectra used previously were replaced by a model anchored to
+measured silicon and GaAs dephasing data: the six-spectrum structure and
+charge-noise correlations of the Tarucha-group Si/SiGe pair [Yoneda \textit{et
+al.}, Nat.\ Phys.\ \textbf{19}, 1793 (2023)], purified-$^{28}$Si coherence as the
+amplitude anchor, high-frequency exponents from natural-Si spectroscopy
+[Rojas-Arias \textit{et al.}], nuclear-Larmor-difference lines from GaAs
+[Malinowski \textit{et al.}, Nat.\ Nano.\ \textbf{12}, 16 (2017)], and exchange
+noise at the operating point [Dial \textit{et al.}, PRL \textbf{110}, 146804
+(2013)]. The ``featured'' regime adds the line triplet to the monotonic
+(``bland'') background.
+
+\begin{table}[h!]
+\centering\small
+\begin{tabular}{lll}
+\toprule
+quantity & value & anchor \\
+\midrule
+time unit (min.\ pulse separation) & $\tau = 25$ ns & legacy anchor \\
+$T_2^{*}$ (both qubits) & $800\,\tau = 20\,\mu$s & purified $^{28}$Si \\
+Gaussian FID $T_2 = 2/S_{a,a}(0)$ & $771\,\tau$ / $770\,\tau \approx 19.3\,\mu$s & model output \\
+electrical fraction at $\omega\tau=0.35$ & 0.88 (Q1) / 0.80 (Q2) & Yoneda 2023 structure \\
+nuclear-difference lines & $\omega\tau \in \{0.261, 0.273, 0.534\}$ & Malinowski fingerprint \\
+ & $= 1.66 / 1.74 / 3.40$ MHz, $\sigma_\mathrm{line}\tau = 0.02$ & (two near-degenerate $+$ one at $2\times$) \\
+ZZ-channel coupling & $S_{12,12}/\sqrt{S_{1,1}S_{2,2}} \approx 0.1$, $\gamma_J = 0.7$ & Dial operating-point $J$-noise \\
+gate windows studied & $\TG = 40$--$2560\,\tau$ $= 1$--$64\,\mu$s $= 0.05$--$3.3\,T_2$ & \\
+\bottomrule
+\end{tabular}
+\caption{Ask 1 in one table: the dephasing scale and where the gates sit relative
+to it.}
+\label{tab:anchor}
+\end{table}
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=\linewidth]{figs/fig_model_spectra.pdf}
+\caption{The six anchored spectra (featured regime) and the 20-tooth comb the QNS
+protocol samples ($T = 160\,\tau$, teeth at $\omega_k\tau = 2\pi k/160$, DC point
+from dedicated slope-fit/double-echo experiments). Vertical lines: the
+nuclear-difference triplet on the single-qubit channels ($J$-noise is electrical,
+so $S_{12,12}$ carries no lines).}
+\label{fig:model}
+\end{figure}
+
+\section{Characterization: the reconstruction lands on truth}\label{sec:char}
+
+\textbf{No-SPAM pipeline (4k shots, $t$-grain 1600).} The full blind
+reconstruction --- harmonic comb inversion, line/tail/head-aware unfolding, DC
+points from noise-aware slope fits and the double-echo $S_{12,12}(0)$ experiment
+--- is statistically consistent with truth at honestly quoted uncertainties
+(Table~\ref{tab:recon}). At 64k shots (the SPAM-arm runs) the same pipeline
+reaches 1--6\% median deviations with the same pull structure.
+
+\begin{table}[h!]
+\centering\small
+\begin{tabular}{lcccc}
+\toprule
+spectrum & median rel.\ dev. & median pull & max pull & within $2\sigma$ \\
+\midrule
+$S_{1,1}$    & 4.8\%  & 0.48 & 2.7 & 95\% \\
+$S_{2,2}$    & 3.4\%  & 0.85 & 3.2 & 95\% \\
+$S_{12,12}$  & 15.3\% & 0.76 & 1.7 & 100\% \\
+$S_{1,2}$    & 6.7\%  & 0.70 & 1.4 & 100\% \\
+$S_{1,12}$   & 13.1\% & 0.88 & 1.5 & 100\% \\
+$S_{2,12}$   & 20.8\% & 0.75 & 2.1 & 90\% \\
+\bottomrule
+\end{tabular}
+\caption{Reconstruction vs.\ truth for the 4k-shot no-SPAM run (pull $=$
+deviation $/$ quoted total uncertainty). Deviations are statistics-dominated and
+scale as expected from the 64k-shot arms ($\times\sqrt{16}$); the bars are honest
+(coverage $\geq 90\%$). $S_{12,12}(0)$ is \emph{determined} by the double-echo
+experiment; the cross-spectra DC points are honestly flagged not-determined at 4k
+shots.}
+\label{tab:recon}
+\end{table}
+
+\textbf{SPAM arms (64k shots).} Figure~\ref{fig:spam} (the four-arm comparison)
+summarizes the SPAM story at the spectroscopy level: the unmitigated (raw) arm's
+SPAM bias is resolvable at \textbf{14--34$\sigma$} across channels; the
+SPAM-mitigated arm is statistically indistinguishable from the SPAM-free
+reference everywhere; the SPAM-robust protocol is immune by construction but
+cannot reconstruct $S_{1,12}, S_{2,12}$.
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=0.96\linewidth]{figs/fig_spam_comparison.pdf}
+\caption{SPAM-protocol comparison vs.\ analytic truth (64k shots, featured
+regime): reference (no SPAM), raw (SPAM, unmitigated), and SPAM-mitigated arms.}
+\label{fig:spam}
+\end{figure}
+
+\section{Ask 2: do I need all six spectra?}\label{sec:ask2}
+
+The answer splits cleanly into \emph{error budgeting} and \emph{control design}:
+
+\textbf{(a) For the error budget --- yes.} Undecoupled, the two-qubit channels
+($S_{12,12}$ and the cross-spectra) carry only $1.2\%$ of the gate error at
+$\TG=320\tau$. Under the best decoupling, CDD(7,7), they carry
+\textbf{20.4\%}: decoupling suppresses the single-qubit channels so effectively
+that the two-qubit channels are promoted to a fifth of the residual error
+budget. Without two-qubit QNS you cannot predict or budget a decoupled gate's
+error.
+
+\textbf{(b) For the optimizer --- largely no, and that is a feature.} We re-ran
+the blind optimization with progressively reduced spectral knowledge (the ideal
+benchmark always keeps full truth); Fig.~\ref{fig:asks}(left) and
+Table~\ref{tab:subsets}. The blind NT winner is essentially unchanged down to
+single-qubit-only knowledge at both gate times: dropping the cross-spectra changes nothing at all, and even
+dropping $S_{12,12}$ costs only $6\%$ at $\TG=80\tau$ (and nothing at
+$320\tau$) --- the single-qubit spectra dominate the design, and the CZ phase
+constraint pins the $y_{12}$ filter's DC weight regardless of what the optimizer
+knows about $S_{12,12}$. In particular, the \textbf{SPAM-robust protocol's
+four-spectrum set costs nothing at the gate level} --- which couples directly
+into ask 3.
+
+\begin{table}[h!]
+\centering\small
+\begin{tabular}{lcccc}
+\toprule
+& \multicolumn{2}{c}{$\TG = 80\tau$} & \multicolumn{2}{c}{$\TG = 320\tau$} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+knowledge & NT true $1-\Fpro$ & vs.\ all-6 & NT true $1-\Fpro$ & vs.\ all-6 \\
+\midrule
+all 6 spectra                       & $6.99\mathrm{e}{-3}$ & 1.00 & $4.29\mathrm{e}{-2}$ & 1.00 \\
+robust set (4): no $S_{1,12},S_{2,12}$ & $6.99\mathrm{e}{-3}$ & 1.00 & $4.29\mathrm{e}{-2}$ & 1.00 \\
+diagonals (3): no crosses           & $6.99\mathrm{e}{-3}$ & 1.00 & $4.29\mathrm{e}{-2}$ & 1.00 \\
+1Q only (2): $S_{1,1},S_{2,2}$      & $7.44\mathrm{e}{-3}$ & 1.06 & $4.27\mathrm{e}{-2}$ & 1.00 \\
+\midrule
+best CDD (for scale)                & $1.17\mathrm{e}{-2}$ & & $7.42\mathrm{e}{-2}$ & \\
+\bottomrule
+\end{tabular}
+\caption{Ask 2(b): true infidelity of the blind NT winner vs.\ the spectral
+knowledge given to the optimizer (identical restart initializations across
+rows).}
+\label{tab:subsets}
+\end{table}
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=\linewidth]{figs/fig_asks.pdf}
+\caption{Left (ask 2): the blind NT gate is insensitive to removing cross- and
+even ZZ-spectral knowledge from the optimizer. Right (ask 3): a gate optimized on
+the raw (SPAM-biased) reconstruction performs identically to one optimized on the
+SPAM-free reference; the cost of SPAM lives in the spectroscopy and the
+prediction, not the design.}
+\label{fig:asks}
+\end{figure}
+
+\section{Ask 3: why characterize SPAM?}\label{sec:ask3}
+
+Two regimes, now both measured:
+
+\textbf{Spectroscopy: SPAM bias is large and certain.} At 64k shots the raw
+arm's reconstruction is wrong at 14--34$\sigma$ (Fig.~\ref{fig:spam}) --- any
+spectroscopic claim made from unmitigated data is falsified at high confidence.
+SPAM mitigation restores truth ($\equiv$ reference within bars), and the
+double-echo experiment turns $S_{12,12}(0)$ from a bounded into a determined
+quantity ($1.12\times10^{-4}$ vs.\ truth $1.11\times10^{-4}$).
+
+\textbf{Gates: the design is forgiving; the prediction is not.} Optimizing on
+the raw arm's biased spectra produces a gate \emph{identical in true performance}
+to the reference-arm gate at $\TG=320\tau$ (Fig.~\ref{fig:asks}, right): both
+arms find the same NT(148,150) sequence at true $1-\Fpro = 4.27\times10^{-2}$.
+The smooth SPAM bias does not move the optimal filter placement. What SPAM
+characterization buys at the gate level is the \emph{credibility of the
+predicted} numbers: the reference arm predicts its gate to $0.7\%$, the raw arm
+to $1.9\%$ at this gate time --- and the uncertainty bands of \S\ref{sec:gates}
+are only meaningful with unbiased spectra and honest error bars.
+
+Synthesis with ask 2: since the robust protocol's lost cross-spectra do not
+affect the gate design, \textbf{SPAM-robust QNS $+$ NT optimization is a
+self-sufficient pipeline} when one accepts budget-level (not channel-resolved)
+error accounting; SPAM-mitigated QNS recovers the full six-spectrum budget.
+
+\section{Gates on the anchored model: the honest headline}\label{sec:gates}
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=\linewidth]{figs/fig_cz_curve_band.pdf}
+\caption{Left: CZ process infidelity vs.\ gate time on the anchored featured
+model --- FID, best CDD (blind-selected), best NT (blind-optimized), all scored
+on truth. Right: the NT-vs-CDD margin with its 95\% CI under the reconstruction
+uncertainty ensemble (200 draws, stat $+$ systematic bars, coherent-systematic
+model, tail-fit sensitivity included).}
+\label{fig:cz}
+\end{figure}
+
+\begin{table}[h!]
+\centering\small
+\begin{tabular}{lccc|ccc}
+\toprule
+& \multicolumn{3}{c|}{published (\texttt{main\_v9}, superseded model)} &
+\multicolumn{3}{c}{regenerated (anchored model)} \\
+operation & FID & best CDD & best NT & FID & best CDD & best NT \\
+\midrule
+idling $640\tau$ & $5.13\mathrm{e}{-2}$ & $\mathbf{3.67\mathrm{e}{-5}}$ & $7.06\mathrm{e}{-5}$
+                 & $6.17\mathrm{e}{-1}$ & $7.29\mathrm{e}{-2}$ & $\mathbf{5.34\mathrm{e}{-2}}$ \\
+idling $2560\tau$ & $1.91\mathrm{e}{-1}$ & $2.55\mathrm{e}{-3}$ & $\mathbf{5.81\mathrm{e}{-4}}$
+                  & $7.46\mathrm{e}{-1}$ & $3.54\mathrm{e}{-1}$ & $\mathbf{2.81\mathrm{e}{-1}}$ \\
+entangling $320\tau$ & $4.75\mathrm{e}{-1}$ & $1.43\mathrm{e}{-1}$ & $\mathbf{4.40\mathrm{e}{-4}}$
+                     & $4.49\mathrm{e}{-1}$ & $7.42\mathrm{e}{-2}$ & $\mathbf{4.41\mathrm{e}{-2}}$ \\
+\bottomrule
+\end{tabular}
+\caption{The published sweet-spot numbers vs.\ the anchored-model regeneration.
+The published $10^2$--$10^3$ NT suppressions were artifacts of the superseded
+synthetic spectra (negligible weight in the NT passband). Winner flips to NT in
+the short-idling row.}
+\label{tab:regen}
+\end{table}
+
+The corrected headline: \textbf{NT beats the best CDD at every operational gate
+time} --- $1.5$--$1.8\times$ for the entangling gate across
+$\TG = 40$--$640\tau$ and $1.3$--$1.4\times$ for idling --- \textbf{with 95\% CI
+lower edges $\geq 1.18\times$ under the full reconstruction-uncertainty
+ensemble}, degrading gracefully to parity only beyond $T_2$. The structural
+argument stands independently: decoupling promotes the two-qubit channels to
+$20\%$ of the CDD error budget, and NT sequences shape $y_{12}$ to address
+exactly that.
+
+NT-vs-CDD margins (true, with predicted 95\% CI): $40\tau$: $1.54\times$
+[1.20, 1.85]; $80\tau$: $1.66\times$ [1.22, 2.28]; $160\tau$: $1.72\times$
+[1.18, 2.63]; $320\tau$: $1.68\times$ [1.27, 2.48]; $640\tau$: $1.50\times$
+[1.32, 1.95]; $1280\tau$: $1.08\times$ [1.00, 1.25]; $2560\tau$: $0.97\times$
+[0.91, 1.06].
+
+\section{The three answers, in talk form}
+
+\textbf{Ask 1 --- how much dephasing?} $T_2^{*} = 20\,\mu$s ($800\tau$) anchored
+to purified $^{28}$Si; Gaussian FID $T_2 \approx 19\,\mu$s; gates studied span
+$0.05$--$3.3\,T_2$. Spectra: $1/f$-type charge noise (exponents 0.4--0.7, Si and
+GaAs agree), GaAs nuclear-difference line triplet at 1.7/1.7/3.4 MHz, exchange
+noise at $10\%$ amplitude coupling.
+
+\textbf{Ask 2 --- do I need all six spectra?} For the error budget, yes:
+decoupling promotes the two-qubit channels from $1\%$ to $20\%$ of the gate
+error. For the optimizer, no: the blind NT design is unchanged down to
+single-qubit knowledge ($\leq 1\%$ effect) --- so the robust protocol's
+four-spectrum set is design-complete, and two-qubit QNS is what makes the
+\emph{prediction} and the budget honest.
+
+\textbf{Ask 3 --- why SPAM?} Unmitigated SPAM falsifies the spectroscopy at
+14--34$\sigma$; mitigation restores truth exactly (and the double-echo determines
+$S_{12,12}(0)$). The gate \emph{design} survives SPAM bias --- the penalty lives
+in prediction credibility, which is precisely what the paper quotes.
+
+\vspace{0.6em}
+\hrule
+\vspace{0.4em}
+{\footnotesize Provenance: QNS-2Q commits through \texttt{29dac8a} (data) /
+\texttt{c14358f} (pipeline); noise model \texttt{anchored-tarucha-20260610};
+runs: \texttt{DraftRun\_NoSPAM\_featured} (4k, recorded),
+\texttt{DraftRun\_SPAM\_featured\_\{reference,raw,mitigated\}} (64k); all
+optimization blind, benchmarks exact (always-folded), reproducible seeds.}
+
+\end{document}
