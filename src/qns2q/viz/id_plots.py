@@ -5,8 +5,19 @@ import numpy as np
 import os
 import re
 import jax.numpy as jnp
-from qns2q.noise.spectra import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
+from qns2q.noise.spectra import (S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12,
+                                 MODEL_VERSION)
 from qns2q.paths import run_path
+
+
+def _warn_stale_model(data, data_file):
+    """OPT-PROVENANCE: the figures overlay analytic spectra from the CURRENT
+    noise model; warn when the optimization data was generated under another."""
+    mv = str(data['model_version']) if 'model_version' in data else None
+    if mv != MODEL_VERSION:
+        print(f"WARNING: {os.path.basename(data_file)} model_version={mv!r} != "
+              f"current noise model {MODEL_VERSION!r} -- regenerate the "
+              f"optimization data before trusting overlaid spectra/T2 scales.")
 
 def format_label_for_latex(label):
     """Formats a label string for LaTeX rendering."""
@@ -138,6 +149,7 @@ def generate_publication_plot():
             tau = float(data['tau'])
             # min_gate_time might not be relevant for ID gate in the same way, but we load it if present
             min_gate_time = float(data['min_gate_time']) if 'min_gate_time' in data else None
+            _warn_stale_model(data, data_file)
     except Exception as e:
         print(f"Error reading data file: {e}")
         return
@@ -303,6 +315,7 @@ def generate_all_M_plot():
     try:
         with np.load(data_file, allow_pickle=True) as data:
             M_values = data['M_values']
+            _warn_stale_model(data, data_file)
             
             # We need tau. It's not explicitly in optimization_data_all_M.npz, 
             # but we can try to load it from one of the single M files or assume it's consistent.
@@ -457,6 +470,7 @@ def generate_best_M_plot():
     try:
         with np.load(data_file, allow_pickle=True) as data:
             M_values = data['M_values']
+            _warn_stale_model(data, data_file)
             
             tau_file = paths["plotting_data"]
             if os.path.exists(tau_file):
@@ -677,6 +691,7 @@ def generate_spectra_overlay_plot():
     try:
         with np.load(data_file, allow_pickle=True) as data:
             M_values = data['M_values']
+            _warn_stale_model(data, data_file)
             
             # Find longest gate time
             all_gate_times = set()

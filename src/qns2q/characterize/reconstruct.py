@@ -991,6 +991,11 @@ class SpectraReconstructor:
         save_dict = dict(
             wk=self.wk,
             spam_protocol=getattr(self.config, 'spam_protocol', 'none'),
+            # OPT-PROVENANCE: propagate the model version the run was recorded
+            # under (params.npz stamp; 'unknown' for pre-stamp folders).
+            model_version=(str(self.config.params['model_version'])
+                           if 'model_version' in self.config.params
+                           else 'unknown'),
             S11=self.reconstructed_spectra['S_11_k'], S22=self.reconstructed_spectra['S_22_k'],
             S12=self.reconstructed_spectra['S_1_2_k'], S1212=self.reconstructed_spectra['S_12_12_k'],
             S112=self.reconstructed_spectra['S_1_12_k'], S212=self.reconstructed_spectra['S_2_12_k'],

@@ -3,6 +3,7 @@ matplotlib.use('Agg') # Use non-interactive backend
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+from qns2q.noise.spectra import MODEL_VERSION
 from qns2q.paths import run_path
 
 def generate_publication_plot():
@@ -78,6 +79,12 @@ def generate_publication_plot():
             infs_nopulse = data['infs_nopulse']
             tau = float(data['tau'])
             min_gate_time = float(data['min_gate_time'])
+            # OPT-PROVENANCE: warn when the data predates the current model.
+            mv = str(data['model_version']) if 'model_version' in data else None
+            if mv != MODEL_VERSION:
+                print(f"WARNING: {os.path.basename(data_file)} model_version="
+                      f"{mv!r} != current noise model {MODEL_VERSION!r} -- "
+                      f"regenerate the optimization data (OPT-PROVENANCE).")
     except Exception as e:
         print(f"Error reading data file: {e}")
         return

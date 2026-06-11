@@ -95,6 +95,51 @@ def load_winners(pdat):
     return entries
 
 
+def render_figure(npz_path):
+    """Render the ensemble npz into a two-panel figure next to it."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+
+    d = np.load(npz_path, allow_pickle=True)
+    draws, central = d['draws'], d['central']
+    labels = [str(x) for x in d['entry_label']]
+    kinds = [str(x) for x in d['entry_kind']]
+    tgs = np.asarray(d['entry_Tg'], dtype=float)
+    margin_keys = sorted(k for k in d.files if k.startswith('margin_'))
+
+    fig, axs = plt.subplots(1, 2, figsize=(9.2, 3.6))
+    colors = {'known': 'C0', 'opt': 'C1'}
+    for j in range(draws.shape[1]):
+        c = colors.get(kinds[j], f'C{j}')
+        axs[0].hist(draws[:, j], bins=30, alpha=0.55, color=c,
+                    label=f"{labels[j]}, $T_G$={tgs[j]:g}$\\tau$")
+        axs[0].axvline(central[j], color=c, ls='--', lw=1.2)
+    axs[0].set_xlabel(r"predicted $1-F_\mathrm{pro}$ on reconstructed spectra")
+    axs[0].set_ylabel("draws")
+    axs[0].legend(fontsize=8)
+    axs[0].set_title("recon-uncertainty ensemble (dashed: central)", fontsize=9)
+
+    for i, k in enumerate(margin_keys):
+        ratio = d[k]
+        lo, med, hi = np.percentile(ratio, [2.5, 50, 97.5])
+        axs[1].hist(ratio, bins=30, alpha=0.6, color=f'C{2 + i}',
+                    label=f"$T_G$={k.split('_')[1]}$\\tau$: "
+                          f"{med:.2f}x [{lo:.2f}, {hi:.2f}]")
+        axs[1].axvspan(lo, hi, color=f'C{2 + i}', alpha=0.12)
+    axs[1].axvline(1.0, color='k', lw=1, ls=':')
+    axs[1].set_xlabel("margin: known / NT (>1 = NT wins)")
+    axs[1].legend(fontsize=8)
+    axs[1].set_title("NT-vs-known margin band (95% CI shaded)", fontsize=9)
+
+    fig.tight_layout()
+    out = os.path.splitext(npz_path)[0] + ".pdf"
+    fig.savefig(out)
+    plt.close(fig)
+    print(f"Figure saved to {out}")
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="Recon-uncertainty band on predicted CZ infidelities "
@@ -111,13 +156,27 @@ def main():
                          "specs folder)")
     ap.add_argument('--n-draws', type=int, default=200)
     ap.add_argument('--seed', type=int, default=20260611)
+    ap.add_argument('--spectral-model', choices=('interp', 'selfconsistent'),
+                    default='interp',
+                    help="characterized-SMat construction (OPT-SPECTRAL-MODEL)")
+    ap.add_argument('--replot', action='store_true',
+                    help="skip the ensemble; re-render the figure from the "
+                         "existing margin_band_cz.npz in the specs folder")
     a = ap.parse_args()
+
+    if a.replot:
+        specs_fname = a.folder or (run_folder(spam=True, protocol=a.protocol)
+                                   if a.protocol else run_folder())
+        render_figure(os.path.join(project_root(), specs_fname,
+                                   "margin_band_cz.npz"))
+        return
 
     from qns2q.control import cz  # heavy import (JAX) after arg parsing
 
     specs_fname = a.folder or (run_folder(spam=True, protocol=a.protocol)
                                if a.protocol else run_folder())
     cfg = cz.CZOptConfig(fname=specs_fname, use_simulated=False,
+                         spectral_model=a.spectral_model,
                          gate_time_factors=[])
 
     winners_fname = a.winners_from or specs_fname
@@ -189,8 +248,11 @@ def main():
              entry_label=np.array([e[2] for e in entries]),
              n_draws=a.n_draws, seed=a.seed,
              specs_folder=specs_fname, winners_from=winners_fname,
+             model_version=cfg.model_version,
+             spectral_model=cfg.spectral_model,
              **margin_out)
     print(f"\nSaved ensemble to {out_path}")
+    render_figure(out_path)
 
 
 if __name__ == '__main__':
