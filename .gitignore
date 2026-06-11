@@ -10,6 +10,7 @@ DraftRun_*/*
 !DraftRun_*/params.npz
 !DraftRun_*/optimization_data_all_M.npz
 !DraftRun_*/simulated_spectra.npz
+!DraftRun_*/margin_band_cz.npz
 !DraftRun_*/plotting_data/
 DraftRun_*/plotting_data/*
 !DraftRun_*/plotting_data/plotting_data_id_v4.npz

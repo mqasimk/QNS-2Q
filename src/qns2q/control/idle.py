@@ -136,17 +136,6 @@ class Config:
              if bad_dc:
                  print(f"[idle] NOTE: flagged (undetermined) DC points in specs: "
                        f"{', '.join(k[:-len('_dc_ok')] for k in bad_dc)}")
-             # The robust protocol cannot reconstruct S_1_12/S_2_12 (stored as
-             # NaN); fail fast rather than let NaN poison every infidelity.
-             if include_cross_spectra:
-                 nan_cross = [k for k in ('S12', 'S112', 'S212')
-                              if k in self.specs.files
-                              and np.any(np.isnan(self.specs[k]))]
-                 if nan_cross:
-                     raise ValueError(
-                         f"cross-spectra {nan_cross} in {specs_path} contain NaN "
-                         f"(robust protocol); pass include_cross_spectra=False "
-                         f"(--no-cross) to optimize on the accessible spectra")
         self.use_simulated = use_simulated
 
         # System Parameters
@@ -248,26 +237,45 @@ class Config:
             dc_val = dc_func(w0, *args)[0]
             return interp.at[0].set(dc_val)
         
-        # Diagonal elements
+        # Diagonal elements. NaN here means corrupted data, not a protocol
+        # limitation -- fail loudly.
+        for key in ("S11", "S22", "S1212"):
+            if np.any(np.isnan(np.asarray(self.specs[key]))):
+                raise ValueError(f"self-spectrum {key} contains NaN -- "
+                                 f"corrupted specs.npz?")
         SMat = SMat.at[1, 1].set(combine(self.specs["S11"], S_11))
         SMat = SMat.at[2, 2].set(combine(self.specs["S22"], S_22))
         SMat = SMat.at[3, 3].set(combine(self.specs["S1212"], S_1212))
-        
-        # Off-diagonal elements
+
+        # Off-diagonal elements. A channel the protocol could not reconstruct
+        # (robust: all-NaN S112/S212) is dropped from this CHARACTERIZED model
+        # with a notice -- the blind objective then assumes zero there -- while
+        # _build_ideal_spectra keeps the full truth, so the ideal benchmark
+        # prices what losing the channel costs (OPT-ROBUST-NAN). By contrast,
+        # include_cross_spectra=False removes the channels from BOTH models
+        # (the gate-v style counterfactual world).
         if self.include_cross_spectra:
-            # 1-2
-            s12 = combine(self.specs["S12"], S_1_2)
-            SMat = SMat.at[1, 2].set(s12)
-            SMat = SMat.at[2, 1].set(jnp.conj(s12))
-            # 1-12 (Index 1-3)
-            s112 = combine(self.specs["S112"], S_1_12)
-            SMat = SMat.at[1, 3].set(s112)
-            SMat = SMat.at[3, 1].set(jnp.conj(s112))
-            # 2-12 (Index 2-3)
-            s212 = combine(self.specs["S212"], S_2_12)
-            SMat = SMat.at[2, 3].set(s212)
-            SMat = SMat.at[3, 2].set(jnp.conj(s212))
-        
+            def cross(key, dc_func):
+                data = np.asarray(self.specs[key])
+                n_nan = int(np.isnan(data).sum())
+                if n_nan:
+                    proto = (str(self.specs['spam_protocol'])
+                             if 'spam_protocol' in self.specs else 'none')
+                    print(f"[idle] NOTE: {key} not reconstructed ({n_nan}/"
+                          f"{data.size} NaN, spam_protocol={proto}) -- dropped "
+                          f"from the characterized gate model; the ideal "
+                          f"benchmark retains it.")
+                    return None
+                return combine(data, dc_func)
+
+            for r, c, key, fn in ((1, 2, "S12", S_1_2),
+                                  (1, 3, "S112", S_1_12),
+                                  (2, 3, "S212", S_2_12)):
+                val = cross(key, fn)
+                if val is not None:
+                    SMat = SMat.at[r, c].set(val)
+                    SMat = SMat.at[c, r].set(jnp.conj(val))
+
         return SMat
 
     def _build_ideal_spectra(self):
@@ -1281,8 +1289,11 @@ if __name__ == "__main__":
                         help="optimize on simulated_spectra.npz (ground truth) "
                              "instead of the reconstructed specs.npz")
     parser.add_argument('--no-cross', action='store_true',
-                        help="drop the cross-spectra from the gate model "
-                             "(required for the robust arm)")
+                        help="counterfactual: drop the cross-spectra from BOTH "
+                             "the characterized and ideal gate models (channels "
+                             "a protocol cannot reconstruct, e.g. robust "
+                             "S112/S212, are auto-dropped from the "
+                             "characterized model alone)")
     cli = parser.parse_args()
     cli_fname = cli.folder or (run_folder(spam=True, protocol=cli.protocol)
                                if cli.protocol else None)
