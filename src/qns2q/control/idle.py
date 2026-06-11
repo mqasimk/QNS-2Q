@@ -122,9 +122,33 @@ class Config:
              self.specs = np.load(sim_path)
              self.params = self.specs
         else:
-             self.specs = np.load(os.path.join(self.path, "specs.npz"))
+             specs_path = os.path.join(self.path, "specs.npz")
+             print(f"Loading reconstructed spectra from {specs_path}")
+             self.specs = np.load(specs_path)
              self.params = np.load(os.path.join(self.path, "params.npz"))
-        
+             if 'spam_protocol' in self.specs.files:
+                 print(f"  specs spam_protocol: {self.specs['spam_protocol']}")
+             # A False *_dc_ok flag means the reconstruction could not determine
+             # that w=0 point (the stored value is a first-harmonic floor or an
+             # insignificant fit) -- surfaced because the SMat consumes it.
+             bad_dc = sorted(k for k in self.specs.files
+                             if k.endswith('_dc_ok') and not bool(self.specs[k]))
+             if bad_dc:
+                 print(f"[idle] NOTE: flagged (undetermined) DC points in specs: "
+                       f"{', '.join(k[:-len('_dc_ok')] for k in bad_dc)}")
+             # The robust protocol cannot reconstruct S_1_12/S_2_12 (stored as
+             # NaN); fail fast rather than let NaN poison every infidelity.
+             if include_cross_spectra:
+                 nan_cross = [k for k in ('S12', 'S112', 'S212')
+                              if k in self.specs.files
+                              and np.any(np.isnan(self.specs[k]))]
+                 if nan_cross:
+                     raise ValueError(
+                         f"cross-spectra {nan_cross} in {specs_path} contain NaN "
+                         f"(robust protocol); pass include_cross_spectra=False "
+                         f"(--no-cross) to optimize on the accessible spectra")
+        self.use_simulated = use_simulated
+
         # System Parameters
         self.Tqns = jnp.float64(self.params['T'])
         # Units guard: tau-unit data has T = 160; SI-era data has T ~ 4e-6 s.
@@ -190,11 +214,25 @@ class Config:
         self._calculate_T2()
 
     def _build_interpolated_spectra(self):
-        """Constructs the matrix of interpolated spectra from QNS data."""
+        """Constructs the matrix of interpolated spectra from QNS data.
+
+        The w=0 point comes from the data grid whenever it carries a DC sample
+        (reconstructed specs.npz: the noise-aware slope-fit / double-echo DC
+        experiments land there, OPT-DC-ORACLE). Only a DC-less grid falls back
+        to inserting the analytic S(0) -- simulated_spectra.npz, where the file
+        IS the analytic model evaluated at the teeth, or a legacy specs.npz
+        (warned at load: regenerate Stage 2). The distinction is first-order
+        here: for M > 10 the comb evaluator's term_dc reads SMat[..., 0]
+        directly."""
         # 4x4 Matrix: Indices 0, 1, 2, 3 correspond to 0, 1, 2, 12
         SMat = jnp.zeros((4, 4, self.w.size), dtype=jnp.complex128)
         w0 = jnp.array([0.0])
-        
+        grid_has_dc = bool(float(self.wkqns[0]) == 0.0)
+        if not grid_has_dc and not self.use_simulated:
+            print("[idle] WARNING: specs grid carries no w=0 point -- inserting "
+                  "the analytic-model DC (legacy behavior). Regenerate Stage 2 "
+                  "for a measured DC point.")
+
         def interp_c(fp):
             """Interpolates complex data; power-law tail beyond the last
             tooth (control.tails) instead of right=0, which let the optimizer
@@ -202,8 +240,11 @@ class Config:
             return tail_extend_interp_complex(self.w, self.wkqns, fp)
 
         def combine(spec_data, dc_func, *args):
-            """Interpolates and inserts exact DC value."""
+            """Interpolated spectrum; w=0 from the grid's DC sample when
+            present, else from the analytic model."""
             interp = interp_c(spec_data)
+            if grid_has_dc:
+                return interp
             dc_val = dc_func(w0, *args)[0]
             return interp.at[0].set(dc_val)
         
@@ -1223,6 +1264,29 @@ def run_optimization_pipeline(config):
     }
 
 if __name__ == "__main__":
+    import argparse
+
+    # Defaults match the manuscript: the idling M-sweep runs on the SPAM-free
+    # reconstructed spectra (specs.npz) of the active regime's NoSPAM folder.
+    # --protocol points at a SPAM arm instead (OPT-ARM-PLUMBING); --simulated
+    # optimizes on the ground-truth file.
+    parser = argparse.ArgumentParser(description="Idling-gate (DD) optimization M-sweep")
+    src = parser.add_mutually_exclusive_group()
+    src.add_argument('--folder', help="run-folder name under the repo root "
+                     "(default: the active regime's NoSPAM folder)")
+    src.add_argument('--protocol',
+                     choices=('reference', 'raw', 'mitigated', 'robust'),
+                     help="read the SPAM arm DraftRun_SPAM_<regime>_<protocol>")
+    parser.add_argument('--simulated', action='store_true',
+                        help="optimize on simulated_spectra.npz (ground truth) "
+                             "instead of the reconstructed specs.npz")
+    parser.add_argument('--no-cross', action='store_true',
+                        help="drop the cross-spectra from the gate model "
+                             "(required for the robust arm)")
+    cli = parser.parse_args()
+    cli_fname = cli.folder or (run_folder(spam=True, protocol=cli.protocol)
+                               if cli.protocol else None)
+
     try:
         # Pin the RNG so the random pulse-count selection and delay seeding are
         # reproducible across the whole M sweep (SEED-OPT). Seeded once here so
@@ -1250,12 +1314,14 @@ if __name__ == "__main__":
 
             # Initialize configuration with testing parameters
             config = Config(
+                fname=cli_fname,
+                include_cross_spectra=not cli.no_cross,
                 use_known_as_seed=False,
                 M=m,
                 max_pulses=1000,
                 num_random_trials=20,
                 tau_divisor=160,
-                use_simulated=False, # Enable simulated spectra by default for testing
+                use_simulated=cli.simulated,
                 gate_time_factors=[-5, -4, -3, -2, -1, 0], # Range of gate times
                 output_path_known=f"infs_known_id_M{m}.npz",
                 output_path_opt=f"infs_opt_id_M{m}.npz",
