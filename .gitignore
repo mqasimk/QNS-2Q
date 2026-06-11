@@ -31,3 +31,8 @@ __pycache__/
 venv/
 .aider*
 GEMINI.md
+
+# LaTeX build artifacts (reports/)
+reports/**/*.aux
+reports/**/*.log
+reports/**/*.out
