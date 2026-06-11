@@ -640,4 +640,25 @@ def main(config=None, record_to=None, replay_from=None):
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    from qns2q.paths import run_folder, project_root
+
+    # Mirrors run_spam_experiments' --record/--replay (the main() plumbing is
+    # shared): --record runs the suite with a PhaseRecorder and saves the
+    # per-shot phase dataset to <run folder>/phases.npz; --replay skips noise
+    # synthesis and replays that dataset (re-reconstruction iterations in
+    # ~minutes instead of a fresh simulation). NOTE: a fresh statistical
+    # repeat needs a fresh --record -- replay reuses the SAME Monte Carlo, so
+    # it serves re-analysis, not independent statistics.
+    args = sys.argv[1:]
+    record = '--record' in args
+    replay = '--replay' in args
+    if record and replay:
+        raise SystemExit("--record and --replay are mutually exclusive")
+    unknown = [a for a in args if a not in ('--record', '--replay')]
+    if unknown:
+        raise SystemExit(f"Unknown arguments {unknown}; expected "
+                         f"[--record | --replay]")
+    _dataset = os.path.join(project_root(), run_folder(), 'phases.npz')
+    main(record_to=_dataset if record else None,
+         replay_from=_dataset if replay else None)
