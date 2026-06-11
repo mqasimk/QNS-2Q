@@ -381,18 +381,50 @@ def forward_model_systematic(spectra, c_times, M, T, t_vec,
 _ECHO_DC_FILTER_CACHE = {}
 
 
-def _echo_dc_filters(t_tuple, ct, n_wl=80001, wmax=12.5):
+def _world_w_grid(half_band, w_grain, midpoint):
+    """(tones, weight) of the noise-synthesis frequency grid.
+
+    Mirrors ``model.trajectories.make_noise_mat`` exactly: 2*w_grain tones over
+    (0, 2*half_band), each carrying spectral weight dw = half_band/w_grain;
+    midpoint grids exclude the w = 0 tone, legacy endpoint grids include it.
+    A mirror integrating the simulated world must quadrature S over THESE tones
+    (Riemann sum) -- a fine continuous trapezoid is a *different* world: its
+    first grid point truncates the (0, w_min) DC cusp whose FID weight grows as
+    S(0) t^2 w_min, and its band extends beyond where the world has any power
+    (UNFOLD-RESIDUAL, diagnosed 2026-06-11: -0.033 missing at the last sweep
+    time = the entire +2.5 sigma self-DC excess the unfold could not remove).
+    """
+    size_w = int(2 * w_grain)
+    if midpoint:
+        w = (np.arange(size_w) + 0.5) * (2.0 * half_band) / size_w
+    else:
+        w = np.linspace(0.0, 2.0 * half_band, size_w)
+    return w, half_band / w_grain
+
+
+def _fid_f2(w, t):
+    """FID filter |F(w, t)|^2 = sin^2(wt/2)/(w/2)^2, with the w = 0 limit t^2."""
+    wsafe = np.where(w == 0.0, 1.0, w)
+    F2 = np.sin(wsafe[None, :] * t[:, None] / 2) ** 2 / (wsafe[None, :] / 2) ** 2
+    return np.where(w[None, :] == 0.0, t[:, None] ** 2, F2)
+
+
+def _echo_dc_filters(t_tuple, ct, n_wl=80001, wmax=12.5, world_grid=None):
     """|F(w,t_k)|^2 grids for the double-echo Ising-DC observables.
 
     Cached: the filters depend only on the sweep times and echo cycle time, not on
     the spectra, and the self-consistent unfold evaluates the same mirror
     repeatedly. Returns (wl, |F1_CDD1|^2, |F12_CDD1xCDD1|^2, |F12_CDD1xCPMG|^2),
-    each (n_t, n_wl); the y_1 filter is identical in both arms by construction."""
-    key = (t_tuple, float(ct), n_wl, wmax)
+    each (n_t, n_wl); the y_1 filter is identical in both arms by construction.
+    With ``world_grid`` the filters are evaluated on the synthesis tones."""
+    key = (t_tuple, float(ct), n_wl, wmax, world_grid)
     if key in _ECHO_DC_FILTER_CACHE:
         return _ECHO_DC_FILTER_CACHE[key]
     from qns2q.model.trajectories import make_y
-    wl = np.linspace(wmax / n_wl, wmax, n_wl)
+    if world_grid is not None:
+        wl, _ = _world_w_grid(*world_grid)
+    else:
+        wl = np.linspace(wmax / n_wl, wmax, n_wl)
     F1sq, F12b_sq, F12r_sq = [], [], []
     for tk in t_tuple:
         n_tb = max(4000, int(40 * tk / ct))
@@ -408,7 +440,8 @@ def _echo_dc_filters(t_tuple, ct, n_wl=80001, wmax=12.5):
 
 
 def dc_fit_systematic(spectra, t_sweep, n_w=400001, wmax=12.5, s1212_echo_ct=None,
-                      s1212_echo_obs_err=None, s1212_echo_wmax=None):
+                      s1212_echo_obs_err=None, s1212_echo_wmax=None,
+                      fid_obs_err=None, world_grid=None):
     # wmax is an angular-frequency integration cutoff in tau units (rad/tau):
     # 12.5 = the legacy 5e8 rad/s at tau = 25 ns.
     """Deterministic bias of the multi-time DC slope fit, per spectrum.
@@ -439,24 +472,53 @@ def dc_fit_systematic(spectra, t_sweep, n_w=400001, wmax=12.5, s1212_echo_ct=Non
     not exist in the run (validated: -23% phantom bias). A real experiment
     re-acquires that term as a genuine out-of-band systematic to be quoted from
     a spectral-tail assumption.
+
+    ``fid_obs_err``: per-time standard errors of the run's FID DC-sweep
+    observables, keyed by spectrum ('S11', 'S22', 'S12', 'S112', 'S212' -> one
+    array; 'S1212' -> the legacy three-array list). Same principle as the echo
+    errors: with errors the data fit windows statistically (C > 2 sigma) and
+    weights the slope by 1/sigma^2 (``_ramsey_fit_dc``); the unweighted
+    absolute-floor mirror is a DIFFERENT estimator whose bias the unfold would
+    then mis-remove (UNFOLD-RESIDUAL, 2026-06-11).
+
+    ``world_grid``: (half_band, w_grain, midpoint) of the run's noise
+    synthesis. When given, EVERY mirror integral (FID curves, CDD3 leak, echo
+    filters) is the Riemann sum over the world's actual tones
+    (``_world_w_grid``) instead of a fine continuous trapezoid over (0, wmax]:
+    the continuous grid both truncates the (0, w_min) DC cusp -- whose FID
+    weight S(0) t^2 w_min/(2 pi) reaches -0.033 at the last sweep time, the
+    entire +2.5 sigma self-DC excess -- and integrates band the world does not
+    populate. Validated 2026-06-11: with the tone-sum mirror the recorded
+    sweeps pull N(0,1) against the forward curves. A real experiment keeps
+    ``world_grid=None`` (the world is continuous; tails are then a quoted
+    assumption, as for ``s1212_echo_wmax``).
     """
     from qns2q.characterize.inversion import (recon_S_11_dc, recon_S_22_dc, recon_S_1212_dc,
                                               recon_S_1212_dc_echo,
                                               recon_S_1_2_dc, recon_S_1_12_dc, recon_S_2_12_dc)
     t = np.asarray(t_sweep, dtype=float)
-    w = np.linspace(wmax / n_w, wmax, n_w)
-    F2 = np.sin(w[None, :] * t[:, None] / 2) ** 2 / (w[None, :] / 2) ** 2   # (n_t, n_w)
+    if world_grid is not None:
+        w, w_dw = _world_w_grid(*world_grid)
+
+        def integ(f):
+            return np.sum(f, axis=-1) * w_dw
+    else:
+        w = np.linspace(wmax / n_w, wmax, n_w)
+
+        def integ(f):
+            return np.trapezoid(f, w, axis=-1)
+    F2 = _fid_f2(w, t)                                                      # (n_t, n_w)
 
     def Sr(key):
         return np.real(np.asarray(spectra[key](w)))
     S = {k: Sr(k) for k in ('S11', 'S22', 'S1212')}
 
     def c_self(key):
-        return (1 / (2 * np.pi)) * np.trapezoid(S[key][None, :] * F2, w, axis=1)
+        return (1 / (2 * np.pi)) * integ(S[key][None, :] * F2)
 
     def c_cross(key):
         g = np.real(np.asarray(spectra[key](w)))
-        return (1 / np.pi) * np.trapezoid(g[None, :] * F2, w, axis=1)
+        return (1 / np.pi) * integ(g[None, :] * F2)
 
     # Residual Ising leak through the CDD3 partner of the self-DC observables: the high-
     # order CDD3 nulls most of S_1212 but not all, biasing C_1_0_FIDCDD3 = Cself(S11) +
@@ -464,14 +526,23 @@ def dc_fit_systematic(spectra, t_sweep, n_w=400001, wmax=12.5, s1212_echo_ct=Non
     from qns2q.model.trajectories import make_y
     Tper = float(t[0])                                   # sweep starts at m=1 -> t = T
     dc_ct = Tper / 8.0
-    wl = np.linspace(wmax / 40001, wmax, 40001)
+    if world_grid is not None:
+        wl, wl_dw = _world_w_grid(*world_grid)
+
+        def integ_l(f):
+            return np.sum(f, axis=-1) * wl_dw
+    else:
+        wl = np.linspace(wmax / 40001, wmax, 40001)
+
+        def integ_l(f):
+            return np.trapezoid(f, wl, axis=-1)
     S1212_l = np.real(np.asarray(spectra['S1212'](wl)))
 
     def leak(tk):
         tb = np.linspace(0.0, float(tk), 4000)
         y = make_y(tb, ['FID', 'CDD3'], ctime=dc_ct, m=1)
         FI = _ff_grid(np.asarray(y[2, 2]), jnp.asarray(tb), wl, +1)
-        return (1 / (2 * np.pi)) * np.trapezoid(S1212_l * np.abs(FI) ** 2, wl)
+        return (1 / (2 * np.pi)) * integ_l(S1212_l * np.abs(FI) ** 2)
 
     leak_arr = np.array([leak(tk) for tk in t])
 
@@ -486,27 +557,45 @@ def dc_fit_systematic(spectra, t_sweep, n_w=400001, wmax=12.5, s1212_echo_ct=Non
     C_112 = c_cross('S112')                              # C_1_12_FID
     C_212 = c_cross('S212')                              # C_2_12_FID
 
-    s11, _, _ = recon_S_11_dc([C_10], t_sweep=t)
-    s22, _, _ = recon_S_22_dc([C_20], t_sweep=t)
+    foe = fid_obs_err or {}
+
+    def oe(sk):
+        a = foe.get(sk)
+        return None if a is None else [np.asarray(a, dtype=float)]
+
+    s11, _, _ = recon_S_11_dc([C_10], t_sweep=t, obs_err=oe('S11'))
+    s22, _, _ = recon_S_22_dc([C_20], t_sweep=t, obs_err=oe('S22'))
     if s1212_echo_ct is not None:
         # Mirror the double-echo estimator: exact C_1_0 curves under
         # ['CDD1','CDD1'] and ['CDD1','CPMG'] (partner-averaged, so variances add
         # and the S_1_12 cross term cancels), then the same difference fit.
         wle, F1sq, F12b_sq, F12r_sq = _echo_dc_filters(
             tuple(float(x) for x in t), float(s1212_echo_ct),
-            wmax=float(s1212_echo_wmax) if s1212_echo_wmax else wmax)
+            wmax=float(s1212_echo_wmax) if s1212_echo_wmax else wmax,
+            world_grid=world_grid)
+        if world_grid is not None:
+            wle_dw = _world_w_grid(*world_grid)[1]
+
+            def integ_e(f):
+                return np.sum(f, axis=-1) * wle_dw
+        else:
+            def integ_e(f):
+                return np.trapezoid(f, wle, axis=-1)
         S11_e = np.real(np.asarray(spectra['S11'](wle)))
         S1212_e = np.real(np.asarray(spectra['S1212'](wle)))
-        v1_e = (1 / (2 * np.pi)) * np.trapezoid(S11_e[None, :] * F1sq, wle, axis=1)
-        C_eb = v1_e + (1 / (2 * np.pi)) * np.trapezoid(S1212_e[None, :] * F12b_sq, wle, axis=1)
-        C_er = v1_e + (1 / (2 * np.pi)) * np.trapezoid(S1212_e[None, :] * F12r_sq, wle, axis=1)
+        v1_e = (1 / (2 * np.pi)) * integ_e(S11_e[None, :] * F1sq)
+        C_eb = v1_e + (1 / (2 * np.pi)) * integ_e(S1212_e[None, :] * F12b_sq)
+        C_er = v1_e + (1 / (2 * np.pi)) * integ_e(S1212_e[None, :] * F12r_sq)
         s1212, _, _ = recon_S_1212_dc_echo([C_eb, C_er], t_sweep=t,
                                            obs_err=s1212_echo_obs_err)
     else:
-        s1212, _, _ = recon_S_1212_dc([C_10ff, C_20ff, C_120], t_sweep=t)
-    s12, _, _ = recon_S_1_2_dc([C_1212], t_sweep=t)
-    s112, _, _ = recon_S_1_12_dc([C_112], t_sweep=t)
-    s212, _, _ = recon_S_2_12_dc([C_212], t_sweep=t)
+        oe1212 = foe.get('S1212')
+        oe1212 = None if oe1212 is None else [np.asarray(a, dtype=float) for a in oe1212]
+        s1212, _, _ = recon_S_1212_dc([C_10ff, C_20ff, C_120], t_sweep=t,
+                                      obs_err=oe1212)
+    s12, _, _ = recon_S_1_2_dc([C_1212], t_sweep=t, obs_err=oe('S12'))
+    s112, _, _ = recon_S_1_12_dc([C_112], t_sweep=t, obs_err=oe('S112'))
+    s212, _, _ = recon_S_2_12_dc([C_212], t_sweep=t, obs_err=oe('S212'))
 
     def truth(key):
         return float(np.real(spectra[key](np.array([0.0]))[0]))
@@ -528,35 +617,149 @@ def analytic_spectra():
     }
 
 
-def selfconsistent_spectra(wk_full, recon):
+def _sym_gauss(w, w0, sig):
+    """Symmetric two-sided Gaussian line kernel (matches ``noise.spectra.Gauss``)."""
+    return 0.5 * (np.exp(-(w - w0) ** 2 / (2 * sig ** 2))
+                  + np.exp(-(w + w0) ** 2 / (2 * sig ** 2)))
+
+
+def _fit_comb_lines(wk_full, vals, centers, sigma):
+    """Nonnegative LSQ heights of Gaussian lines (known centers/width) on comb teeth.
+
+    Teeth within 3*sigma of a center carry the line's excess over the local smooth
+    background (interpolated through the remaining teeth); NNLS soaks exactly that
+    excess into the heights. Near-degenerate centers share teeth, so NNLS splits
+    their unresolved total weight -- which is all the forward model needs. Returns
+    zeros when nothing significant fits (e.g. the bland regime reconstructed with
+    line priors passed anyway).
+    """
+    from scipy.optimize import nnls
+    wk_full = np.asarray(wk_full, dtype=float)
+    v = np.real(np.asarray(vals)).astype(float)
+    centers = np.asarray(centers, dtype=float)
+    is_line = np.zeros(wk_full.size, dtype=bool)
+    for w0 in centers:
+        is_line |= np.abs(wk_full - w0) < 3.0 * sigma
+    is_line &= wk_full > 0                      # never the DC point
+    if not is_line.any() or is_line.sum() >= wk_full.size - 2:
+        return np.zeros(centers.size)
+    bg = np.interp(wk_full[is_line], wk_full[~is_line], v[~is_line])
+    A = np.stack([_sym_gauss(wk_full[is_line], w0, sigma) for w0 in centers], axis=1)
+    h, _ = nnls(A, v[is_line] - bg)
+    return h
+
+
+def _fit_powerlaw_head(wk_full, pts, n_fit=4):
+    """(A, p, cap) of a saturated power-law head below the first tooth.
+
+    Log-log slope over the first ``n_fit`` teeth, anchored exactly at tooth 1
+    (continuity), capped at the reconstructed DC value:
+    S(w) = min(A w^-p, cap). The legacy linear DC->tooth-1 bridge is a chord
+    ABOVE this convex head, over-weighting the (0, w_1) band that dominates
+    the DC slope-fit mirror -- the remaining self-DC overcorrection after the
+    line fix (UNFOLD-RESIDUAL). Returns None when no decreasing positive head
+    resolves; callers then keep the linear bridge.
+    """
+    wk = np.asarray(wk_full, dtype=float)
+    v = np.asarray(pts, dtype=float)
+    if wk.size < n_fit + 1 or wk[0] != 0.0:
+        return None
+    wf, yf = wk[1:n_fit + 1], v[1:n_fit + 1]
+    cap = float(v[0])
+    if cap <= 0 or np.any(yf <= 0):
+        return None
+    p = float(-np.polyfit(np.log(wf), np.log(yf), 1)[0])
+    if not np.isfinite(p) or p <= 0:
+        return None                      # flat/rising head: the bridge is fine
+    p = min(p, 6.0)
+    A = float(yf[0] * wf[0] ** p)        # passes exactly through tooth 1
+    return A, p, cap
+
+
+def selfconsistent_spectra(wk_full, recon, lines=None):
     """Spectrum callables built from the reconstructed comb (no ground-truth knowledge).
 
     The reconstruction yields S only at the comb points wk_full = [0, w_1, ..., w_kmax].
     To feed the forward integral we must model S on the *continuous* axis, including the
-    unsampled bands. We use a piecewise-linear interpolation through the reconstructed
-    points, extended to 0 at w=0..(DC point) and decaying linearly to 0 from w_kmax over
-    one extra comb cutoff. This is the deliberately-simple, assumption-light model whose
-    only purpose is to show the systematic is *estimable* without the answer; it is not
-    used for the quoted figure bars.
+    unsampled bands. The model is assumption-light -- everything in it is either the
+    reconstructed data or an experimentally-known prior:
+
+    * smooth background: piecewise-linear through the (de-lined) reconstructed points;
+    * narrow lines, when ``lines=(centers, sigma)`` is given (``noise.spectra.
+      line_priors``): Gaussians at the experimentally-known nuclear-Larmor-difference
+      centers, heights >= 0 fitted per spectrum to the teeth they touch
+      (``_fit_comb_lines``) -- S11/S22 only, since the J channel is electrical and
+      carries no nuclear lines. Piecewise-linear cannot represent sub-tooth-width
+      lines, and the missed leakage was the dominant post-unfold residual
+      (UNFOLD-RESIDUAL, diagnosed 2026-06-11);
+    * high band: power-law tail above the last tooth, fitted per real/imag component
+      to the top de-lined teeth (``control.tails.fit_powerlaw_tail``, same physics as
+      the gate-side GATE-TAILS extension); components with no one-signed resolved
+      tail keep the legacy linear taper to zero over (wmax, 2*wmax);
+    * low band (self spectra): saturated power-law head below the first tooth
+      (``_fit_powerlaw_head``), replacing the linear DC->tooth-1 bridge whose chord
+      over-weighted the band the DC slope-fit mirror integrates.
     """
+    from qns2q.control.tails import fit_powerlaw_tail
     wk_full = np.asarray(wk_full)
     wmax = wk_full[-1]
+    line_fits = {}
+    if lines is not None:
+        centers, sigma = lines
+        for key in ('S11', 'S22'):
+            h = _fit_comb_lines(wk_full, recon[key], centers, sigma)
+            line_fits[key] = (np.asarray(centers, dtype=float), float(sigma), h)
 
     def make(key):
         vals = recon[key]
-        re = np.real(vals); im = np.imag(vals)
+        re = np.real(vals).astype(float); im = np.imag(vals)
+        nonneg = key in ('S11', 'S22', 'S1212')
+
+        fit = line_fits.get(key)
+        if fit is not None:
+            centers, sigma, h = fit
+
+            def line_part(w):
+                out = np.zeros_like(w, dtype=float)
+                for w0, hi in zip(centers, h):
+                    if hi > 0:
+                        out = out + hi * _sym_gauss(w, w0, sigma)
+                return out
+            re = re - line_part(wk_full)        # de-lined teeth -> smooth background
+        else:
+            line_part = None
+
+        # Power-law tails are fitted to the de-lined background (the top teeth sit
+        # above the last line by construction of the comb -- cf. tails.TAIL_N_FIT).
+        tail_re = fit_powerlaw_tail(wk_full[1:], re[1:])
+        tail_im = (None if np.allclose(im, 0.0)
+                   else fit_powerlaw_tail(wk_full[1:], np.asarray(im, dtype=float)[1:]))
+        head = _fit_powerlaw_head(wk_full, re) if nonneg else None
+
+        def extend(w, pts, tail):
+            x = np.interp(w, wk_full, pts, left=pts[0], right=0.0)
+            if tail is not None:
+                A, p = tail
+                hi = A * (np.maximum(w, wmax) / wmax) ** (-p)
+            else:
+                # legacy linear taper to zero over (wmax, 2*wmax)
+                hi = pts[-1] * np.clip(1.0 - (w - wmax) / wmax, 0.0, 1.0)
+            return np.where(w > wmax, hi, x)
 
         def fn(w):
             w = np.asarray(w, dtype=float)
-            r = np.interp(w, wk_full, re, left=re[0], right=0.0)
-            # linear taper to zero over (wmax, 2*wmax) so out-of-band weight is bounded
-            taper = np.clip(1.0 - (w - wmax) / wmax, 0.0, 1.0)
-            r = np.where(w > wmax, re[-1] * taper, r)
+            r = extend(w, re, tail_re)
+            if head is not None:
+                A, p, cap = head
+                hd = np.minimum(A * np.maximum(w, 1e-12) ** (-p), cap)
+                r = np.where(w < wk_full[1], hd, r)
+            if nonneg:
+                r = np.maximum(r, 0.0)
+            if line_part is not None:
+                r = r + line_part(w)
             if np.allclose(im, 0.0):
                 return r
-            ii = np.interp(w, wk_full, im, left=im[0], right=0.0)
-            ii = np.where(w > wmax, im[-1] * taper, ii)
-            return r + 1j * ii
+            return r + 1j * extend(w, np.asarray(im, dtype=float), tail_im)
         return fn
 
     return {k: make(k) for k in ('S11', 'S22', 'S1212', 'S12', 'S112', 'S212')}

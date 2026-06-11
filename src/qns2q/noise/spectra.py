@@ -111,6 +111,21 @@ _LINE_AMP_Q2 = jnp.array([2.817e-03, 2.744e-03, 1.897e-03])
 _LINES_ON = (_REGIME != "bland")
 
 
+def line_priors():
+    """(centers, sigma) of the nuclear-difference line triplet, or None (bland).
+
+    The experimentally-known part of the line fingerprint only: the centers are
+    differences of nuclear Larmor frequencies (fixed by the species and the
+    magnetic field) and the width is the comb's resolution limit. Heights are
+    deliberately NOT exposed -- a line-aware reconstruction model must fit them
+    from its own reconstructed data (see ``characterize.systematics``).
+    """
+    if not _LINES_ON:
+        return None
+    import numpy as np
+    return np.asarray(_LINE_CENTERS, dtype=float), float(_LINE_SIGMA)
+
+
 def _plaw(w, g):
     """IR-regularized power law (w^2 + W_IR^2)^(-g/2); finite at w = 0."""
     return (w**2 + W_IR**2)**(-g/2)
