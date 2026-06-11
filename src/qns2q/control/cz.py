@@ -30,7 +30,7 @@ import numpy as np
 import scipy.optimize
 
 from qns2q.noise.spectra import (S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12,
-                                 MODEL_VERSION)
+                                 MODEL_VERSION, line_priors)
 from qns2q.control.tails import tail_extend_interp_complex
 from qns2q.paths import run_folder, project_root
 
@@ -697,6 +697,24 @@ def calculate_cz_fidelity(I_matrix, J, M, dc_12):
     
     return fid
 
+def use_comb_approximation(M, T_seq):
+    """Whether the frequency-comb overlap approximation is valid at (M, T_seq).
+
+    The comb samples S at delta teeth; the TRUE M-fold filter tooth has width
+    ~ 2pi/(M*T_seq). When that width is comparable to the nuclear-line width
+    sigma the comb mis-weights the lines (OPT-COMB-M16 diagnostic,
+    scripts/diag_comb_vs_folded.py: 8-14% at Tg = 320 tau / M = 16). Smooth
+    (bland) spectra keep the legacy speed cutoff M > 10. (CZ currently runs
+    M = 1, so this is future-proofing kept in lockstep with idle.py.)"""
+    if M <= 10:
+        return False
+    pri = line_priors()
+    if pri is None:
+        return True
+    _, sigma = pri
+    return 2 * np.pi / (M * T_seq) < sigma / 4
+
+
 # ==============================================================================
 # Optimization Logic
 # ==============================================================================
@@ -777,7 +795,7 @@ def optimize_sequence(config, M, T_seq, n1, n2, seed_seq=None):
         return None, 1.0
 
     # Setup Evaluation Method
-    use_comb = (M > 10)
+    use_comb = use_comb_approximation(M, T_seq)
     
     if use_comb:
         w0 = 2 * jnp.pi / T_seq
@@ -859,7 +877,7 @@ def evaluate_known_sequences_with_T(config, M, T_seq, pLib):
     best_idx = -1
     
     # Setup Evaluation Method
-    use_comb = (M > 10)
+    use_comb = use_comb_approximation(M, T_seq)
     
     if use_comb:
         w0 = 2 * jnp.pi / T_seq
@@ -934,7 +952,7 @@ def calculate_infidelity(seq, config, M, T_seq, use_ideal=False):
     SMat = config.SMat_ideal if use_ideal else config.SMat
     w_grid = config.w_ideal if use_ideal else config.w
     
-    use_comb = (M > 10)
+    use_comb = use_comb_approximation(M, T_seq)
     
     if use_comb:
         w0 = 2 * jnp.pi / T_seq

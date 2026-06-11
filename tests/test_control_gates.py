@@ -136,6 +136,19 @@ def test_comb_matches_folded_on_smooth_spectrum():
     assert abs(c - f) / f < 0.02, (f, c)
 
 
+def test_use_comb_crossover_respects_lines():
+    """OPT-COMB-M16: the comb approximation must stay off while the M-fold
+    filter tooth width is comparable to the nuclear-line width."""
+    from qns2q.noise.spectra import line_priors
+    if line_priors() is None:
+        pytest.skip("bland regime: no lines, legacy M cutoff applies")
+    assert not idle.use_comb_approximation(8, 1000.0)   # legacy M <= 10 cutoff
+    assert not idle.use_comb_approximation(16, 20.0)    # Tg=320: 8-14% error regime
+    assert idle.use_comb_approximation(128, 80.0)       # Tg=10240: <= 0.3%
+    assert (cz.use_comb_approximation(16, 20.0)
+            == idle.use_comb_approximation(16, 20.0))
+
+
 # --------------------------------------------------- SMat build semantics --
 
 def _fake_cfg(builder_cls, wk, specs, use_simulated=False, cross=True):
