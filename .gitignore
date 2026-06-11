@@ -20,6 +20,9 @@ DraftRun_*/plotting_data/*
 __pycache__/
 *.pyc
 
+# Persistent XLA compilation cache (OPT-SPEEDUPS)
+.jax_cache/
+
 # IDE
 .idea/
 

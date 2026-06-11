@@ -151,6 +151,61 @@ def test_use_comb_crossover_respects_lines():
             == idle.use_comb_approximation(16, 20.0))
 
 
+# ----------------------------------------------------- identity padding ----
+
+def test_pad_targets_counts_and_parity_guard():
+    from qns2q.control.padding import pad_targets, pad_count, pad_delays
+    t = pad_targets([150, 149, 148, 76, 75, 74])
+    assert t == {0: 150, 1: 149}
+    assert pad_count(74, t) == 150 and pad_count(75, t) == 149
+    assert pad_count(150, t) == 150
+    with pytest.raises(ValueError):
+        pad_delays(np.ones(3), 4)                      # odd pad count
+    assert np.array_equal(pad_delays(np.ones(3), 5),
+                          np.array([1., 1., 1., 0., 0.]))
+
+
+def test_identity_padding_exact_value_and_grad():
+    """The padded cost equals the unpadded cost, and the gradient w.r.t. the
+    REAL delays is unchanged -- for both gate modules and both evaluators."""
+    T_seq, M, tau = 40.0, 1, 1.0
+    nbs = int(np.ceil(T_seq / (tau / 4)))
+    rng = np.random.default_rng(3)
+    RMat = jnp.asarray(rng.normal(size=(4, 4, 2 * nbs - 1)) * 1e-6 + 0j)
+    omega_k = jnp.arange(1, 41) * (2 * jnp.pi / T_seq)
+    S_packed = jnp.asarray(rng.normal(size=(4, 4, 41)) * 1e-6 + 0j)
+    n1, n2 = 5, 8
+    d1 = np.asarray(cz.get_random_delays(n1, T_seq, tau))
+    d2 = np.asarray(cz.get_random_delays(n2, T_seq, tau))
+    x = np.concatenate([d1, d2])
+    xp = np.concatenate([d1, np.zeros(4), d2, np.zeros(2)])
+    n1p, n2p = n1 + 4, n2 + 2
+
+    def strip(g):
+        g = np.asarray(g)
+        return np.concatenate([g[:n1], g[n1p:n1p + n2]])
+
+    cases = [
+        ("cz folded",
+         lambda z, n: cz.cost_vag_folded(jnp.asarray(z), RMat, tau / 4, T_seq,
+                                         0.05, M, n_pulses1=n, n_base_steps=nbs)),
+        ("cz comb",
+         lambda z, n: cz.cost_vag_comb(jnp.asarray(z), S_packed, omega_k,
+                                       T_seq, 0.05, n_pulses1=n, M=M)),
+        ("idle folded",
+         lambda z, n: idle.cost_vag_folded(jnp.asarray(z), RMat, tau / 4,
+                                           T_seq, n_pulses1=n, n_base_steps=nbs)),
+        ("idle comb",
+         lambda z, n: idle.cost_vag_comb(jnp.asarray(z), S_packed, omega_k,
+                                         T_seq, n_pulses1=n, M=M)),
+    ]
+    for label, vag in cases:
+        v0, g0 = vag(x, n1)
+        v1, g1 = vag(xp, n1p)
+        assert np.isclose(float(v0), float(v1), rtol=1e-12, atol=1e-15), label
+        assert np.allclose(np.asarray(g0), strip(g1), rtol=1e-9, atol=1e-13), label
+
+
 # --------------------------------------------------- SMat build semantics --
 
 def _fake_cfg(builder_cls, wk, specs, use_simulated=False, cross=True):

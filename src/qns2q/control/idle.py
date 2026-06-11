@@ -22,6 +22,11 @@ import jax
 import jax.numpy as jnp
 import jax.scipy.integrate
 jax.config.update("jax_enable_x64", True)
+# OPT-SPEEDUPS (a): persistent XLA compilation cache (see cz.py).
+from qns2q.paths import project_root as _project_root
+jax.config.update("jax_compilation_cache_dir",
+                  os.path.join(_project_root(), ".jax_cache"))
+jax.config.update("jax_persistent_cache_min_compile_time_secs", 0.5)
 import jax.scipy.signal
 import numpy as np
 import scipy.optimize
@@ -29,6 +34,7 @@ import scipy.optimize
 from qns2q.noise.spectra import (S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12,
                                  MODEL_VERSION, line_priors)
 from qns2q.control.tails import tail_extend_interp_complex
+from qns2q.control.padding import pad_targets, pad_count, pad_delays
 from qns2q.paths import run_folder, project_root
 
 # Fixed RNG seed for the unseeded np.random restarts (random pulse counts and
@@ -36,6 +42,10 @@ from qns2q.paths import run_folder, project_root
 # winning-sequence labels reproducible across re-runs. Recorded in the saved
 # optimization data so every figure carries its provenance.
 RANDOM_SEED = 20260608
+
+# OPT-SPEEDUPS (d): SLSQP convergence knobs (see cz.py for rationale).
+SLSQP_TOL = 1e-7
+SLSQP_MAXITER = 300
 
 # Memoizes the (sequence-independent) folded-correlation setup built by
 # prepare_time_domain_overlap. That setup depends only on the spectrum/grid
@@ -852,117 +862,127 @@ def use_comb_approximation(M, T_seq):
 # Optimization Logic
 # ==============================================================================
 
-def cost_function(delays_params, n_pulses1, RMat_data, T_seq, tau_min, overlap_fn):
-    """
-    Cost function: 1 - Normalized Fidelity.
-    overlap_fn: A callable that takes (pt_a, pt_b, data) and returns the overlap integral.
-    """
+def _pack_comb(SMat, w_grid, omega_k):
+    """[S(0), S(w_k)] packed per channel for evaluate_overlap_comb."""
+    S_flat = SMat.reshape(-1, SMat.shape[-1])
+
+    def interp_row(fp):
+        return (jnp.interp(omega_k, w_grid, jnp.real(fp), right=0.) +
+                1j * jnp.interp(omega_k, w_grid, jnp.imag(fp), right=0.))
+
+    S_h = jax.vmap(interp_row)(S_flat)
+    return jnp.concatenate([S_flat[:, :1], S_h], axis=1).reshape(4, 4, -1)
+
+
+def _delays_to_pts(delays_params, n_pulses1, T_seq):
     delays1 = delays_params[:n_pulses1]
     delays2 = delays_params[n_pulses1:]
-
     pt1 = delays_to_pulse_times(delays1, T_seq)
     pt2 = delays_to_pulse_times(delays2, T_seq)
     pt12 = make_tk12(pt1, pt2)
-
-    # Dummy pulse sequence for index 0 (Identity).
-    # Since SMat[0,:] is 0, the overlap will be 0 regardless of sequence.
+    # Dummy pulse sequence for index 0 (Identity): SMat[0,:] is 0, so the
+    # overlap vanishes regardless of sequence.
     pt0 = jnp.array([0., T_seq])
+    return [pt0, pt1, pt2, pt12]
 
-    pts = [pt0, pt1, pt2, pt12]
 
-    # Calculate I_matrix (4x4)
-    vals = []
-    for i in range(4):
-        row_vals = []
-        for j in range(4):
-            val = overlap_fn(pts[i], pts[j], RMat_data[i, j])
-            row_vals.append(val)
-        vals.append(row_vals)
+def _cost_folded(delays_params, RMat_data, dt, T_seq, n_pulses1, n_base_steps):
+    """Idling cost (1 - F/16) on the folded evaluator. Every input is a
+    runtime ARGUMENT (OPT-SPEEDUPS (b)): the value_and_grad wrappers below
+    are stable module-level objects, so restarts and (Tg, M) blocks reuse
+    compiled programs per (shape, static) instead of recompiling per fresh
+    closure, and the HLO is spectrum-value-independent (persistent cache
+    works across runs/repeats)."""
+    pts = _delays_to_pts(delays_params, n_pulses1, T_seq)
+    I_mat = jnp.array([[evaluate_overlap_folded(pts[i], pts[j], RMat_data[i, j],
+                                                dt, n_base_steps)
+                        for j in range(4)] for i in range(4)])
+    return 1.0 - calculate_idling_fidelity(I_mat) / 16.0
 
-    I_mat = jnp.array(vals)
-    
-    fid = calculate_idling_fidelity(I_mat)
-    norm_fid = fid / 16.0
-    infidelity = 1.0 - norm_fid
-    
-    return infidelity
+
+def _cost_comb(delays_params, S_packed, omega_k, T_seq, n_pulses1, M):
+    """Idling cost on the comb evaluator (see _cost_folded for the design)."""
+    pts = _delays_to_pts(delays_params, n_pulses1, T_seq)
+    I_mat = jnp.array([[evaluate_overlap_comb(pts[i], pts[j], S_packed[i, j],
+                                              omega_k, T_seq, M)
+                        for j in range(4)] for i in range(4)])
+    return 1.0 - calculate_idling_fidelity(I_mat) / 16.0
+
+
+cost_vag_folded = jax.jit(jax.value_and_grad(_cost_folded),
+                          static_argnames=('n_pulses1', 'n_base_steps'))
+cost_vag_comb = jax.jit(jax.value_and_grad(_cost_comb),
+                        static_argnames=('n_pulses1', 'M'))
 
 def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
     """Optimizes random sequences for a given repetition count M."""
     T_seq = config.Tg / M
     best_inf = 1.0
     best_seq = None
-    
+
     # Setup Evaluation Method
     use_comb = use_comb_approximation(M, T_seq)
-    
+
     if use_comb:
         print(f"Using Frequency Comb Approximation (M={M})...")
-        # 1. Determine Harmonics
         w0 = 2 * jnp.pi / T_seq
         max_k = int(config.w_max / w0)
-        k_vals = jnp.arange(1, max_k + 1)
-        omega_k = k_vals * w0
+        omega_k = jnp.arange(1, max_k + 1) * w0
+        S_packed = _pack_comb(config.SMat, config.w, omega_k)
 
-        # 2. Interpolate Spectra
-        S_flat = config.SMat.reshape(-1, config.SMat.shape[-1])
-
-        def interp_row(fp):
-            return (jnp.interp(omega_k, config.w, jnp.real(fp), right=0.) +
-                   1j * jnp.interp(omega_k, config.w, jnp.imag(fp), right=0.))
-
-        S_harmonics_flat = jax.vmap(interp_row)(S_flat) # (16, K)
-        S_DC_flat = S_flat[:, 0]
-
-        # Pack: (16, K+1) -> (4, 4, K+1)
-        S_packed_flat = jnp.concatenate([S_DC_flat[:, None], S_harmonics_flat], axis=1)
-        RMat_data = S_packed_flat.reshape(4, 4, -1)
-
-        @jax.jit
-        def overlap_fn(pt_a, pt_b, data):
-            return evaluate_overlap_comb(pt_a, pt_b, data, omega_k, T_seq, M)
-            
+        def vag(xp, n1p):
+            return cost_vag_comb(xp, S_packed, omega_k, T_seq,
+                                 n_pulses1=n1p, M=M)
     else:
         print(f"Using Folded Noise Matrix (M={M})...")
         RMat_data, dt, n_base_steps = prepare_time_domain_overlap(
             config.SMat, config.w, config.tau, T_seq, M
         )
 
-        @jax.jit
-        def overlap_fn(pt_a, pt_b, data):
-            return evaluate_overlap_folded(pt_a, pt_b, data, dt, n_base_steps)
+        def vag(xp, n1p):
+            return cost_vag_folded(xp, RMat_data, dt, T_seq,
+                                   n_pulses1=n1p, n_base_steps=n_base_steps)
+
+    # One compiled cost per parity class for the whole trial list
+    # (control.padding shape unification).
+    all_ns = [int(n) for pair in n_pulses_list for n in pair]
+    if seed_seq is not None:
+        all_ns += [len(seed_seq[0]) - 2, len(seed_seq[1]) - 2]
+    opt_targets = pad_targets(all_ns)
 
     def run_single_optimization(n1, n2, initial_params, label):
         nonlocal best_inf, best_seq
 
         # Bounds
         bounds = [(config.tau, T_seq) for _ in range(len(initial_params))]
-        
-        # Partial cost function for JIT
-        cost_for_n = functools.partial(cost_function, n_pulses1=n1,
-                                       RMat_data=RMat_data,
-                                       T_seq=T_seq, tau_min=config.tau,
-                                       overlap_fn=overlap_fn)
-        
-        val_and_grad = jax.jit(jax.value_and_grad(cost_for_n))
 
+        n1p = pad_count(n1, opt_targets)
+        n2p = pad_count(n2, opt_targets)
+        pad1 = np.zeros(n1p - n1)
+        pad2 = np.zeros(n2p - n2)
+
+        # The pads are appended/stripped here in the wrapper (exact identity,
+        # control.padding); SLSQP sees the original (n1 + n2)-dim problem.
         def fun_wrapper(x):
-            v, g = val_and_grad(x)
-            return jnp.float64(v), jnp.array(g)
+            xp = jnp.asarray(np.concatenate([x[:n1], pad1, x[n1:], pad2]))
+            v, g = vag(xp, n1p)
+            g = np.asarray(g)
+            return float(v), np.concatenate([g[:n1], g[n1p:n1p + n2]])
 
         # Linear constraints
         A = np.zeros((2, n1 + n2))
         A[0, :n1] = 1
         A[1, n1:] = 1
         linear_cons = scipy.optimize.LinearConstraint(A, -np.inf, T_seq - config.tau)
-        
+
         try:
-            res = scipy.optimize.minimize(fun_wrapper, jnp.array(initial_params), method='SLSQP',
+            res = scipy.optimize.minimize(fun_wrapper, np.asarray(initial_params), method='SLSQP',
                                           bounds=bounds, constraints=linear_cons, jac=True,
-                                          tol=1e-10, options={'maxiter': 1000, 'disp': False})
-            
+                                          tol=SLSQP_TOL,
+                                          options={'maxiter': SLSQP_MAXITER, 'disp': False})
+
             inf = res.fun
-            
+
             if inf < best_inf:
                 best_inf = inf
                 d1_opt = jnp.array(res.x[:n1])
@@ -970,9 +990,9 @@ def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
                 pt1 = delays_to_pulse_times(d1_opt, T_seq)
                 pt2 = delays_to_pulse_times(d2_opt, T_seq)
                 best_seq = (pt1, pt2)
-                
+
             print(f"  {label} (n={n1},{n2}): Infidelity = {inf:.6e}")
-            
+
         except Exception as e:
             print(f"  {label} failed for n={n1},{n2}: {e}")
             # traceback.print_exc()
@@ -1009,45 +1029,42 @@ def evaluate_known_sequences(config, M, pLib):
     best_idx = -1
     
     print(f"Evaluating {len(pLib)} known sequences...")
-    
+
     # Setup Evaluation Method
     use_comb = use_comb_approximation(M, T_seq)
-    
+
     if use_comb:
         print(f"Using Frequency Comb Approximation (M={M})...")
         w0 = 2 * jnp.pi / T_seq
         max_k = int(config.w_max / w0)
-        k_vals = jnp.arange(1, max_k + 1)
-        omega_k = k_vals * w0
+        omega_k = jnp.arange(1, max_k + 1) * w0
+        S_packed = _pack_comb(config.SMat, config.w, omega_k)
 
-        S_flat = config.SMat.reshape(-1, config.SMat.shape[-1])
-
-        def interp_row(fp):
-            return (jnp.interp(omega_k, config.w, jnp.real(fp), right=0.) +
-                   1j * jnp.interp(omega_k, config.w, jnp.imag(fp), right=0.))
-
-        S_harmonics_flat = jax.vmap(interp_row)(S_flat)
-        S_DC_flat = S_flat[:, 0]
-        S_packed_flat = jnp.concatenate([S_DC_flat[:, None], S_harmonics_flat], axis=1)
-        RMat_data = S_packed_flat.reshape(4, 4, -1)
-
-        @jax.jit
-        def overlap_fn(pt_a, pt_b, data):
-            return evaluate_overlap_comb(pt_a, pt_b, data, omega_k, T_seq, M)
-            
+        def overlap_fn(pt_a, pt_b, r, c):
+            return evaluate_overlap_comb(pt_a, pt_b, S_packed[r, c],
+                                         omega_k, T_seq, M)
     else:
         print(f"Using Folded Noise Matrix (M={M})...")
         RMat_data, dt, n_base_steps = prepare_time_domain_overlap(
             config.SMat, config.w, config.tau, T_seq, M
         )
 
-        @jax.jit
-        def overlap_fn(pt_a, pt_b, data):
-            return evaluate_overlap_folded(pt_a, pt_b, data, dt, n_base_steps)
+        def overlap_fn(pt_a, pt_b, r, c):
+            return evaluate_overlap_folded(pt_a, pt_b, RMat_data[r, c],
+                                           dt, n_base_steps)
+
+    # Shape-unify the library with exact-identity padding (control.padding):
+    # <= 2 shapes per qubit (parity classes) instead of one compile per
+    # distinct CDD/mqCDD length. Padded arrays are used for EVALUATION only;
+    # the recorded winner keeps its original (unpadded) pulse times.
+    targets1 = pad_targets([np.asarray(d1).shape[0] for d1, _ in pLib])
+    targets2 = pad_targets([np.asarray(d2).shape[0] for _, d2 in pLib])
 
     for i, (d1, d2) in enumerate(pLib):
-        pt1 = delays_to_pulse_times(d1, T_seq)
-        pt2 = delays_to_pulse_times(d2, T_seq)
+        d1p = pad_delays(d1, pad_count(np.asarray(d1).shape[0], targets1))
+        d2p = pad_delays(d2, pad_count(np.asarray(d2).shape[0], targets2))
+        pt1 = delays_to_pulse_times(d1p, T_seq)
+        pt2 = delays_to_pulse_times(d2p, T_seq)
         pt12 = make_tk12(pt1, pt2)
         pt0 = jnp.array([0., T_seq])
 
@@ -1057,7 +1074,7 @@ def evaluate_known_sequences(config, M, pLib):
         for r in range(4):
             row_vals = []
             for c in range(4):
-                val = overlap_fn(pts[r], pts[c], RMat_data[r, c])
+                val = overlap_fn(pts[r], pts[c], r, c)
                 row_vals.append(val)
             vals.append(row_vals)
         I_mat = jnp.array(vals)
@@ -1067,9 +1084,12 @@ def evaluate_known_sequences(config, M, pLib):
 
         if inf < best_inf:
             best_inf = inf
-            best_seq = (pt1, pt2)
+            # Record the ORIGINAL (unpadded) sequence -- padding is an
+            # evaluation-shape detail, not part of the winner.
+            best_seq = (delays_to_pulse_times(d1, T_seq),
+                        delays_to_pulse_times(d2, T_seq))
             best_idx = i
-            
+
     return best_seq, best_inf, best_idx
 
 def calculate_infidelity(seq, config, M, T_seq, use_ideal=False):
@@ -1086,20 +1106,9 @@ def calculate_infidelity(seq, config, M, T_seq, use_ideal=False):
     
     if use_comb:
         w0 = 2 * jnp.pi / T_seq
-        limit_w = w_grid[-1]
-        max_k = int(limit_w / w0)
-
-        k_vals = jnp.arange(1, max_k + 1)
-        omega_k = k_vals * w0
-
-        S_flat = SMat.reshape(-1, SMat.shape[-1])
-        def interp_row(fp):
-            return (jnp.interp(omega_k, w_grid, jnp.real(fp), right=0.) +
-                   1j * jnp.interp(omega_k, w_grid, jnp.imag(fp), right=0.))
-        S_harmonics_flat = jax.vmap(interp_row)(S_flat)
-        S_DC_flat = S_flat[:, 0]
-        S_packed_flat = jnp.concatenate([S_DC_flat[:, None], S_harmonics_flat], axis=1)
-        RMat_data = S_packed_flat.reshape(4, 4, -1)
+        max_k = int(w_grid[-1] / w0)
+        omega_k = jnp.arange(1, max_k + 1) * w0
+        RMat_data = _pack_comb(SMat, w_grid, omega_k)
 
         overlap_fn = lambda pt_a, pt_b, data: evaluate_overlap_comb(pt_a, pt_b, data, omega_k, T_seq, M)
 
