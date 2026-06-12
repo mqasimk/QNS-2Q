@@ -110,6 +110,16 @@ class CZOptConfig:
     # keeps the full truth -- prices what the TWO-QUBIT reconstruction adds.
     # Contrast include_cross_spectra=False, which drops crosses from BOTH.
     char_self_only: bool = False
+    # Spectrum-informed pulse-count candidates (SHOWCASE-0612): rank uniform-
+    # train counts by first-order chi of the CHARACTERIZED spectra at the
+    # fundamental (blind-protocol-safe -- each arm ranks on what it knows) and
+    # add the top windows to the legacy {max, max-1, max-2, half+-1} set. On
+    # featured landscapes the legacy heuristic can sit entirely on spectral
+    # lines while the quiet window lives at an untried count.
+    informed_counts: bool = False
+    # NT-search pair filter: skip (n1, n2) with |n1 - n2| > pair_gap when > 0
+    # (CZ optima are near-diagonal; the full grid is quadratic in candidates).
+    pair_gap: int = 0
     plot_data_name: str = "plotting_data_cz_v2.npz"
 
     # These will be loaded from the run files
@@ -1226,12 +1236,39 @@ def run_optimization(config):
             if half_max + 1 < effective_max:
                 n_candidates_set.add(half_max + 1)
 
+        if config.informed_counts and effective_max >= 2:
+            # Rank every feasible uniform-train count by the characterized
+            # spectra at its fundamental w = pi*n/T_seq (first-order window
+            # proxy; S11 + S22 dominate the self error). Take the best
+            # windows, with a min separation so the picks don't cluster, and
+            # add +-1 neighbors for the free-timing search to refine.
+            ns = np.arange(2, effective_max + 1)
+            w_fund = jnp.asarray(np.pi * ns / T_seq)
+            proxy = np.asarray(
+                jnp.interp(w_fund, config.w, jnp.real(config.SMat[1, 1]))
+                + jnp.interp(w_fund, config.w, jnp.real(config.SMat[2, 2])))
+            picked = []
+            for idx in np.argsort(proxy):
+                n_pick = int(ns[idx])
+                if all(abs(n_pick - p) > 2 for p in picked):
+                    picked.append(n_pick)
+                if len(picked) >= 3:
+                    break
+            informed_set = set()
+            for p in list(picked):
+                informed_set.update(
+                    q for q in (p - 1, p, p + 1) if 1 <= q <= effective_max)
+            n_candidates_set |= informed_set
+            print(f"  Spectrum-informed windows (characterized): {sorted(picked)}")
+        else:
+            informed_set = set()
+
         n_candidates = sorted(list(n_candidates_set), reverse=True)
-        
+
         if not n_candidates:
              print(f"    Skipping: T_seq too small for pulses")
              continue
-                 
+
         print(f"  Auto-selected pulse counts: {n_candidates}")
 
         # One compiled cost per parity class for the whole (n1, n2) sweep
@@ -1241,13 +1278,27 @@ def run_optimization(config):
         for n1 in n_candidates:
             for n2 in n_candidates:
                 # Check feasibility (redundant with max_n logic but safe)
-                if (n1 + 1) * config.tau > T_seq or (n2 + 1) * config.tau > T_seq:
+                if (n1 + 1) * config.min_sep > T_seq or (n2 + 1) * config.min_sep > T_seq:
+                     continue
+                if config.pair_gap > 0 and abs(n1 - n2) > config.pair_gap:
                      continue
 
                 print(f"  Optimizing n=({n1}, {n2})...")
-                # Use best known as seed if available and pulse counts match?
-                # For now, just random init
+                # Spectrum-informed window pairs start from the EQUIDISTANT
+                # (uniform-train) configuration -- the solution class the
+                # window ranking is valid for; SLSQP then refines it. A random
+                # init in a featured landscape routinely converges to a local
+                # optimum ABOVE the plain uniform train (probe 4: 4.2e-4 vs
+                # the CPMG-28 bound 2.6e-4). All other pairs keep the random
+                # exploration init.
+                seed = None
+                if n1 in informed_set and n2 in informed_set:
+                    seed = (delays_to_pulse_times(
+                                jnp.full(n1, T_seq / (n1 + 1)), T_seq),
+                            delays_to_pulse_times(
+                                jnp.full(n2, T_seq / (n2 + 1)), T_seq))
                 seq, inf = optimize_sequence(config, M, T_seq, n1, n2,
+                                             seed_seq=seed,
                                              pad_to=(opt_pad_targets[n1 % 2],
                                                      opt_pad_targets[n2 % 2]))
                 if seq is not None and inf < best_opt_inf:
@@ -1323,6 +1374,8 @@ def run_optimization(config):
         # SHOWCASE-0612 provenance: control-bandwidth scenario + ablation rung
         'min_sep_factor': float(config.min_sep_factor),
         'char_self_only': bool(config.char_self_only),
+        'informed_counts': bool(config.informed_counts),
+        'pair_gap': int(config.pair_gap),
     }
 
     if best_known_seq_overall is not None:
@@ -1404,6 +1457,14 @@ if __name__ == '__main__':
                              "S11/S22 alone (S1212 + crosses dropped, as a "
                              "1Q-only QNS campaign leaves them); the ideal "
                              "benchmark keeps the full truth")
+    parser.add_argument('--informed-counts', action='store_true',
+                        help="add spectrum-informed pulse-count candidates "
+                             "(top quiet windows of the CHARACTERIZED "
+                             "spectra) to the legacy heuristic set "
+                             "(SHOWCASE-0612)")
+    parser.add_argument('--pair-gap', type=int, default=0,
+                        help="NT search: skip (n1, n2) pairs with "
+                             "|n1 - n2| > this (0 = full grid)")
     parser.add_argument('--factors', type=str, default=None,
                         help="comma-separated gate-time factors to run "
                              "(default: the full 3,2,1,0,-1,-2,-3 sweep); "
@@ -1421,6 +1482,8 @@ if __name__ == '__main__':
                   max_pulses=cli.max_pulses,
                   min_sep_factor=cli.min_sep,
                   char_self_only=cli.self_only,
+                  informed_counts=cli.informed_counts,
+                  pair_gap=cli.pair_gap,
                   output_path_known=f"infs_known_cz_v2{sfx}.npz",
                   output_path_opt=f"infs_opt_cz_v2{sfx}.npz",
                   plot_data_name=f"plotting_data_cz_v2{sfx}.npz")
