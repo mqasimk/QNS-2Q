@@ -95,6 +95,9 @@ def fig_model_spectra():
     axs[0, 2].annotate('visible only to\ntwo-qubit QNS',
                        xy=(0.42, 0.78), xycoords='axes fraction', fontsize=8,
                        color=C_ROB)
+    axs[1, 0].annotate('common-mode slow carrier\n(decides which Bell coherence\nan idle protects)',
+                       xy=(0.30, 0.74), xycoords='axes fraction', fontsize=7.5,
+                       color=C_REF)
     for ax in axs[1]:
         ax.set_xlabel(r"$\omega\tau$")
     for ax in axs[:, 0]:
@@ -239,12 +242,17 @@ def fig_recon_capture():
     plt.close(fig)
 
 
-def _margin_quantiles(npz):
+def _margin_quantiles(*npzs):
+    """Merge one or more margin-band files (e.g. the cap + cap_short CZ runs)
+    into a single sorted (Tg, lo, med, hi) quantile table."""
     tgs, lo, med, hi = [], [], [], []
-    for key in sorted(k for k in npz.files if k.startswith('margin_')):
-        q = np.percentile(npz[key], [2.5, 50, 97.5])
-        tgs.append(float(key.split('_')[1]))
-        lo.append(q[0]); med.append(q[1]); hi.append(q[2])
+    for npz in npzs:
+        if npz is None:
+            continue
+        for key in sorted(k for k in npz.files if k.startswith('margin_')):
+            q = np.percentile(npz[key], [2.5, 50, 97.5])
+            tgs.append(float(key.split('_')[1]))
+            lo.append(q[0]); med.append(q[1]); hi.append(q[2])
     o = np.argsort(tgs)
     return (np.asarray(tgs)[o],) + tuple(np.asarray(v)[o] for v in (lo, med, hi))
 
@@ -276,23 +284,36 @@ def _idle_best_over_M():
 
 
 def fig_gates():
-    pd_cz = np.load(os.path.join(RUN_GATES, "plotting_data",
-                                 f"plotting_data_cz_v2{GATE_TAG}.npz"),
-                    allow_pickle=True)
-    mb_cz_path = os.path.join(RUN_GATES, f"margin_band_cz{GATE_TAG}.npz")
-    mb_cz = (np.load(mb_cz_path, allow_pickle=True)
-             if os.path.exists(mb_cz_path) else None)
-    mb_id_path = os.path.join(RUN_GATES, f"margin_band_id{GATE_TAG}.npz")
-    mb_id = np.load(mb_id_path, allow_pickle=True) if os.path.exists(mb_id_path) else None
+    def _load_cz(tag):
+        return np.load(os.path.join(RUN_GATES, "plotting_data",
+                                    f"plotting_data_cz_v2{tag}.npz"),
+                       allow_pickle=True)
+
+    pd_parts = [_load_cz(GATE_TAG)]
+    short_path = os.path.join(RUN_GATES, "plotting_data",
+                              f"plotting_data_cz_v2{GATE_TAG}_short.npz")
+    if os.path.exists(short_path):
+        pd_parts.append(np.load(short_path, allow_pickle=True))
+
+    def _mb(name):
+        p = os.path.join(RUN_GATES, name)
+        return np.load(p, allow_pickle=True) if os.path.exists(p) else None
+
+    mb_cz = [_mb(f"margin_band_cz{GATE_TAG}.npz"),
+             _mb(f"margin_band_cz{GATE_TAG}_short.npz")]
+    mb_id = [_mb(f"margin_band_id{GATE_TAG}.npz")]
     idle_path = os.path.join(RUN_GATES, f"optimization_data_all_M{GATE_TAG}.npz")
     idl = _idle_best_over_M() if os.path.exists(idle_path) else None
 
-    tg = np.asarray(pd_cz['taxis'], dtype=float)
+    tg = np.concatenate([np.asarray(p['taxis'], dtype=float) for p in pd_parts])
+    cz_k = np.concatenate([np.asarray(p['infs_known'], dtype=float)
+                           for p in pd_parts])
+    cz_o = np.concatenate([np.asarray(p['infs_opt'], dtype=float)
+                           for p in pd_parts])
+    cz_np = np.concatenate([np.asarray(p['infs_nopulse'], dtype=float)
+                            for p in pd_parts])
     order = np.argsort(tg)
-    tg = tg[order]
-    cz_k = np.asarray(pd_cz['infs_known'], dtype=float)[order]
-    cz_o = np.asarray(pd_cz['infs_opt'], dtype=float)[order]
-    cz_np = np.asarray(pd_cz['infs_nopulse'], dtype=float)[order]
+    tg, cz_k, cz_o, cz_np = tg[order], cz_k[order], cz_o[order], cz_np[order]
 
     n_rows = 2 if idl is not None else 1
     fig, axs = plt.subplots(n_rows, 2, figsize=(9.6, 2.9 * n_rows + 0.2),
@@ -313,9 +334,10 @@ def fig_gates():
         ax.legend(frameon=False, fontsize=8)
 
     def margin_panel(ax, mb, title):
-        if mb is None:
+        mb = [m for m in mb if m is not None]
+        if not mb:
             ax.set_axis_off(); return
-        tgs_m, lo, med, hi = _margin_quantiles(mb)
+        tgs_m, lo, med, hi = _margin_quantiles(*mb)
         ax.fill_between(tgs_m, lo, hi, color=C_REF, alpha=0.18,
                         label=r'95\% CI under recon.\ uncertainty')
         ax.plot(tgs_m, med, '-', color=C_REF, marker='s', ms=4,
@@ -388,7 +410,7 @@ def fig_design_experiments(ladder_cz, ladder_id=None, arms_cz=None,
     plt.close(fig)
 
 
-def _arms_bars(ax, arms, title):
+def _arms_bars(ax, arms, title, ylabel=r"$1-F_\mathrm{pro}$ at $T_G=320\tau$"):
     order = [a for a in ('reference', 'mitigated', 'raw') if a in arms]
     pretty = {'reference': 'reference\n(SPAM-free recon.)',
               'mitigated': 'SPAM-mitigated\nrecon.',
@@ -405,86 +427,108 @@ def _arms_bars(ax, arms, title):
     for xi, v in zip(x, ntv):
         ax.text(xi, v * 1.04, f"{v:.2e}", ha='center', fontsize=6.5)
     ax.set_xticks(x, [pretty[a] for a in order], fontsize=8)
-    ax.set_ylabel(r"$1-F_\mathrm{pro}$ at $T_G=320\tau$")
+    ax.set_ylabel(ylabel)
     ax.set_title(title, fontsize=9.5)
     ax.legend(frameon=False, fontsize=8)
     ax.grid(True, alpha=0.25, axis='y')
 
 
-def _idle_penalty_panel(ax, title):
-    """1Q-only design penalty vs Tg for the idle gate (best over M per Tg)."""
-    def best_table(tag):
-        d = np.load(os.path.join(
-            RUN_GATES, f"optimization_data_all_M_{tag}.npz"), allow_pickle=True)
-        Ms = [int(m) for m in d['M_values']]
-        gts = sorted({round(float(g), 6) for m in Ms
-                      for g in d[f'M{m}_gate_times']})
-        out = {}
-        for gt in gts:
-            vals = []
-            for m in Ms:
-                mg = np.asarray(d[f'M{m}_gate_times'], dtype=float)
-                ix = np.where(np.abs(mg - gt) < 1e-6)[0]
-                if ix.size:
-                    vals.append(float(d[f'M{m}_infs_opt'][int(ix[0])]))
-            out[gt] = min(vals)
-        return out
-    full = best_table(GATE_TAG.lstrip('_'))
-    solo = best_table('rung_c_idle')
-    gts = sorted(full)
-    pen = [solo[g] / full[g] for g in gts]
-    ax.plot(gts, pen, '-', color=C_ROB, marker='o', ms=4,
-            label='idle: 1Q-only design / full design')
-    ax.axhline(1.0, color='k', lw=0.8, ls=':')
-    ax.set_xscale('log')
-    ax.set_xlabel(r"$T_G/\tau$")
-    ax.set_ylabel(r"true-infidelity penalty")
+LADDER_LABELS = [
+    ('cdd', "best CDD\n(no spectral\nknowledge)", C_RAW),
+    ('rung_c', "1Q only (2):\n$S_{1,1},S_{2,2}$", C_ROB),
+    ('diag3', "selfs (3):\n$+\\,S_{12,12}$", C_BLD),
+    ('robust4', "robust (4):\n$+\\,S_{1,2}$", C_MIT),
+    ('full', "all six\nspectra", C_REF),
+]
+
+
+def _ladder_grouped(ax, dn, prefix, tgs, title):
+    """06/11-format knowledge ladder: light/dark bar pairs = two gate times."""
+    x = np.arange(len(LADDER_LABELS))
+    width = 0.34 if len(tgs) == 2 else 0.62
+    all_vals = []
+    for j, tg in enumerate(tgs):
+        sfx = f"_{int(tg)}" if len(tgs) == 2 else ""
+        vals = [float(dn[f'{prefix}_{k}{sfx}']) for k, _, _ in LADDER_LABELS]
+        all_vals += vals
+        off = (j - (len(tgs) - 1) / 2) * (width + 0.04)
+        ax.bar(x + off, vals, width=width,
+               color=[c for _, _, c in LADDER_LABELS],
+               alpha=0.55 if (len(tgs) == 2 and j == 0) else 0.95,
+               label=f"$T_G={int(tg)}\\tau$")
+        for xi, v in zip(x + off, vals):
+            ax.text(xi, v * 1.12, f"{v:.1e}", ha='center', fontsize=5.8,
+                    rotation=0)
+    ax.set_yscale('log')
+    ax.set_ylim(min(all_vals) / 2.5, max(all_vals) * 4.0)
+    ax.set_xticks(x, [l for _, l, _ in LADDER_LABELS], fontsize=7)
+    ax.set_ylabel(r"true $1-F_\mathrm{pro}$")
     ax.set_title(title, fontsize=9.5)
-    ax.legend(frameon=False, fontsize=8)
-    ax.grid(True, alpha=0.25)
-
-
-def _load_design_data():
-    """Assemble the ladder data from the capture-landscape rung outputs.
-
-    The smoothfit/1Q rungs ran on the truth comb (--simulated; on this
-    landscape the blind-on-recon and truth-comb variants agreed to ~2% in the
-    v1 battery); CDD + full come from the blind capture-arm curve. The SPAM
-    arms rerun overnight at capture grade -- panel omitted until then."""
-    def opt_at(fname, tag):
-        d = np.load(os.path.join(ROOT, fname, "plotting_data",
-                                 f"plotting_data_cz_v2_{tag}.npz"),
-                    allow_pickle=True)
-        return float(np.asarray(d['infs_opt'], dtype=float)[0])
-
-    pd = np.load(os.path.join(RUN_GATES, "plotting_data",
-                              f"plotting_data_cz_v2{GATE_TAG}.npz"),
-                 allow_pickle=True)
-    tg = np.asarray(pd['taxis'], dtype=float)
-    i320 = int(np.argmin(np.abs(tg - 320.0)))
-    cdd_320 = float(np.asarray(pd['infs_known'], dtype=float)[i320])
-    full_320 = float(np.asarray(pd['infs_opt'], dtype=float)[i320])
-
-    ladder_cz = [
-        ("best CDD\n(no spectral knowledge)", cdd_320, C_MIT),
-        ("smooth fit of the\nsame comb (no lines)",
-         opt_at("DraftRun_NoSPAM_showcase", "rung_b_cap"), C_BLD),
-        ("1Q (2):\n$S_{1,1},S_{2,2}$ only",
-         opt_at("DraftRun_NoSPAM_showcase", "rung_c_cap"), C_ROB),
-        ("all 6", full_320, C_REF),
-    ]
-    return ladder_cz, None
+    if len(tgs) == 2:
+        ax.legend(frameon=False, fontsize=7.5)
+    ax.grid(True, alpha=0.25, axis='y')
 
 
 def fig_design():
-    ladder_cz, arms_cz = _load_design_data()
-    fig, ax = plt.subplots(1, 1, figsize=(5.4, 3.4))
-    _ladder_panel(ax, ladder_cz,
-                  "entangling (CZ): blind NT gate vs spectral\n"
-                  "knowledge given to the optimizer ($T_G=320\\tau$)")
+    """The 06/11-format 2x2: knowledge ladder (left) and SPAM-arm designs
+    (right), entangling gate top row, idle bottom row. Data from
+    harvest_design_numbers.py."""
+    dn = np.load(os.path.join(RUN_GATES, "design_numbers.npz"))
+    fig, axs = plt.subplots(2, 2, figsize=(9.6, 6.8))
+    _ladder_grouped(axs[0, 0], dn, 'cz_ladder', [320.0],
+                    "(a) entangling (CZ), $T_G=320\\tau$: blind NT design\n"
+                    "vs the optimizer's spectral knowledge")
+    _arms_bars(axs[0, 1], {a: dn[f'cz_arm_{a}']
+                           for a in ('reference', 'mitigated', 'raw')},
+               "(b) entangling (CZ): gates designed on the\n"
+               "SPAM arms' reconstructions ($T_G=320\\tau$)")
+    _ladder_grouped(axs[1, 0], dn, 'id_ladder', [640.0, 10240.0],
+                    "(c) idle (best over $M$): the same ladder")
+    _arms_bars(axs[1, 1], {a: dn[f'id_arm_{a}']
+                           for a in ('reference', 'mitigated', 'raw')},
+               "(d) idle: SPAM-arm designs ($T_G=640\\tau$)",
+               ylabel=r"$1-F_\mathrm{pro}$ at $T_G=640\tau$")
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "fig_design_experiments.pdf"),
                 bbox_inches='tight')
+    plt.close(fig)
+
+
+def fig_storage():
+    """Entanglement-storage panel: holding Phi+ through the idle. The
+    in-phase/anti-phase implementations of the SAME symmetric train are
+    indistinguishable to single-qubit QNS and in average fidelity; the
+    measured Re S_1_2 > 0 dictates anti-phase. Data: storage_panel.npz."""
+    d = np.load(os.path.join(RUN_GATES, "storage_panel.npz"))
+    tg = np.asarray(d['Tg'], dtype=float)
+    fig, ax = plt.subplots(1, 1, figsize=(5.6, 3.6))
+    ax.plot(tg, d['fid_phi'], ':', color=C_RAW, marker='v', ms=4,
+            label='free induction, $\\Phi^+$')
+    ax.plot(tg, d['fid_psi'], '-.', color=C_RAW, marker='^', ms=4, mfc='none',
+            label='free induction, $\\Psi^+$ ($\\times 11$ DFS split)')
+    ax.plot(tg, d['sync_phi'], '-', color=C_MIT, marker='o', ms=4,
+            label='symmetric train, in-phase\n(simultaneous pulses)')
+    ax.plot(tg, d['anti_phi'], '-', color=C_REF, marker='s', ms=4,
+            label='same train, anti-phase\n(the measured $\\mathrm{Re}\\,S_{1,2}>0$ choice)')
+    ax.plot(tg, d['nt_phi'], '--', color=C_ROB, marker='D', ms=3.5,
+            label='blind NT idle (avg.-fidelity winner)')
+    ax.plot(tg, d['sync_phi_pred'], 'o', ms=7, mfc='none', color=C_MIT,
+            alpha=0.7, label='predicted from the blind\nreconstruction')
+    ax.plot(tg, d['anti_phi_pred'], 's', ms=7, mfc='none', color=C_REF,
+            alpha=0.7)
+    for i in range(tg.size):
+        r = float(d['sync_phi'][i] / d['anti_phi'][i])
+        ax.annotate(f"$\\times{r:.0f}$", xy=(tg[i], np.sqrt(
+            float(d['sync_phi'][i]) * float(d['anti_phi'][i]))),
+            fontsize=7, color='k', ha='center', alpha=0.75)
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlabel(r"storage time $T_G/\tau$")
+    ax.set_ylabel(r"Bell-pair infidelity $1-F_{\Phi^+}$")
+    ax.grid(True, alpha=0.25)
+    ax.legend(frameon=False, fontsize=7, loc='upper left')
+    fig.tight_layout()
+    fig.savefig(os.path.join(OUT, "fig_storage.pdf"), bbox_inches='tight')
     plt.close(fig)
 
 
@@ -510,4 +554,7 @@ if __name__ == "__main__":
     if which in ('all', 'design'):
         fig_design()
         print("fig_design_experiments done")
+    if which in ('all', 'storage'):
+        fig_storage()
+        print("fig_storage done")
     print(f"figures -> {OUT}")

@@ -151,8 +151,23 @@ _SC_ZZ_W0, _SC_ZZ_SIG = 0.2356, 0.020
 _SC_H_ZZ_LINE = 1.4e-05            # coupler TLF resonance (2Q-only structure)
 _SC_H_ZZ_KNEE = 0.5e-06            # 3e-6 cost full-NT ~1.1e-4 via the FORCED
                                    # low-w ZZ exposure (dc_12 >= pi/(4 Jmax))
+# Shared slow carrier (SHOWCASE-0612, cross-spectra story): the slow bath that
+# carries the coherence budget is COMMON-MODE between the qubits at fraction
+# _SC_C2_QS (global field/thermal/charge drift; the measured class -- Yoneda
+# 2023 |c_12| up to 0.7 at low f), with the remainder qubit-local. This adds
+# the carrier to Re S_1_2 ONLY: S_11/S_22 keep the same totals (the carrier
+# power per qubit is unchanged), and zeta_12 = A_J e_A - B_J e_B + j never
+# sees it (a common-mode drift cancels in the interdot-tilt difference
+# coupling), so S_1212, S_1_12, S_2_12 are bit-identical too. Downstream this
+# is FIRST-ORDER INVISIBLE to average gate fidelity (the DQ/ZQ cross terms
+# cancel over the PTM) -- it is load-bearing only for element-resolved
+# quantities (which Bell coherence survives an idle), which is exactly the
+# cross-spectra demonstration the showcase report carries.
+_SC_C2_QS = 0.85                   # shared (common-mode) fraction of the
+                                   # carrier power = its inter-qubit coherence
 
 HAS_ZZ_EXTRA = (_REGIME == "showcase")
+HAS_QS_SHARED = (_REGIME == "showcase")
 
 
 def line_priors():
@@ -234,18 +249,39 @@ if _REGIME == "showcase":
         return _SC_A_FL_2*_plaw(w, _SC_G_FL)
 
     @jax.jit
+    def S_qs_1(w):
+        """Qubit-1 slow-carrier PSD (T2* carrier, whose in-band w^-2 tail also
+        punishes CDD1-2). Shared between the qubits at fraction _SC_C2_QS;
+        the synthesis carries it as its own shared+local component pair."""
+        return _SC_A_QS_1*_plaw(w, _SC_G_QS, _SC_W_QS)
+
+    @jax.jit
+    def S_qs_2(w):
+        """Qubit-2 slow-carrier PSD (same shape; amplitude re-solved for
+        T2* = 3500 tau)."""
+        return _SC_A_QS_2*_plaw(w, _SC_G_QS, _SC_W_QS)
+
+    @jax.jit
+    def S_lines_1(w):
+        """Qubit-1 trap-line family (strictly local defect structure)."""
+        return _sc_lines(w, _SC_LINE_AMP_Q1)
+
+    @jax.jit
+    def S_lines_2(w):
+        """Qubit-2 trap-line family (strictly local defect structure)."""
+        return _sc_lines(w, _SC_LINE_AMP_Q2)
+
+    @jax.jit
     def S_nuc_1(w):
         """Qubit-1 local low-frequency + featured component (showcase):
-        quasistatic slow bath (T2* carrier, whose in-band w^-2 tail also
-        punishes CDD1-2) + trap-line family."""
-        return (_SC_A_QS_1*_plaw(w, _SC_G_QS, _SC_W_QS)
-                + _sc_lines(w, _SC_LINE_AMP_Q1))
+        slow carrier + trap-line family. Total is UNCHANGED by the carrier's
+        shared/local split -- only S_1_2 sees the split."""
+        return S_qs_1(w) + S_lines_1(w)
 
     @jax.jit
     def S_nuc_2(w):
         """Qubit-2 local low-frequency + featured component (showcase)."""
-        return (_SC_A_QS_2*_plaw(w, _SC_G_QS, _SC_W_QS)
-                + _sc_lines(w, _SC_LINE_AMP_Q2))
+        return S_qs_2(w) + S_lines_2(w)
 
     @jax.jit
     def S_zz_extra(w):
@@ -266,6 +302,7 @@ else:
         return A_EL_2*_plaw(w, _G_EL_2)
 
     S_zz_extra = None
+    S_qs_1 = S_qs_2 = S_lines_1 = S_lines_2 = None
 
     if _LINES_ON:
         @jax.jit
@@ -325,8 +362,15 @@ def S_1212(w):
 
 @jax.jit
 def S_1_2(w):
-    """Cross-spectrum of qubits 1 and 2 (the shared electrical part only)."""
-    return _cross_el(w)
+    """Cross-spectrum of qubits 1 and 2: the shared electrical part, plus (in
+    the showcase regime) the common-mode slow carrier. The carrier term is
+    REAL and positive -- a common drift hits both qubits with no lag -- so the
+    sign of Re S_1_2 at low frequency is a measurable model prediction (it
+    decides which Bell coherence an idle protects)."""
+    base = _cross_el(w)
+    if HAS_QS_SHARED:
+        base = base + _SC_C2_QS*jnp.sqrt(S_qs_1(w)*S_qs_2(w))
+    return base
 
 
 @jax.jit
