@@ -624,27 +624,30 @@ def _sym_gauss(w, w0, sig):
 
 
 def _fit_comb_lines(wk_full, vals, centers, sigma):
-    """Nonnegative LSQ heights of Gaussian lines (known centers/width) on comb teeth.
+    """Nonnegative LSQ heights of Gaussian lines (known centers/widths) on comb teeth.
 
     Teeth within 3*sigma of a center carry the line's excess over the local smooth
     background (interpolated through the remaining teeth); NNLS soaks exactly that
     excess into the heights. Near-degenerate centers share teeth, so NNLS splits
     their unresolved total weight -- which is all the forward model needs. Returns
     zeros when nothing significant fits (e.g. the bland regime reconstructed with
-    line priors passed anyway).
+    line priors passed anyway). ``sigma`` may be a scalar (shared width) or a
+    per-line array (showcase regime).
     """
     from scipy.optimize import nnls
     wk_full = np.asarray(wk_full, dtype=float)
     v = np.real(np.asarray(vals)).astype(float)
     centers = np.asarray(centers, dtype=float)
+    sigmas = np.broadcast_to(np.asarray(sigma, dtype=float), centers.shape)
     is_line = np.zeros(wk_full.size, dtype=bool)
-    for w0 in centers:
-        is_line |= np.abs(wk_full - w0) < 3.0 * sigma
+    for w0, sg in zip(centers, sigmas):
+        is_line |= np.abs(wk_full - w0) < 3.0 * sg
     is_line &= wk_full > 0                      # never the DC point
     if not is_line.any() or is_line.sum() >= wk_full.size - 2:
         return np.zeros(centers.size)
     bg = np.interp(wk_full[is_line], wk_full[~is_line], v[~is_line])
-    A = np.stack([_sym_gauss(wk_full[is_line], w0, sigma) for w0 in centers], axis=1)
+    A = np.stack([_sym_gauss(wk_full[is_line], w0, sg)
+                  for w0, sg in zip(centers, sigmas)], axis=1)
     h, _ = nnls(A, v[is_line] - bg)
     return h
 
@@ -685,13 +688,14 @@ def selfconsistent_spectra(wk_full, recon, lines=None):
     reconstructed data or an experimentally-known prior:
 
     * smooth background: piecewise-linear through the (de-lined) reconstructed points;
-    * narrow lines, when ``lines=(centers, sigma)`` is given (``noise.spectra.
-      line_priors``): Gaussians at the experimentally-known nuclear-Larmor-difference
+    * narrow lines, when ``lines`` is given: Gaussians at the experimentally-known
       centers, heights >= 0 fitted per spectrum to the teeth they touch
-      (``_fit_comb_lines``) -- S11/S22 only, since the J channel is electrical and
-      carries no nuclear lines. Piecewise-linear cannot represent sub-tooth-width
-      lines, and the missed leakage was the dominant post-unfold residual
-      (UNFOLD-RESIDUAL, diagnosed 2026-06-11);
+      (``_fit_comb_lines``). Legacy form ``(centers, sigma)`` applies to S11/S22
+      (anchored classes: the J channel is electrical and carries no nuclear
+      lines); the per-channel dict form (``noise.spectra.line_priors_per_channel``)
+      lets the showcase regime's coupler resonance live on S1212. Piecewise-linear
+      cannot represent sub-tooth-width lines, and the missed leakage was the
+      dominant post-unfold residual (UNFOLD-RESIDUAL, diagnosed 2026-06-11);
     * high band: power-law tail above the last tooth, fitted per real/imag component
       to the top de-lined teeth (``control.tails.fit_powerlaw_tail``, same physics as
       the gate-side GATE-TAILS extension); components with no one-signed resolved
@@ -705,10 +709,21 @@ def selfconsistent_spectra(wk_full, recon, lines=None):
     wmax = wk_full[-1]
     line_fits = {}
     if lines is not None:
-        centers, sigma = lines
-        for key in ('S11', 'S22'):
-            h = _fit_comb_lines(wk_full, recon[key], centers, sigma)
-            line_fits[key] = (np.asarray(centers, dtype=float), float(sigma), h)
+        # Legacy form: (centers, sigma) applies to the qubit-local channels.
+        # Per-channel form (noise.spectra.line_priors_per_channel): a dict
+        # {key: (centers, sigmas)} -- the showcase regime's ZZ channel carries
+        # its own coupler line, and widths may differ per line.
+        if isinstance(lines, dict):
+            chan_lines = lines
+        else:
+            centers, sigma = lines
+            chan_lines = {'S11': (centers, sigma), 'S22': (centers, sigma)}
+        for key, (centers, sigma) in chan_lines.items():
+            centers = np.asarray(centers, dtype=float)
+            sigmas = np.broadcast_to(np.asarray(sigma, dtype=float),
+                                     centers.shape).astype(float)
+            h = _fit_comb_lines(wk_full, recon[key], centers, sigmas)
+            line_fits[key] = (centers, sigmas, h)
 
     def make(key):
         vals = recon[key]
@@ -717,13 +732,13 @@ def selfconsistent_spectra(wk_full, recon, lines=None):
 
         fit = line_fits.get(key)
         if fit is not None:
-            centers, sigma, h = fit
+            centers, sigmas, h = fit
 
             def line_part(w):
                 out = np.zeros_like(w, dtype=float)
-                for w0, hi in zip(centers, h):
+                for w0, sg, hi in zip(centers, sigmas, h):
                     if hi > 0:
-                        out = out + hi * _sym_gauss(w, w0, sigma)
+                        out = out + hi * _sym_gauss(w, w0, sg)
                 return out
             re = re - line_part(wk_full)        # de-lined teeth -> smooth background
         else:

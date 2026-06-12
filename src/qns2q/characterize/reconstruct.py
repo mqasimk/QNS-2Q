@@ -528,9 +528,13 @@ class SpectraReconstructor:
         systematic becomes the iteration increment |b2 - b1| (the fixed-point
         convergence scale) instead of the full bias.
         """
-        from qns2q.noise.spectra import line_priors
+        from qns2q.noise.spectra import line_priors_per_channel
         c = self.config
-        lines = line_priors()
+        # Per-channel prior form: identical to the legacy (centers, sigma) on
+        # the anchored classes; under the showcase regime it adds the coupler
+        # line on S1212 (which the piecewise-linear background would otherwise
+        # miss -- the UNFOLD-RESIDUAL lesson, applied to the new channel).
+        lines = line_priors_per_channel()
         inv_opts = dict(inversion_method=c.inversion_method, reg_lambda=c.reg_lambda,
                         enforce_nonneg=c.enforce_nonneg)
         n_h = len(c.c_times)

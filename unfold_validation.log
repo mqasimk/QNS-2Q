@@ -1,0 +1,162 @@
+=== UNFOLDED RECONSTRUCTION of existing 64k run — Wed Jun 10 05:05:51 PM EDT 2026 ===
+--- recon (unfolded): reference — Wed Jun 10 05:05:51 PM EDT 2026 ---
+DC values (reliable?): S_11(0)=2.636e-03(True), S_22(0)=2.626e-03(True), S_1212(0)=1.661e-04(False)
+[unfold] self-consistent comb-bias correction (applied bias RMS -> residual RMS, harmonics):
+       S11:  3.639e-05 ->  1.023e-06
+       S22:  5.569e-05 ->  2.141e-06
+     S1212:  2.156e-06 ->  1.257e-07
+       S12:  2.914e-05 ->  2.023e-06
+      S112:  1.147e-05 ->  4.767e-07
+      S212:  1.133e-05 ->  4.684e-07
+[systematic] folded sigma_sys per spectrum (forward-model comb bias; RMS over harmonics, |DC bias|):
+       S11: harmonic RMS =  1.023e-06  |DC bias| =  1.827e-06
+       S22: harmonic RMS =  2.141e-06  |DC bias| =  1.712e-06
+     S1212: harmonic RMS =  1.257e-07  |DC bias| =  0.000e+00  [DC flagged: not determined]
+       S12: harmonic RMS =  2.023e-06  |DC bias| =  7.296e-07
+      S112: harmonic RMS =  4.767e-07  |DC bias| =  3.579e-07
+      S212: harmonic RMS =  4.684e-07  |DC bias| =  0.000e+00  [DC flagged: not determined]
+Saved combined spectra plot to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_reference/figures/reconstruction/spectral_reconstruction_all_pub.pdf
+Saved cross-spectra plot to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_reference/figures/reconstruction/spectral_reconstruction_cross_pub.pdf
+--- recon (unfolded): raw — Wed Jun 10 05:06:48 PM EDT 2026 ---
+DC values (reliable?): S_11(0)=1.995e-03(True), S_22(0)=3.157e-03(True), S_1212(0)=1.670e-04(False)
+[unfold] self-consistent comb-bias correction (applied bias RMS -> residual RMS, harmonics):
+       S11:  3.483e-05 ->  1.004e-06
+       S22:  6.170e-05 ->  2.592e-06
+     S1212:  2.134e-06 ->  1.252e-07
+       S12:  2.906e-05 ->  2.001e-06
+      S112:  9.849e-06 ->  4.116e-07
+      S212:  1.156e-05 ->  4.788e-07
+[systematic] folded sigma_sys per spectrum (forward-model comb bias; RMS over harmonics, |DC bias|):
+       S11: harmonic RMS =  1.004e-06  |DC bias| =  9.237e-07
+       S22: harmonic RMS =  2.592e-06  |DC bias| =  2.388e-06
+     S1212: harmonic RMS =  1.252e-07  |DC bias| =  0.000e+00  [DC flagged: not determined]
+       S12: harmonic RMS =  2.001e-06  |DC bias| =  0.000e+00  [DC flagged: not determined]
+      S112: harmonic RMS =  4.116e-07  |DC bias| =  0.000e+00  [DC flagged: not determined]
+      S212: harmonic RMS =  4.788e-07  |DC bias| =  0.000e+00  [DC flagged: not determined]
+Saved combined spectra plot to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_raw/figures/reconstruction/spectral_reconstruction_all_pub.pdf
+Saved cross-spectra plot to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_raw/figures/reconstruction/spectral_reconstruction_cross_pub.pdf
+--- recon (unfolded): mitigated — Wed Jun 10 05:07:45 PM EDT 2026 ---
+DC values (reliable?): S_11(0)=2.637e-03(True), S_22(0)=2.626e-03(True), S_1212(0)=1.735e-04(False)
+[unfold] self-consistent comb-bias correction (applied bias RMS -> residual RMS, harmonics):
+       S11:  3.639e-05 ->  1.023e-06
+       S22:  5.569e-05 ->  2.141e-06
+     S1212:  2.154e-06 ->  1.253e-07
+       S12:  2.914e-05 ->  2.023e-06
+      S112:  1.146e-05 ->  4.761e-07
+      S212:  1.134e-05 ->  4.687e-07
+[systematic] folded sigma_sys per spectrum (forward-model comb bias; RMS over harmonics, |DC bias|):
+       S11: harmonic RMS =  1.023e-06  |DC bias| =  1.828e-06
+       S22: harmonic RMS =  2.141e-06  |DC bias| =  1.713e-06
+     S1212: harmonic RMS =  1.253e-07  |DC bias| =  0.000e+00  [DC flagged: not determined]
+       S12: harmonic RMS =  2.023e-06  |DC bias| =  7.220e-07
+      S112: harmonic RMS =  4.761e-07  |DC bias| =  3.595e-07
+      S212: harmonic RMS =  4.687e-07  |DC bias| =  0.000e+00  [DC flagged: not determined]
+Saved combined spectra plot to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_mitigated/figures/reconstruction/spectral_reconstruction_all_pub.pdf
+Saved cross-spectra plot to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_mitigated/figures/reconstruction/spectral_reconstruction_cross_pub.pdf
+=== comparison — Wed Jun 10 05:08:43 PM EDT 2026 ===
+spectrum |        no SPAM (reference) |          SPAM, unmitigated |             SPAM-mitigated |
+         |     rel.dev / pull / <2sig |     rel.dev / pull / <2sig |     rel.dev / pull / <2sig |
+-------------------------------------------------------------------------------------------------
+     S11 |   4.64% / 2.05 /  48% |  11.34% / 5.00 /  10% |   4.64% / 2.05 /  48% |
+     S22 |   5.29% / 3.21 /  24% |   6.53% / 5.62 /  14% |   5.29% / 3.24 /  24% |
+   S1212 |  10.78% / 1.50 /  62% |   8.14% / 0.90 /  62% |  10.51% / 1.53 /  62% |
+     S12 |   3.78% / 1.52 /  57% |   5.73% / 1.74 /  57% |   3.78% / 1.53 /  62% |
+    S112 |   9.49% / 1.59 /  67% |  14.09% / 3.63 /  14% |   9.62% / 1.44 /  71% |
+    S212 |   8.92% / 1.07 /  67% |  12.50% / 1.74 /  62% |   8.66% / 1.04 /  71% |
+
+Saved comparison figure to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_mitigated/figures/spam_protocol_comparison.pdf
+Saved pulls figure to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_mitigated/figures/spam_protocol_pulls.pdf
+=== n_meas smoke test (reduced, projection noise on) — Wed Jun 10 05:08:46 PM EDT 2026 ===
+Running QNS experiments [seed=20260608]...
+SPAM protocol: none
+[dataset] recording phase coefficients -> /home/mqasimk/IdeaProjects/QNS-2Q/NMeasCheck_ref/phases.npz
+Running experiment: C_12_0_MT_1
+--- C_12_0_MT_1 completed in 3.97s ---
+Running experiment: C_12_0_MT_2
+--- C_12_0_MT_2 completed in 2.44s ---
+Running experiment: C_12_0_MT_3
+--- C_12_0_MT_3 completed in 0.46s ---
+Running experiment: C_12_12_MT_1
+--- C_12_12_MT_1 completed in 0.46s ---
+Running experiment: C_12_12_MT_2
+--- C_12_12_MT_2 completed in 0.45s ---
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 1.01s ---
+Running experiment: C_2_0_MT_1
+--- C_2_0_MT_1 completed in 0.32s ---
+Running experiment: C_12_0_MT_4
+--- C_12_0_MT_4 completed in 0.45s ---
+Running experiment: C_1_2_MT_1
+--- C_1_2_MT_1 completed in 0.26s ---
+Running experiment: C_1_2_MT_2
+--- C_1_2_MT_2 completed in 0.65s ---
+Running experiment: C_2_1_MT_1
+--- C_2_1_MT_1 completed in 0.26s ---
+Running experiment: C_2_1_MT_2
+--- C_2_1_MT_2 completed in 0.39s ---
+Running DC sweep: C_1_0_FIDCDD3 over m=[1, 2, 3, 4, 5, 6, 7, 8]
+--- C_1_0_FIDCDD3 sweep done in 0.74s ---
+Running DC sweep: C_2_0_CDD3FID over m=[1, 2, 3, 4, 5, 6, 7, 8]
+--- C_2_0_CDD3FID sweep done in 0.20s ---
+Running DC sweep: C_1_0_FIDFID over m=[1, 2, 3, 4, 5, 6, 7, 8]
+--- C_1_0_FIDFID sweep done in 0.18s ---
+Running DC sweep: C_2_0_FIDFID over m=[1, 2, 3, 4, 5, 6, 7, 8]
+--- C_2_0_FIDFID sweep done in 0.18s ---
+Running DC sweep: C_12_0_FID_FID over m=[1, 2, 3, 4, 5, 6, 7, 8]
+--- C_12_0_FID_FID sweep done in 0.31s ---
+Running DC sweep: C_12_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8]
+--- C_12_12_FID sweep done in 0.29s ---
+Running DC sweep: C_1_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8]
+--- C_1_12_FID sweep done in 0.18s ---
+Running DC sweep: C_2_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8]
+--- C_2_12_FID sweep done in 0.18s ---
+Results saved to /home/mqasimk/IdeaProjects/QNS-2Q/NMeasCheck_ref
+Phase dataset saved to /home/mqasimk/IdeaProjects/QNS-2Q/NMeasCheck_ref/phases.npz (520 calls)
+Running QNS experiments [seed=20260608]...
+SPAM protocol: none
+Projection noise: n_meas = 500 measurements/realization
+[dataset] replaying phase coefficients <- /home/mqasimk/IdeaProjects/QNS-2Q/NMeasCheck_ref/phases.npz (520 calls)
+Running experiment: C_12_0_MT_1
+--- C_12_0_MT_1 completed in 0.18s ---
+Running experiment: C_12_0_MT_2
+--- C_12_0_MT_2 completed in 0.16s ---
+Running experiment: C_12_0_MT_3
+--- C_12_0_MT_3 completed in 0.16s ---
+Running experiment: C_12_12_MT_1
+--- C_12_12_MT_1 completed in 0.18s ---
+Running experiment: C_12_12_MT_2
+--- C_12_12_MT_2 completed in 0.16s ---
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 0.19s ---
+Running experiment: C_2_0_MT_1
+--- C_2_0_MT_1 completed in 0.19s ---
+Running experiment: C_12_0_MT_4
+--- C_12_0_MT_4 completed in 0.17s ---
+Running experiment: C_1_2_MT_1
+--- C_1_2_MT_1 completed in 0.12s ---
+Running experiment: C_1_2_MT_2
+--- C_1_2_MT_2 completed in 0.26s ---
+Running experiment: C_2_1_MT_1
+--- C_2_1_MT_1 completed in 0.12s ---
+Running experiment: C_2_1_MT_2
+--- C_2_1_MT_2 completed in 0.25s ---
+Running DC sweep: C_1_0_FIDCDD3 over m=[1, 2, 3, 4, 5, 6, 7, 8]
+--- C_1_0_FIDCDD3 sweep done in 0.10s ---
+Running DC sweep: C_2_0_CDD3FID over m=[1, 2, 3, 4, 5, 6, 7, 8]
+--- C_2_0_CDD3FID sweep done in 0.10s ---
+Running DC sweep: C_1_0_FIDFID over m=[1, 2, 3, 4, 5, 6, 7, 8]
+--- C_1_0_FIDFID sweep done in 0.08s ---
+Running DC sweep: C_2_0_FIDFID over m=[1, 2, 3, 4, 5, 6, 7, 8]
+--- C_2_0_FIDFID sweep done in 0.08s ---
+Running DC sweep: C_12_0_FID_FID over m=[1, 2, 3, 4, 5, 6, 7, 8]
+--- C_12_0_FID_FID sweep done in 0.09s ---
+Running DC sweep: C_12_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8]
+--- C_12_12_FID sweep done in 0.09s ---
+Running DC sweep: C_1_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8]
+--- C_1_12_FID sweep done in 0.09s ---
+Running DC sweep: C_2_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8]
+--- C_2_12_FID sweep done in 0.08s ---
+Results saved to /home/mqasimk/IdeaProjects/QNS-2Q/NMeasCheck_proj
+C_12_0_MT_1_err: median stderr exact 1.53e-02 -> n_meas=500 1.50e-02 (x0.98)
+C_1_2_MT_1_err: median stderr exact 6.81e-03 -> n_meas=500 6.76e-03 (x0.99)
+=== ALL DONE — Wed Jun 10 05:09:04 PM EDT 2026 ===

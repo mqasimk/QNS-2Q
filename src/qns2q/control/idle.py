@@ -33,7 +33,7 @@ import scipy.optimize
 
 from qns2q.noise.spectra import (S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12,
                                  MODEL_VERSION, line_priors)
-from qns2q.control.tails import tail_extend_interp_complex
+from qns2q.control.tails import tail_extend_interp_complex, smoothfit_curve
 from qns2q.control.padding import pad_targets, pad_count, pad_delays
 from qns2q.paths import run_folder, project_root
 
@@ -113,6 +113,8 @@ class Config:
                  gate_time_factors=None,
                  spectral_model="interp",
                  max_dim=0,
+                 min_sep_factor=1.0,
+                 char_self_only=False,
                  plot_data_name="plotting_data_id_v4.npz"
                  ):
 
@@ -185,7 +187,22 @@ class Config:
         self.Tg = Tg
         self.tau_divisor = tau_divisor
         self.tau = self.Tqns / tau_divisor
-        
+        # Control-bandwidth scenario (SHOWCASE-0612): minimum pulse separation
+        # in units of tau, applied symmetrically to the library, the NT search
+        # and the inits. 1.0 = legacy (separation = tau). The time-domain
+        # overlap resolution stays keyed to tau.
+        if min_sep_factor < 1.0:
+            raise ValueError("min_sep_factor < 1: the minimum separation "
+                             "cannot undercut the time unit tau")
+        self.min_sep_factor = min_sep_factor
+        self.min_sep = min_sep_factor * self.tau
+        if min_sep_factor != 1.0:
+            print(f"[idle] control-bandwidth scenario: min pulse separation = "
+                  f"{min_sep_factor:g} tau")
+        # Ablation rung (c) (SHOWCASE-0612): characterized model from the
+        # single-qubit spectra alone; the ideal benchmark keeps full truth.
+        self.char_self_only = char_self_only
+
         self.M = M
         if max_pulses == 0:
             max_pulses = 10**9
@@ -266,11 +283,18 @@ class Config:
                   "the analytic-model DC (legacy behavior). Regenerate Stage 2 "
                   "for a measured DC point.")
 
+        if self.spectral_model not in ('interp', 'selfconsistent', 'smoothfit'):
+            raise ValueError(f"unknown spectral_model {self.spectral_model!r}")
         use_sc = (self.spectral_model == 'selfconsistent')
+        use_smooth = (self.spectral_model == 'smoothfit')
         if use_sc and self.use_simulated:
             raise ValueError("spectral_model='selfconsistent' models a "
                              "reconstructed comb; simulated_spectra.npz "
                              "already IS the analytic model")
+        if use_smooth:
+            print("[idle] spectral_model='smoothfit': LINE-BLIND characterized "
+                  "model (single power law through all teeth per self-"
+                  "spectrum; crosses interp) -- ablation rung (b)")
         if use_sc:
             # OPT-SPECTRAL-MODEL: each channel from the same line/tail/head-
             # aware model the unfold bias correction uses (characterize.
@@ -291,12 +315,17 @@ class Config:
             the last tooth either way -- control.tails / the sc model)."""
             if use_sc:
                 return jnp.asarray(np.asarray(sc_fns[key](w_np), dtype=complex))
+            if use_smooth and key in ("S11", "S22", "S1212"):
+                dc_val = (float(np.real(np.asarray(self.specs[key])[0]))
+                          if grid_has_dc else float(np.real(dc_func(w0)[0])))
+                return smoothfit_curve(self.w, self.wkqns, self.specs[key],
+                                       dc_val=dc_val).astype(jnp.complex128)
             interp = tail_extend_interp_complex(self.w, self.wkqns,
                                                 self.specs[key])
             if grid_has_dc:
                 return interp
             return interp.at[0].set(dc_func(w0)[0])
-        
+
         # Diagonal elements. NaN here means corrupted data, not a protocol
         # limitation -- fail loudly.
         for key in ("S11", "S22", "S1212"):
@@ -305,6 +334,15 @@ class Config:
                                  f"corrupted specs.npz?")
         SMat = SMat.at[1, 1].set(combine("S11", S_11))
         SMat = SMat.at[2, 2].set(combine("S22", S_22))
+        if self.char_self_only:
+            # Ablation rung (c): a single-qubit-only QNS campaign leaves the
+            # ZZ self-spectrum and every cross unreconstructed -- the blind
+            # objective assumes zero there; SMat_ideal keeps the full truth,
+            # so the benchmark prices what the 2Q reconstruction adds.
+            print("[idle] char_self_only: S1212 + crosses DROPPED from the "
+                  "characterized model (1Q-only QNS counterfactual); the "
+                  "ideal benchmark retains them.")
+            return SMat
         SMat = SMat.at[3, 3].set(combine("S1212", S_1212))
 
         # Off-diagonal elements. A channel the protocol could not reconstruct
@@ -966,8 +1004,8 @@ def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
     def run_single_optimization(n1, n2, initial_params, label):
         nonlocal best_inf, best_seq
 
-        # Bounds
-        bounds = [(config.tau, T_seq) for _ in range(len(initial_params))]
+        # Bounds (min_sep = tau unless the control-bandwidth scenario raises it)
+        bounds = [(config.min_sep, T_seq) for _ in range(len(initial_params))]
 
         n1p = pad_count(n1, opt_targets)
         n2p = pad_count(n2, opt_targets)
@@ -986,7 +1024,8 @@ def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
         A = np.zeros((2, n1 + n2))
         A[0, :n1] = 1
         A[1, n1:] = 1
-        linear_cons = scipy.optimize.LinearConstraint(A, -np.inf, T_seq - config.tau)
+        linear_cons = scipy.optimize.LinearConstraint(A, -np.inf,
+                                                      T_seq - config.min_sep)
 
         try:
             res = scipy.optimize.minimize(fun_wrapper, np.asarray(initial_params), method='SLSQP',
@@ -1023,7 +1062,7 @@ def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
 
     # 2. Random Optimization
     for n1, n2 in n_pulses_list:
-        if (n1 + 1) * config.tau > T_seq or (n2 + 1) * config.tau > T_seq:
+        if (n1 + 1) * config.min_sep > T_seq or (n2 + 1) * config.min_sep > T_seq:
             print(f"Skipping Random Opt (n={n1},{n2}): Over-constrained (Too many pulses for T_seq)")
             continue
 
@@ -1210,7 +1249,7 @@ def run_optimization_pipeline(config):
         print(f"  No Pulse (Ideal): {inf_nopulse:.6e}")
         
         # 1. Known Sequences
-        pLib_delays, pLib_desc = construct_pulse_library(config.T_seq, config.tau, config.max_pulses_per_rep)
+        pLib_delays, pLib_desc = construct_pulse_library(config.T_seq, config.min_sep, config.max_pulses_per_rep)
         
         best_known_seq = None
         best_known_inf = 1.0
@@ -1246,7 +1285,7 @@ def run_optimization_pipeline(config):
         best_opt_seq = None
         
         # Random candidate selection
-        max_n_physical = int(config.T_seq / config.tau) - 1
+        max_n_physical = int(config.T_seq / config.min_sep) - 1
         upper_bound_physical = max(1, max_n_physical - 1)
         effective_max = min(config.max_pulses_per_rep, upper_bound_physical)
         if config.max_dim > 0 and 2 * effective_max > config.max_dim:
@@ -1395,12 +1434,22 @@ if __name__ == "__main__":
                              "a protocol cannot reconstruct, e.g. robust "
                              "S112/S212, are auto-dropped from the "
                              "characterized model alone)")
-    parser.add_argument('--spectral-model', choices=('interp', 'selfconsistent'),
+    parser.add_argument('--spectral-model',
+                        choices=('interp', 'selfconsistent', 'smoothfit'),
                         default='interp',
                         help="characterized-SMat construction: linear interp "
-                             "through the teeth (+tails), or the unfold "
+                             "through the teeth (+tails); the unfold "
                              "model's line/tail/head-aware spectra "
-                             "(OPT-SPECTRAL-MODEL)")
+                             "(OPT-SPECTRAL-MODEL); or the LINE-BLIND single "
+                             "power law (ablation rung (b), SHOWCASE-0612)")
+    parser.add_argument('--min-sep', type=float, default=1.0,
+                        help="minimum pulse separation in units of tau "
+                             "(SHOWCASE-0612 control-bandwidth scenario; "
+                             "default 1.0 = legacy)")
+    parser.add_argument('--self-only', action='store_true',
+                        help="ablation rung (c): characterized model from "
+                             "S11/S22 alone (S1212 + crosses dropped); the "
+                             "ideal benchmark keeps the full truth")
     parser.add_argument('--max-pulses', type=int, default=1000,
                         help="total pulse-count cap across all repetitions "
                              "(default 1000, the published-run value); 0 = "
@@ -1454,6 +1503,8 @@ if __name__ == "__main__":
                 M=m,
                 max_pulses=cli.max_pulses,
                 max_dim=cli.max_dim,
+                min_sep_factor=cli.min_sep,
+                char_self_only=cli.self_only,
                 num_random_trials=20,
                 tau_divisor=160,
                 use_simulated=cli.simulated,
@@ -1505,6 +1556,8 @@ if __name__ == "__main__":
             data_to_save['seed'] = RANDOM_SEED
             data_to_save['max_pulses'] = int(last_config.max_pulses)
             data_to_save['max_dim'] = int(last_config.max_dim)
+            data_to_save['min_sep_factor'] = float(last_config.min_sep_factor)
+            data_to_save['char_self_only'] = bool(last_config.char_self_only)
             # Frequency grid kept for reference; SMat omitted (plot scripts
             # recompute spectra from the analytic noise model -- avoids ~5 MB
             # of dead weight).

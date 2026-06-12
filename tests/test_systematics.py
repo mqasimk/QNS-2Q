@@ -15,6 +15,7 @@ from qns2q.characterize.systematics import (comb_inversion_systematic, analytic_
                                             forward_model_systematic, forward_observables, _FWD_OBS,
                                             dc_fit_systematic)
 from qns2q.characterize.inversion import _ramsey_fit_dc
+from qns2q.paths import current_regime
 
 # Small but representative config (keep the grids light so the test stays fast).
 # tau units (tau = 1): matches the dimensionless spectra in noise/spectra.py.
@@ -90,13 +91,19 @@ def test_dc_self_spectra_leak_bias_small():
     (S_1212(0)/S_11(0) ~ 0.04, gate-operating-point calibration), so neither it nor
     the small negative FID short-time tail biases the DC fit appreciably. (Under the
     pre-2026-06 model the leak was ~80% of the self DC and forced a positive bias;
-    that sign claim was model-specific.)"""
+    that sign claim was model-specific.) The SHOWCASE regime's slow-bath head
+    (W_QS = 2.5e-3, ~8x sharper than the anchored W_IR plateau) makes the raw
+    window bias ~25% by construction -- there the bound is the generic <25%
+    sanity level, and correctness rests on the forward-model correction
+    (test_dc_fit_systematic_recovers_self_and_qq_cross, which runs under every
+    regime)."""
+    frac = 0.25 if current_regime() == "showcase" else 0.01
     spectra = analytic_spectra()
     bias = dc_systematic(spectra, M, T, n_tb_per_period=1000, n_wfine=60001)
     for key in ('S11', 'S22'):
         truth = float(np.real(spectra[key](np.array([0.0]))[0]))
-        assert abs(bias[key]) < 0.01 * abs(truth), \
-            f"{key} DC bias {bias[key]:.2e} exceeds 1% of truth {truth:.2e}"
+        assert abs(bias[key]) < frac * abs(truth), \
+            f"{key} DC bias {bias[key]:.2e} exceeds {frac:.0%} of truth {truth:.2e}"
 
 
 def test_selfconsistent_runs_without_truth(systematic_result):

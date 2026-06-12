@@ -1,0 +1,65 @@
+=== UNFOLD v2 (residual = |b2-b1| (+) 0.5|b2|) — Wed Jun 10 05:10:30 PM EDT 2026 ===
+DC values (reliable?): S_11(0)=2.636e-03(True), S_22(0)=2.626e-03(True), S_1212(0)=1.661e-04(False)
+[unfold] self-consistent comb-bias correction (applied bias RMS -> residual RMS, harmonics):
+       S11:  3.639e-05 ->  1.822e-05
+       S22:  5.569e-05 ->  2.793e-05
+     S1212:  2.156e-06 ->  1.085e-06
+       S12:  2.914e-05 ->  1.471e-05
+      S112:  1.147e-05 ->  5.756e-06
+      S212:  1.133e-05 ->  5.685e-06
+[systematic] folded sigma_sys per spectrum (forward-model comb bias; RMS over harmonics, |DC bias|):
+       S11: harmonic RMS =  1.822e-05  |DC bias| =  2.960e-05
+       S22: harmonic RMS =  2.793e-05  |DC bias| =  2.985e-05
+     S1212: harmonic RMS =  1.085e-06  |DC bias| =  0.000e+00  [DC flagged: not determined]
+       S12: harmonic RMS =  1.471e-05  |DC bias| =  1.077e-05
+      S112: harmonic RMS =  5.756e-06  |DC bias| =  4.907e-06
+      S212: harmonic RMS =  5.685e-06  |DC bias| =  0.000e+00  [DC flagged: not determined]
+Saved combined spectra plot to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_reference/figures/reconstruction/spectral_reconstruction_all_pub.pdf
+Saved cross-spectra plot to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_reference/figures/reconstruction/spectral_reconstruction_cross_pub.pdf
+DC values (reliable?): S_11(0)=1.995e-03(True), S_22(0)=3.157e-03(True), S_1212(0)=1.670e-04(False)
+[unfold] self-consistent comb-bias correction (applied bias RMS -> residual RMS, harmonics):
+       S11:  3.483e-05 ->  1.745e-05
+       S22:  6.170e-05 ->  3.096e-05
+     S1212:  2.134e-06 ->  1.074e-06
+       S12:  2.906e-05 ->  1.467e-05
+      S112:  9.849e-06 ->  4.942e-06
+      S212:  1.156e-05 ->  5.802e-06
+[systematic] folded sigma_sys per spectrum (forward-model comb bias; RMS over harmonics, |DC bias|):
+       S11: harmonic RMS =  1.745e-05  |DC bias| =  1.814e-05
+       S22: harmonic RMS =  3.096e-05  |DC bias| =  3.919e-05
+     S1212: harmonic RMS =  1.074e-06  |DC bias| =  0.000e+00  [DC flagged: not determined]
+       S12: harmonic RMS =  1.467e-05  |DC bias| =  0.000e+00  [DC flagged: not determined]
+      S112: harmonic RMS =  4.942e-06  |DC bias| =  0.000e+00  [DC flagged: not determined]
+      S212: harmonic RMS =  5.802e-06  |DC bias| =  0.000e+00  [DC flagged: not determined]
+Saved combined spectra plot to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_raw/figures/reconstruction/spectral_reconstruction_all_pub.pdf
+Saved cross-spectra plot to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_raw/figures/reconstruction/spectral_reconstruction_cross_pub.pdf
+DC values (reliable?): S_11(0)=2.637e-03(True), S_22(0)=2.626e-03(True), S_1212(0)=1.735e-04(False)
+[unfold] self-consistent comb-bias correction (applied bias RMS -> residual RMS, harmonics):
+       S11:  3.639e-05 ->  1.822e-05
+       S22:  5.569e-05 ->  2.793e-05
+     S1212:  2.154e-06 ->  1.084e-06
+       S12:  2.914e-05 ->  1.471e-05
+      S112:  1.146e-05 ->  5.751e-06
+      S212:  1.134e-05 ->  5.689e-06
+[systematic] folded sigma_sys per spectrum (forward-model comb bias; RMS over harmonics, |DC bias|):
+       S11: harmonic RMS =  1.822e-05  |DC bias| =  2.961e-05
+       S22: harmonic RMS =  2.793e-05  |DC bias| =  2.986e-05
+     S1212: harmonic RMS =  1.084e-06  |DC bias| =  0.000e+00  [DC flagged: not determined]
+       S12: harmonic RMS =  1.471e-05  |DC bias| =  1.069e-05
+      S112: harmonic RMS =  5.751e-06  |DC bias| =  4.929e-06
+      S212: harmonic RMS =  5.689e-06  |DC bias| =  0.000e+00  [DC flagged: not determined]
+Saved combined spectra plot to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_mitigated/figures/reconstruction/spectral_reconstruction_all_pub.pdf
+Saved cross-spectra plot to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_mitigated/figures/reconstruction/spectral_reconstruction_cross_pub.pdf
+spectrum |        no SPAM (reference) |          SPAM, unmitigated |             SPAM-mitigated |
+         |     rel.dev / pull / <2sig |     rel.dev / pull / <2sig |     rel.dev / pull / <2sig |
+-------------------------------------------------------------------------------------------------
+     S11 |   4.64% / 1.38 /  76% |  11.34% / 3.35 /  24% |   4.64% / 1.38 /  76% |
+     S22 |   5.29% / 1.89 /  52% |   6.53% / 2.74 /  43% |   5.29% / 1.88 /  52% |
+   S1212 |  10.78% / 1.50 /  62% |   8.14% / 0.90 /  62% |  10.51% / 1.53 /  62% |
+     S12 |   3.78% / 0.94 /  86% |   5.73% / 1.04 /  76% |   3.78% / 0.94 /  86% |
+    S112 |   9.49% / 1.22 /  81% |  14.09% / 3.17 /  38% |   9.62% / 1.24 /  81% |
+    S212 |   8.92% / 0.90 /  81% |  12.50% / 0.99 /  76% |   8.66% / 0.88 /  81% |
+
+Saved comparison figure to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_mitigated/figures/spam_protocol_comparison.pdf
+Saved pulls figure to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_mitigated/figures/spam_protocol_pulls.pdf
+=== DONE — Wed Jun 10 05:13:27 PM EDT 2026 ===

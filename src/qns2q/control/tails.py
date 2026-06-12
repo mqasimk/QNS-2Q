@@ -69,3 +69,42 @@ def tail_extend_interp_complex(w_dense, wk, fp, n_fit=TAIL_N_FIT):
     """Complex version: Re and Im components are fitted/extended separately."""
     return (tail_extend_interp(w_dense, wk, jnp.real(fp), n_fit)
             + 1j * tail_extend_interp(w_dense, wk, jnp.imag(fp), n_fit))
+
+
+def smoothfit_curve(w_dense, wk, comp, dc_val=None):
+    """LINE-BLIND smooth model of a self-spectrum: one power law A*w^-p,
+    log-log least-squares over ALL positive teeth, saturated toward DC.
+
+    This is the ablation-ladder rung-(b) characterization model ("coarse
+    knowledge"): an experimenter who fits a single 1/f^p charge-noise law
+    through the comb -- lines included, because a line-blind fitter cannot
+    exclude what it does not know is there -- and anchors the low-frequency
+    plateau at the measured DC point. Deliberately NOT assumption-light: the
+    point is to price what the line-aware reconstruction adds.
+
+    Parameters
+    ----------
+    w_dense : jax array -- evaluation grid (>= 0).
+    wk : array -- comb grid (may carry a DC point at index 0).
+    comp : array -- reconstructed spectrum samples on wk (real part used).
+    dc_val : float, optional -- measured S(0); caps the rising power law.
+
+    Returns the fitted curve on ``w_dense`` (real jnp array).
+    """
+    wk = np.asarray(wk, dtype=float)
+    y = np.real(np.asarray(comp)).astype(float)
+    pos = wk > 0
+    yp, wp = y[pos], wk[pos]
+    good = yp > 0
+    if good.sum() < 3:
+        # degenerate comb: fall back to a flat line at the median level
+        level = float(np.median(np.abs(yp))) if yp.size else 0.0
+        return jnp.full(w_dense.shape, level)
+    p = float(-np.polyfit(np.log(wp[good]), np.log(yp[good]), 1)[0])
+    p = float(np.clip(p, 0.0, 6.0))
+    logA = float(np.mean(np.log(yp[good]) + p * np.log(wp[good])))
+    A = float(np.exp(logA))
+    cap = float(dc_val) if (dc_val is not None and np.isfinite(dc_val)
+                            and dc_val > 0) else A * wp[0] ** (-p)
+    ws = jnp.maximum(w_dense, 1e-12)
+    return jnp.minimum(A * ws ** (-p), cap)

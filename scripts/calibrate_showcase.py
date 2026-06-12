@@ -57,7 +57,13 @@ TOOTH = 2 * np.pi / T_COMB                    # 0.0393 comb spacing
 
 # --- fixed showcase constants -----------------------------------------------------
 T2_TARGET = 3500.0
-G_QS, W_QS = 2.0, 1.0e-3       # quasistatic hyperfine (sets T2*)
+# Quasistatic-class slow bath (sets T2*). W_QS = 2.5e-3 (correlation time
+# ~400 tau = 2 us at the 5 ns anchor) keeps the FID-slope DC protocol inside
+# its linear window (t_max ~ 1600 tau >> 1/W_QS; at 1e-3 the dc_systematic
+# bias hit ~50% of S(0) and the test-suite sanity bounds) while ALSO raising
+# the in-band w^-2 tail that punishes CDD1-2 (S_QS(w >> W) ~ A ~ W at fixed
+# T2*).
+G_QS, W_QS = 2.0, 2.5e-3
 G_FL, W_IR = 0.9, 0.02         # electrical floor: falling 1/f^0.9
 W_TLF = 0.025                  # Connors-type knee position (catches CDD1-2)
 
