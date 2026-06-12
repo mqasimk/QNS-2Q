@@ -1,0 +1,288 @@
+\documentclass[10pt]{article}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage[dvipsnames]{xcolor}
+\usepackage[colorlinks=true,linkcolor=NavyBlue,citecolor=NavyBlue]{hyperref}
+\usepackage{enumitem}
+\setlength{\parskip}{0.35em}
+\setlength{\parindent}{0pt}
+
+\newcommand{\Fpro}{F_\mathrm{pro}}
+\newcommand{\TG}{T_G}
+
+\title{\vspace{-1.5em}When is the full spectral reconstruction worth it?\\
+A showcase landscape for noise-tailored two-qubit gates\vspace{-0.4em}}
+\author{Qasim Khan}
+\date{June 12, 2026}
+
+\begin{document}
+\maketitle
+\vspace{-1.8em}
+
+\textit{Following the June 12 discussion: the anchored Tarucha-class model
+stays as the realistic arm of the paper, and this note builds its
+counterpart --- a noise landscape that is deliberately engineered, feature
+by measured feature, so that the value of the full spectral reconstruction
+is not a matter of bookkeeping but visible at a glance. On it, the same
+blind pipeline as always (the optimizer never sees ground truth; every
+quoted ``true'' infidelity is evaluated exactly on the analytic model)
+delivers entangling gates at the $10^{-4}$ level on a device whose generic
+dynamically-corrected gates sit at today's $10^{-3}$--$10^{-2}$, with
+noise-tailoring margins that grow from $2\times$ at the shortest gate to
+$44\times$ at $0.8\,T_2^*$ --- and a knowledge-ablation ladder showing
+precisely which ingredient of the characterization pipeline buys what. All
+numbers June 12, 2026; gate results on the 64k-shot reconstruction unless
+stated.}
+
+\section{The landscape: engineered contrast from measured ingredients}
+\label{sec:model}
+
+The question this scenario is built to answer is the one raised on the
+thread: \emph{when does knowing the spectrum --- all of it --- pay
+dramatically?} The anchored model answered ``for that device, modestly''
+(a flat $\sim$1.5--1.7$\times$). The honest way to show the other end of
+the dial is not to inflate noise strengths but to engineer \emph{contrast}:
+concentrate the dephasing weight where generic decoupling cannot avoid it,
+and leave quiet windows that only a spectrally informed design can find.
+Every ingredient below is a measured \emph{type} of spectral feature; what
+is stylized is only how starkly they stand apart. The device itself is kept
+resolutely realistic: $T_2^* = 3500\,\tau$ per qubit ($17.6\,\mu$s at the
+$\tau = 5$\,ns anchor --- the measured Ge-hole value, equivalently
+purified $^{28}$Si at $\tau \approx 7$\,ns), and a finite control bandwidth,
+$\text{min pulse separation} = 8\tau$ (40\,ns $\pi$-pulse spacing at the
+anchor), applied symmetrically to every sequence considered --- library,
+tailored, and counterfactual alike.
+
+The composition (Fig.~\ref{fig:spectra}):
+\begin{itemize}[leftmargin=1.4em, itemsep=0.1em]
+\item \textbf{A quasistatic-class slow bath} on each qubit (correlation
+time $\sim 400\tau$) carries the entire $T_2^*$ budget. Its in-band
+$\omega^{-2}$ tail is what punishes the \emph{low} decoupling orders: CDD1
+and CDD2 cannot escape it ($\gtrsim 7\times 10^{-3}$ at
+$\TG = 320\tau$).
+\item \textbf{A defect-harmonic line family} $\{\omega_0, 2\omega_0,
+3\omega_0, 4\omega_0\}$ with $\omega_0\tau = 0.051$ on the qubit-local
+channels. Measured precedent for a defect line plus its harmonic: the
+$^{73}$Ge Larmor line ($f_L$, Hendrickx 2024) and the HRL observation of
+$f_L$ \emph{and} $2f_L$ surviving isotopic purification. The placement is
+the engineered part: the de-duplicated CDD ladder at $\TG = 320\tau$ has
+fundamentals $\pi n/\TG$ with $n = \{5, 10, 21\}$ for CDD3/4/5 --- i.e.\ at
+$\{0.049, 0.098, 0.206\}$, each within a line width of a family member.
+Doubling the gate time slides the ladder down by exactly one harmonic, so
+the trap holds across the whole $\TG$ sweep --- that is why the margin
+\emph{grows} with gate time in Fig.~\ref{fig:gates} instead of appearing at
+one sweet spot.
+\item \textbf{A top-window line at $\omega\tau = 0.372$.} Under the
+bandwidth constraint the densest reachable train at $320\tau$ has its
+passband at $\pi\cdot 39/320 = 0.383$: any design that simply flees up the
+falling $1/f^{0.9}$ electrical floor --- including every line-blind design
+--- parks exactly there. This line is the price of coarse knowledge.
+\item \textbf{A coupler TLF resonance at $\omega\tau = 0.236$ on the $ZZ$
+channel only} (an independent process on $\zeta_{12}$; Connors-type knee
+retained there at a low level). Single-qubit QNS cannot see it: it is the
+structure that only the two-qubit reconstruction reveals, sitting right
+beside the quiet window the tailored gates use.
+\item \textbf{A quiet electrical floor} ($1/f^{0.9}$, the measured charge
+exponent class) roughly 30\,dB below the natural-Si anchored level. This is
+the one frankly aspirational element --- it is the contrast knob --- and
+between the $4\omega_0$ line's upper edge and the top line's lower edge it
+leaves the \emph{quiet window} $\omega\tau \in [0.26, 0.31]$ whose floor,
+not any line, sets what a fully informed design can reach.
+\end{itemize}
+
+Two engineering lessons from the probe iterations are worth recording
+because they are physics, not tuning trivia. First, generic decoupling
+feels the \emph{area} of a spectral line (its filter lobes are wider than
+the line), while a tailored design parked nearby feels only the line's
+\emph{tails}: narrow-but-tall lines at constant area keep CDD trapped while
+opening the window --- the final landscape uses widths
+$\sigma\tau = 0.014$--$0.020$, still resolvable by the comb. Second, there
+is a structural ceiling: every reachable window must be flanked by mines,
+and any finite filter lobe integrates a skirt over the total mine area, so
+the single-gate-time margin saturates ($\sim$14$\times$ at $320\tau$ here);
+the way past it is the harmonic lattice, which compounds the punishment
+with gate time while the tailored gate keeps finding windows ---
+$44\times$ by $2560\tau$.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig_model_spectra.pdf}
+\caption{The showcase landscape: the six spectra (dashed), the comb
+harmonics the QNS protocol samples (dots), the dedicated DC experiments
+(diamonds), the defect-harmonic trap family (vertical lines), the coupler
+resonance on $S_{12,12}$ only, and the quiet window (shaded) in which the
+noise-tailored gates park. Line centers are off-tooth by construction; the
+line-aware reconstruction model fits their heights from the teeth they
+touch.}
+\label{fig:spectra}
+\end{figure}
+
+\section{Characterization: what 4{,}000 shots already buy}
+\label{sec:char}
+
+The protocol is unchanged --- the same comb, the same estimators, the same
+SPAM machinery as the anchored arm --- only the landscape underneath moved.
+Two reconstruction arms were run end-to-end: a 4k-shot arm (the
+shot-economy question) and a 64k-shot arm (the equal-footing reference for
+all gate numbers).
+
+\textbf{Features.} Every core line tooth (within one line width of a
+center) is detected at $>3\sigma$ with pulls $\le 1.9$ in both arms; the
+coupler line's teeth on $S_{12,12}$ are fully resolved at 64k (the 4k arm
+leaves one shoulder tooth at the consistent-but-not-significant level ---
+the one case the shot escalation was designed for). The double-echo DC
+experiment lands $S_{12,12}(0) = 5.48\times 10^{-7}$ against a true
+$5.43\times 10^{-7}$.
+
+\textbf{The floor is a bound, by design.} In the quiet window the truth
+sits one to two orders below the shot floor of any realistic acquisition;
+the teeth there reconstruct as zeros within honest bars (all 63 gap teeth
+consistent, both arms). This is not a deficiency --- it is the operating
+mode of characterization on a high-contrast landscape: the reconstruction
+\emph{locates the structure} and \emph{bounds the quiet}, and the bound is
+what the design needs. The same property makes every prediction
+conservative (Sec.~\ref{sec:ladder}).
+
+\textbf{SPAM.} The three SPAM arms (shared phase record, hardware-realistic
+mild SPAM) behave exactly as in the anchored study: the mitigated
+reconstruction is indistinguishable from the SPAM-free reference (maximum
+deviation $0.03\sigma$ across all six spectra), while the raw arm carries a
+resolvable bias --- up to $3.8\sigma$ on the $ZZ$ channel and, notably, a
+trap-line tooth mis-measured at pull 2.9: on a featured landscape, SPAM
+bias falsifies \emph{line heights}, i.e.\ exactly the quantities a tailored
+design leans on (Fig.~\ref{fig:spam}).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.96\linewidth]{figs/fig_spam_comparison.pdf}
+\caption{SPAM arms against the engineered truth at 64k shots. Mitigated
+$\equiv$ reference everywhere; the raw arm's bias is resolvable and lands
+on the worst possible places --- the line heights.}
+\label{fig:spam}
+\end{figure}
+
+\section{The knowledge ladder: one device, five designers}
+\label{sec:ladder}
+
+The meeting's central ask was to make the value of the \emph{full}
+reconstruction visible. The cleanest object we found is a ladder: the same
+device, the same gate time ($\TG = 320\tau$), the same optimizer and
+control constraints --- only the noise knowledge handed to the designer
+changes. Every row is the \emph{true} infidelity of the blind winner
+(Fig.~\ref{fig:design}a):
+
+\begin{center}
+\begin{tabular}{llr}
+\toprule
+knowledge given to the designer & what it stands for & true $1-\Fpro$ \\
+\midrule
+none (best CDD/mqCDD of the library) & generic DD practice & $3.8\times 10^{-3}$ \\
+line-blind smooth fit of the same comb data & coarse characterization & $7.1\times 10^{-3}$ \\
+single-qubit spectra only ($S_{1,1}, S_{2,2}$) & 1Q QNS campaign & $3.0\times 10^{-4}$ \\
+all six, SPAM-unmitigated (raw arm) & skipping SPAM treatment & $2.7\times 10^{-4}$ \\
+all six, SPAM-mitigated / reference & the paper's pipeline & $2.7\times 10^{-4}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Three punchlines. \emph{(i) Coarse knowledge is worse than no knowledge:}
+the smooth-fit designer, armed with the very same measured comb but no line
+model, confidently parks the filter at the top of its fitted $1/f$ floor
+--- onto the top-window line --- and delivers a gate $26\times$ worse than
+the full design and $1.9\times$ worse than generic CDD. Spectral knowledge
+is only as good as its resolution of structure. \emph{(ii) The full
+reconstruction buys $14\times$ over practice at this gate time} ($26\times$
+over coarse characterization), and the design transfers blind: the same
+optimizer run on the 4k-shot arm lands the \emph{identical} winner --- four
+thousand shots of characterization fund a $2.7\times 10^{-4}$ entangling
+gate. \emph{(iii) For this gate the single-qubit-only and raw-SPAM designs
+escape punishment} --- the CZ's near-diagonal trains happen to put little
+merged-filter weight on the coupler resonance, and the mild raw bias,
+though it visibly corrupts a window ranking, is rescued by the optimizer's
+refinement. The honest statement is that their cost here is
+\emph{certification}, not design%
+%%IDLE-RUNG-C: replace/extend once the idle self-only arm lands
+. All arms over-predict the tailored gate's
+infidelity by the same factor 1.8 (the bounded-not-resolved window floor
+enters as an upper limit), so predictions are uniformly conservative ---
+the pipeline never flatters its own gates.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.92\linewidth]{figs/fig_design_experiments.pdf}
+\caption{(a) The knowledge ladder at $\TG = 320\tau$: true infidelity of
+the blind winner as the designer's noise knowledge degrades. (b) Designs on
+the three SPAM arms: at hardware-realistic mild SPAM the design survives
+raw bias; the mitigated arm is exactly the reference.%
+%%IDLE-DESIGN-PANELS
+}
+\label{fig:design}
+\end{figure}
+
+\section{The gates: a margin that grows to $44\times$ at realistic
+infidelities}
+\label{sec:gates}
+
+Figure~\ref{fig:gates} is the headline. Across the full gate-time sweep,
+all under the bandwidth constraint and the blind protocol:
+
+\begin{center}
+\begin{tabular}{rrrrr}
+\toprule
+$\TG/\tau$ & FID & best CDD & best NT & margin \\
+\midrule
+  40 & $1.5\times 10^{-3}$ & $5.2\times 10^{-4}$ & $2.5\times 10^{-4}$ & $2.1\times$ \\
+  80 & $5.1\times 10^{-3}$ & $8.7\times 10^{-4}$ & $2.8\times 10^{-4}$ & $3.1\times$ \\
+ 160 & $1.8\times 10^{-2}$ & $2.0\times 10^{-3}$ & $2.9\times 10^{-4}$ & $6.9\times$ \\
+ 320 & $6.2\times 10^{-2}$ & $3.8\times 10^{-3}$ & $2.7\times 10^{-4}$ & $13.9\times$ \\
+ 640 & $1.8\times 10^{-1}$ & $7.8\times 10^{-3}$ & $3.3\times 10^{-4}$ & $23.7\times$ \\
+1280 & $3.9\times 10^{-1}$ & $1.5\times 10^{-2}$ & $4.3\times 10^{-4}$ & $35.4\times$ \\
+2560 & $6.1\times 10^{-1}$ & $3.1\times 10^{-2}$ & $6.9\times 10^{-4}$ & $44.2\times$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The two requested properties hold simultaneously. \emph{Realistic
+infidelities:} the tailored entangling gate sits between $2.5\times
+10^{-4}$ and $6.9\times 10^{-4}$ \emph{everywhere} --- on a device whose
+unprotected coherence would put a $2560\tau$ gate at $61\%$ error, the
+tailored gate at the same length is still under $10^{-3}$, while the best
+generic sequence of the library has climbed to $3\times 10^{-2}$.
+\emph{A dramatic, robust margin:} the CDD-over-NT ratio grows monotonically
+--- $2\times$, $3\times$, $7\times$, $14\times$, $24\times$, $35\times$,
+$44\times$ --- because the harmonic lattice re-traps the CDD ladder at
+every doubling while the tailored design keeps finding the windows. Folded
+through the full reconstruction uncertainty (200-draw ensembles per gate
+time), the \emph{predicted} margins are conservative and still decisive:
+$7.9\times\,[7.7, 8.1]$ at $320\tau$ and $41\times\,[34, 46]$ at
+$2560\tau$ (95\% CI).
+
+%%IDLE-SECTION: idle-gate numbers + the idle knowledge ladder to be inserted
+%%here when the M-sweep completes.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig_gates.pdf}
+\caption{Infidelity versus gate time and the noise-tailoring margin with
+95\% reconstruction-uncertainty bands, for the entangling (top) and idle
+(bottom) gates on the showcase landscape, 64k-shot reconstruction,
+bandwidth-constrained control.}
+\label{fig:gates}
+\end{figure}
+
+\textbf{Where this leaves the two-scenario story.} The anchored arm says:
+on a quiet, monotonic, well-behaved device, generic DD is nearly optimal
+and tailoring buys a reproducible but modest $1.5$--$1.7\times$ --- do it
+if a factor approaching two matters to you. The showcase arm says: the
+moment a device carries resolvable structure --- defect harmonics, coupler
+resonances, the things that purification demonstrably does \emph{not}
+remove --- the same characterization pipeline, at as little as 4k shots per
+estimator, is the difference between $10^{-2}$-class and $10^{-4}$-class
+two-qubit gates, and no intermediate shortcut (coarse fits, single-qubit
+campaigns, unmitigated SPAM) delivers it. Which device you have is an
+empirical question --- and answering it is itself the reconstruction.
+
+\end{document}
