@@ -70,8 +70,8 @@ W_TLF = 0.025                  # Connors-type knee position (catches CDD1-2)
 # floor amplitude: the stylized "quiet electrical environment" knob.
 # S_FL(0.30) ~ 1.2e-7 puts the NT parking-spot floor at the 2e-4 target.
 S_FLOOR_AT = 0.30
-S_FLOOR_VAL_1 = 0.40e-7
-S_FLOOR_VAL_2 = 0.52e-7
+S_FLOOR_VAL_1 = 1.00e-7
+S_FLOOR_VAL_2 = 1.30e-7
 
 # Local TLF knee on the SELFS: dropped (probe iteration 4). With W_QS =
 # 2.5e-3 the T2*-carrying quasistatic tail already punishes CDD1 at ~2e-2 and
@@ -104,11 +104,11 @@ H_TLF_2 = 0.0
 # the window; heights go UP to keep CDD5 and the blind flee-up punished.
 W0_DEFECT = 0.051
 LINES = np.array([
-    [1 * W0_DEFECT, 0.016, 1.45e-5, 1.95e-5],   # CDD3 (n=5)
-    [2 * W0_DEFECT, 0.020, 1.75e-5, 2.25e-5],   # CDD4 (n=10)
-    [3 * W0_DEFECT, 0.018, 1.60e-5, 2.05e-5],   # CPMG-16-class gap filler
-    [4 * W0_DEFECT, 0.014, 8.20e-5, 1.03e-4],   # CDD5 (n=21) + CPMG-21+-3
-    [0.3720,        0.015, 6.50e-5, 8.10e-5],   # top window: CPMG-34..39 + blind
+    [1 * W0_DEFECT, 0.016, 2.05e-5, 2.75e-5],   # CDD3 (n=5)
+    [2 * W0_DEFECT, 0.020, 2.45e-5, 3.15e-5],   # CDD4 (n=10)
+    [3 * W0_DEFECT, 0.018, 2.25e-5, 2.85e-5],   # CPMG-16-class gap filler
+    [4 * W0_DEFECT, 0.014, 1.15e-4, 1.44e-4],   # CDD5 (n=21) + CPMG-21+-3
+    [0.3720,        0.015, 9.10e-5, 1.13e-4],   # top window: CPMG-34..39 + blind
 ])
 
 # coupler (ZZ) channel: smooth electrical difference (inherited, tiny) + an
@@ -119,7 +119,7 @@ C2_SHARE = 0.8
 DT_SHIFT = 1.5
 ZZ_LINE_W0 = 6 * TOOTH         # 0.2356, inside NT's preferred gap
 ZZ_LINE_SIG = 0.020
-H_ZZ_LINE = 1.0e-5
+H_ZZ_LINE = 1.4e-5
 # Probe iteration: 3e-6 cost the full-NT design ~1.1e-4 through the CZ's
 # FORCED low-frequency ZZ exposure (dc_12 >= pi/(4 Jmax) -- no design dodges
 # it); 1e-6 keeps the 2Q-only structure visible while the rung-(c)
