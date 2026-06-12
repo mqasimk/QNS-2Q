@@ -15,7 +15,7 @@ Run folders follow the canonical scheme ``DraftRun_{NoSPAM|SPAM}_{bland|featured
 
 import os
 
-VALID_REGIMES = ("bland", "featured")
+VALID_REGIMES = ("bland", "featured", "showcase")
 DEFAULT_REGIME = "featured"
 
 
