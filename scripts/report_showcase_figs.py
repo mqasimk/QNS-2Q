@@ -63,9 +63,9 @@ def fig_model_spectra():
         yk = np.asarray(fn(wk))
         ydc = complex(np.asarray(fn(np.array([0.0]))).ravel()[0])
         ax.axvspan(*NT_WINDOW, color=C_REF, alpha=0.08, lw=0,
-                   label='quiet window (noise-tailored\ngates park here)')
+                   label='quiet band between the lines\n(exploited by the tailored gates)')
         if kind == 'self':
-            ax.plot(w, np.real(yc), 'k--', lw=1.0, label='engineered landscape')
+            ax.plot(w, np.real(yc), 'k--', lw=1.0, label='featured model')
             ax.plot(wk, np.real(yk), 'o', ms=3.5, color=C_REF,
                     label='comb harmonics (QNS samples)')
             ax.plot([0.0], [np.real(ydc)], 'D', ms=4.5, mfc='none',
@@ -87,12 +87,12 @@ def fig_model_spectra():
     for j, c in enumerate(c11):
         for ax in (axs[0, 0], axs[0, 1]):
             ax.axvline(c, color=C_MIT, lw=1.1, alpha=0.9,
-                       label=('defect-harmonic trap lines'
+                       label=('defect line + harmonics'
                               if ax is axs[0, 0] and j == 0 else None))
     zz_c = pri['S1212'][0][0]
     axs[0, 2].axvline(zz_c, color=C_ROB, lw=1.1, alpha=0.9,
-                      label='coupler resonance ($ZZ$ only)')
-    axs[0, 2].annotate('structure only the\ntwo-qubit spectra see',
+                      label='line on the exchange channel only')
+    axs[0, 2].annotate('visible only to\ntwo-qubit QNS',
                        xy=(0.42, 0.78), xycoords='axes fraction', fontsize=8,
                        color=C_ROB)
     for ax in axs[1]:
@@ -148,7 +148,7 @@ def fig_spam_comparison():
     def panel(ax, key, part, title, yscale):
         tr_f = np.asarray(truth[key](w_fine))
         tr_f = np.real(tr_f) if part == 're' else np.imag(tr_f)
-        ax.plot(w_fine, tr_f, 'k--', lw=1.0, label='engineered landscape', zorder=1)
+        ax.plot(w_fine, tr_f, 'k--', lw=1.0, label='analytic truth', zorder=1)
         for off, (a, d) in zip(offsets, arms.items()):
             rec = np.asarray(d[key])
             rec_p = np.real(rec) if part == 're' else np.imag(rec)
@@ -205,7 +205,7 @@ def fig_recon_capture():
     def panel(ax, key, part, title, yscale):
         tr_f = np.asarray(truth[key](w_fine))
         tr_f = np.real(tr_f) if part == 're' else np.imag(tr_f)
-        ax.plot(w_fine, tr_f, 'k--', lw=1.0, label='engineered landscape',
+        ax.plot(w_fine, tr_f, 'k--', lw=1.0, label='analytic truth',
                 zorder=1)
         rec = np.asarray(d[key])
         rec_p = np.real(rec) if part == 're' else np.imag(rec)
@@ -466,12 +466,12 @@ def _load_design_data():
     full_320 = float(np.asarray(pd['infs_opt'], dtype=float)[i320])
 
     ladder_cz = [
-        ("generic DD\n(best CDD)", cdd_320, C_MIT),
-        ("line-blind\nsmooth fit",
+        ("best CDD\n(no spectral knowledge)", cdd_320, C_MIT),
+        ("smooth fit of the\nsame comb (no lines)",
          opt_at("DraftRun_NoSPAM_showcase", "rung_b_cap"), C_BLD),
-        ("single-qubit\nQNS only",
+        ("1Q (2):\n$S_{1,1},S_{2,2}$ only",
          opt_at("DraftRun_NoSPAM_showcase", "rung_c_cap"), C_ROB),
-        ("all six\n(full recon.)", full_320, C_REF),
+        ("all 6", full_320, C_REF),
     ]
     return ladder_cz, None
 
@@ -480,8 +480,8 @@ def fig_design():
     ladder_cz, arms_cz = _load_design_data()
     fig, ax = plt.subplots(1, 1, figsize=(5.4, 3.4))
     _ladder_panel(ax, ladder_cz,
-                  "entangling (CZ), $T_G=320\\tau$: the same device,\n"
-                  "four levels of noise knowledge")
+                  "entangling (CZ): blind NT gate vs spectral\n"
+                  "knowledge given to the optimizer ($T_G=320\\tau$)")
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "fig_design_experiments.pdf"),
                 bbox_inches='tight')
