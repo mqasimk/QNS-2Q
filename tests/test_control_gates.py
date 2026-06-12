@@ -138,17 +138,27 @@ def test_comb_matches_folded_on_smooth_spectrum():
 
 def test_use_comb_crossover_respects_lines():
     """OPT-COMB-M16: the comb approximation must stay off while the M-fold
-    filter tooth width is comparable to the nuclear-line width."""
+    filter tooth width is comparable to the regime's narrowest line width.
+    The hard-coded boundary points were measured on the FEATURED model
+    (sigma = 0.02, scripts/diag_comb_vs_folded.py); other line-carrying
+    regimes (showcase: sigma_min = 0.016) get the generic rule checks."""
     from qns2q.noise.spectra import line_priors
-    if line_priors() is None:
+    pri = line_priors()
+    if pri is None:
         pytest.skip("bland regime: no lines, legacy M cutoff applies")
     assert not idle.use_comb_approximation(8, 1000.0)   # legacy M <= 10 cutoff
-    assert not idle.use_comb_approximation(16, 20.0)    # Tg=320: 8-14% error regime
-    assert not idle.use_comb_approximation(16, 80.0)    # Tg=1280: up to 3.2% (boundary sweep)
-    assert idle.use_comb_approximation(16, 160.0)       # Tg=2560: <= 1.7% measured
-    assert idle.use_comb_approximation(128, 80.0)       # Tg=10240: <= 0.3%
+    assert not idle.use_comb_approximation(16, 20.0)    # tooth width >> sigma/8
     assert (cz.use_comb_approximation(16, 20.0)
             == idle.use_comb_approximation(16, 20.0))
+    _, sigma = pri
+    # generic rule: crossover exactly at 2*pi/(M*T_seq) < sigma/8
+    for M_, Ts in ((16, 80.0), (16, 160.0), (128, 80.0), (64, 320.0)):
+        expect = (2 * np.pi / (M_ * Ts)) < sigma / 8
+        assert idle.use_comb_approximation(M_, Ts) == expect, (M_, Ts)
+    if abs(sigma - 0.02) < 1e-12:   # featured: the measured boundary sweep
+        assert not idle.use_comb_approximation(16, 80.0)   # up to 3.2%
+        assert idle.use_comb_approximation(16, 160.0)      # <= 1.7% measured
+        assert idle.use_comb_approximation(128, 80.0)      # <= 0.3%
 
 
 # ----------------------------------------------------- identity padding ----
@@ -208,14 +218,16 @@ def test_identity_padding_exact_value_and_grad():
 
 # --------------------------------------------------- SMat build semantics --
 
-def _fake_cfg(builder_cls, wk, specs, use_simulated=False, cross=True):
+def _fake_cfg(builder_cls, wk, specs, use_simulated=False, cross=True,
+              spectral_model='interp', self_only=False):
     ns = types.SimpleNamespace()
     ns.w = jnp.linspace(0, 2 * jnp.pi, 4000)
     ns.wkqns = jnp.asarray(wk)
     ns.specs = specs
     ns.include_cross_spectra = cross
     ns.use_simulated = use_simulated
-    ns.spectral_model = 'interp'
+    ns.spectral_model = spectral_model
+    ns.char_self_only = self_only
     return builder_cls._build_interpolated_spectra(ns)
 
 
@@ -267,3 +279,66 @@ def test_smat_nan_self_raises(builder):
     specs['S22'] = np.full_like(specs['S22'], np.nan)
     with pytest.raises(ValueError, match="corrupted"):
         _fake_cfg(builder, wk, specs)
+
+
+# ----------------------------------------- SHOWCASE-0612 ablation switches --
+
+@pytest.mark.parametrize("builder", [cz.CZOptConfig, idle.Config])
+def test_smat_self_only_drops_zz_and_crosses(builder):
+    """char_self_only (ablation rung c): the characterized model keeps S11/S22
+    only; the ZZ self-spectrum and every cross are zero (1Q-only QNS world)."""
+    wk = np.concatenate([[0.0], np.linspace(2 * np.pi / 160, np.pi / 4, 20)])
+    specs = _toy_specs(np.linspace(2 * np.pi / 160, np.pi / 4, 20), dc=1e-4)
+    SMat = _fake_cfg(builder, wk, specs, self_only=True)
+    assert np.any(np.asarray(SMat[1, 1]) != 0)
+    assert np.any(np.asarray(SMat[2, 2]) != 0)
+    assert np.all(np.asarray(SMat[3, 3]) == 0)      # ZZ dropped
+    for r, c in ((1, 2), (1, 3), (2, 3)):
+        assert np.all(np.asarray(SMat[r, c]) == 0)  # crosses dropped
+        assert np.all(np.asarray(SMat[c, r]) == 0)
+
+
+def test_smoothfit_recovers_powerlaw_and_caps_at_dc():
+    from qns2q.control.tails import smoothfit_curve
+    wk = np.concatenate([[0.0], np.linspace(0.05, 0.8, 20)])
+    A_true, p_true, dc = 5e-6, 0.9, 3e-4
+    comp = np.concatenate([[dc], A_true * wk[1:] ** (-p_true)])
+    w_dense = jnp.linspace(0.0, 2.0, 1000)
+    out = np.asarray(smoothfit_curve(w_dense, wk, comp, dc_val=dc))
+    mid = (np.asarray(w_dense) > 0.1) & (np.asarray(w_dense) < 1.5)
+    expect = A_true * np.asarray(w_dense)[mid] ** (-p_true)
+    assert np.allclose(out[mid], expect, rtol=1e-6)
+    assert np.isclose(out[0], dc, rtol=1e-12)        # capped, not divergent
+
+
+def test_smoothfit_is_line_blind():
+    """A narrow line on a flat background must NOT survive the smooth fit: the
+    fitted curve at the line center stays near the background level (within
+    the line's small pull on the global fit), nowhere near the line peak."""
+    from qns2q.control.tails import smoothfit_curve
+    wk = np.linspace(0.04, 0.8, 20)
+    bg = 1e-7 * (wk / 0.3) ** (-0.9)
+    line = 2e-5 * np.exp(-(wk - 0.204) ** 2 / (2 * 0.022 ** 2))
+    out = np.asarray(smoothfit_curve(jnp.array([0.204]), wk, bg + line,
+                                     dc_val=1e-4))
+    bg_at_line = 1e-7 * (0.204 / 0.3) ** (-0.9)
+    assert out[0] < 10 * bg_at_line, "smooth fit should average the line away"
+    assert out[0] < 0.05 * 2e-5, "smooth fit must not track the line peak"
+
+
+def test_min_sep_prunes_library_and_caps_density():
+    """The pulse library under a min-sep floor: every spacing >= min_sep, and
+    the deep-nesting CDD orders that violate it are pruned."""
+    T_seq, min_sep = 320.0, 8.0
+    lib_legacy, _ = cz.construct_pulse_library(T_seq, 1.0, 10**9)
+    lib_bw, desc_bw = cz.construct_pulse_library(T_seq, min_sep, 10**9)
+    assert len(lib_bw) < len(lib_legacy)
+    for d1, d2 in lib_bw:
+        for d in (d1, d2):
+            if np.asarray(d).size:
+                assert float(np.min(np.asarray(d))) >= min_sep - 1e-9
+    # CDD6 needs spacing T/2^6 = 5 tau < 8 tau -> the deepest order present
+    # must be CDD5
+    orders = [int(s.split('(')[1].split(',')[0]) for s in desc_bw
+              if s.startswith('CDD')]
+    assert max(orders) == 5

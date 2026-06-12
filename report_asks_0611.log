@@ -1,0 +1,44 @@
+Loading reconstructed spectra from /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured/specs.npz
+  specs spam_protocol: none
+[cz] NOTE: flagged (undetermined) DC points in specs: S112, S12, S212
+Calculated T2 times (Ideal): Q1=7.71e+02 tau, Q2=7.70e+02 tau
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+[Tg=   80 all-6       ] known CDD(6, 6)  char 1.529e-02 true 1.170e-02 | NT(78,76) char 9.783e-03 true 6.989e-03
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+[Tg=   80 robust-4    ] known CDD(6, 6)  char 1.529e-02 true 1.170e-02 | NT(78,76) char 9.783e-03 true 6.989e-03
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+[Tg=   80 diag-3      ] known CDD(6, 6)  char 1.529e-02 true 1.170e-02 | NT(78,76) char 9.784e-03 true 6.989e-03
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+[Tg=   80 1Q-2        ] known CDD(6, 6)  char 1.035e-02 true 1.170e-02 | NT(77,78) char 8.279e-03 true 7.440e-03
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+[Tg=  320 all-6       ] known CDD(7, 7)  char 8.977e-02 true 7.420e-02 | NT(150,150) char 4.893e-02 true 4.286e-02
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+[Tg=  320 robust-4    ] known CDD(7, 7)  char 8.977e-02 true 7.420e-02 | NT(150,150) char 4.893e-02 true 4.286e-02
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+[Tg=  320 diag-3      ] known CDD(7, 7)  char 8.994e-02 true 7.420e-02 | NT(150,150) char 4.893e-02 true 4.286e-02
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+[Tg=  320 1Q-2        ] known CDD(7, 7)  char 6.131e-02 true 7.420e-02 | NT(148,150) char 4.526e-02 true 4.269e-02
+Loading reconstructed spectra from /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_reference/specs.npz
+  specs spam_protocol: none
+[cz] WARNING: spectra model_version='unknown' != current noise model 'anchored-tarucha-20260610'; the ideal benchmark uses the CURRENT model -- regenerate Stage 1/2.
+Calculated T2 times (Ideal): Q1=7.71e+02 tau, Q2=7.70e+02 tau
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+[Tg=  320 arm-reference] known CDD(7, 7)  char 7.209e-02 true 7.420e-02 | NT(148,150) char 4.240e-02 true 4.269e-02
+Loading reconstructed spectra from /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_raw/specs.npz
+  specs spam_protocol: raw
+[cz] NOTE: flagged (undetermined) DC points in specs: S112
+[cz] WARNING: spectra model_version='unknown' != current noise model 'anchored-tarucha-20260610'; the ideal benchmark uses the CURRENT model -- regenerate Stage 1/2.
+Calculated T2 times (Ideal): Q1=7.71e+02 tau, Q2=7.70e+02 tau
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+[Tg=  320 arm-raw     ] known CDD(7, 7)  char 7.283e-02 true 7.420e-02 | NT(148,150) char 4.350e-02 true 4.269e-02
+saved /home/mqasimk/IdeaProjects/QNS-2Q/scripts/../DraftRun_NoSPAM_featured/report_ask_experiments.npz

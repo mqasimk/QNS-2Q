@@ -1,0 +1,1842 @@
+[seed=20260608]
+M          | Known Inf            | Opt Inf             
+--------------------------------------------------------
+
+========================================
+Running Optimization for M = 1
+========================================
+Loading reconstructed spectra from /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured/specs.npz
+  specs spam_protocol: none
+[idle] NOTE: flagged (undetermined) DC points in specs: S112, S12, S212
+Calculated T2 times (Ideal): Q1=7.71e+02 tau, Q2=7.70e+02 tau
+Configuration loaded for M=1.
+
+============================================================
+RUNNING OPTIMIZATION PIPELINE
+M (Repetitions): 1
+Total Pulse Limit: 1000
+Pulse Limit Per Repetition: 1000
+============================================================
+
+Gate Time: 10240.0 tau (Tg/T2q1=13.2815, Tg/T2q2=13.3069)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+2026-06-11 15:06:22.869009: E external/xla/xla/service/slow_operation_alarm.cc:73] Trying algorithm eng28{k2=4,k3=0} for conv (f64[1,1,163843]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,81922]{2,1,0}, f64[1,1,81922]{2,1,0}), window={size=81922 pad=81921_81921}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:06:40.769000: E external/xla/xla/service/slow_operation_alarm.cc:140] The operation took 18.900147245s
+Trying algorithm eng28{k2=4,k3=0} for conv (f64[1,1,163843]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,81922]{2,1,0}, f64[1,1,81922]{2,1,0}), window={size=81922 pad=81921_81921}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:06:41.769318: E external/xla/xla/service/slow_operation_alarm.cc:73] Trying algorithm eng28{k2=3,k3=0} for conv (f64[1,1,163843]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,81922]{2,1,0}, f64[1,1,81922]{2,1,0}), window={size=81922 pad=81921_81921}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:06:45.455523: E external/xla/xla/service/slow_operation_alarm.cc:140] The operation took 4.686425062s
+Trying algorithm eng28{k2=3,k3=0} for conv (f64[1,1,163843]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,81922]{2,1,0}, f64[1,1,81922]{2,1,0}), window={size=81922 pad=81921_81921}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:06:46.888140: E external/xla/xla/service/slow_operation_alarm.cc:73] Trying algorithm eng28{k2=0,k3=0} for conv (f64[1,1,163843]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,81922]{2,1,0}, f64[1,1,81922]{2,1,0}), window={size=81922 pad=81921_81921}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:07:04.357854: E external/xla/xla/service/slow_operation_alarm.cc:140] The operation took 18.469875463s
+Trying algorithm eng28{k2=0,k3=0} for conv (f64[1,1,163843]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,81922]{2,1,0}, f64[1,1,81922]{2,1,0}), window={size=81922 pad=81921_81921}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:07:05.358084: E external/xla/xla/service/slow_operation_alarm.cc:73] Trying algorithm eng28{k2=1,k3=0} for conv (f64[1,1,163843]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,81922]{2,1,0}, f64[1,1,81922]{2,1,0}), window={size=81922 pad=81921_81921}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:07:41.428378: E external/xla/xla/service/slow_operation_alarm.cc:140] The operation took 37.070414099s
+Trying algorithm eng28{k2=1,k3=0} for conv (f64[1,1,163843]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,81922]{2,1,0}, f64[1,1,81922]{2,1,0}), window={size=81922 pad=81921_81921}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+  No Pulse (Ideal): 7.499998e-01
+Evaluating 134 known sequences...
+Using Folded Noise Matrix (M=1)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+2026-06-11 15:09:45.942677: E external/xla/xla/service/slow_operation_alarm.cc:73] Trying algorithm eng28{k2=4,k3=0} for conv (f64[1,1,81923]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,40962]{2,1,0}, f64[1,1,40962]{2,1,0}), window={size=40962 pad=40961_40961}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:09:49.782616: E external/xla/xla/service/slow_operation_alarm.cc:140] The operation took 4.840099593s
+Trying algorithm eng28{k2=4,k3=0} for conv (f64[1,1,81923]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,40962]{2,1,0}, f64[1,1,40962]{2,1,0}), window={size=40962 pad=40961_40961}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:09:50.782865: E external/xla/xla/service/slow_operation_alarm.cc:73] Trying algorithm eng28{k2=3,k3=0} for conv (f64[1,1,81923]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,40962]{2,1,0}, f64[1,1,40962]{2,1,0}), window={size=40962 pad=40961_40961}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:09:50.980488: E external/xla/xla/service/slow_operation_alarm.cc:140] The operation took 1.197781374s
+Trying algorithm eng28{k2=3,k3=0} for conv (f64[1,1,81923]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,40962]{2,1,0}, f64[1,1,40962]{2,1,0}), window={size=40962 pad=40961_40961}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:09:52.007997: E external/xla/xla/service/slow_operation_alarm.cc:73] Trying algorithm eng28{k2=0,k3=0} for conv (f64[1,1,81923]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,40962]{2,1,0}, f64[1,1,40962]{2,1,0}), window={size=40962 pad=40961_40961}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:09:55.676937: E external/xla/xla/service/slow_operation_alarm.cc:140] The operation took 4.669103966s
+Trying algorithm eng28{k2=0,k3=0} for conv (f64[1,1,81923]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,40962]{2,1,0}, f64[1,1,40962]{2,1,0}), window={size=40962 pad=40961_40961}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:09:56.677083: E external/xla/xla/service/slow_operation_alarm.cc:73] Trying algorithm eng28{k2=1,k3=0} for conv (f64[1,1,81923]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,40962]{2,1,0}, f64[1,1,40962]{2,1,0}), window={size=40962 pad=40961_40961}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:10:05.019734: E external/xla/xla/service/slow_operation_alarm.cc:140] The operation took 9.342702058s
+Trying algorithm eng28{k2=1,k3=0} for conv (f64[1,1,81923]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,40962]{2,1,0}, f64[1,1,40962]{2,1,0}), window={size=40962 pad=40961_40961}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+  Best Known (Char): 7.473798e-01 (mqCDD(n=8, m=2))
+  Best Known (Ideal): 7.477360e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(584, 92), (933, 99), (570, 17), (758, 178), (92, 816), (872, 993), (9, 20), (764, 826), (809, 966), (127, 818), (772, 385), (183, 752), (553, 138), (434, 396), (693, 934), (988, 205), (893, 634), (965, 794), (484, 434), (157, 844)]
+Using Folded Noise Matrix (M=1)...
+  Random Opt (n=584,92): Infidelity = 7.473727e-01
+  Random Opt (n=933,99): Infidelity = 7.499168e-01
+  Random Opt (n=570,17): Infidelity = 7.474693e-01
+  Random Opt (n=758,178): Infidelity = 7.493536e-01
+  Random Opt (n=92,816): Infidelity = 7.499999e-01
+  Random Opt (n=872,993): Infidelity = 7.499562e-01
+  Random Opt (n=9,20): Infidelity = 7.500000e-01
+  Random Opt (n=764,826): Infidelity = 7.496032e-01
+  Random Opt (n=809,966): Infidelity = 7.498554e-01
+  Random Opt (n=127,818): Infidelity = 7.499980e-01
+  Random Opt (n=772,385): Infidelity = 7.489008e-01
+  Random Opt (n=183,752): Infidelity = 7.499721e-01
+  Random Opt (n=553,138): Infidelity = 7.475810e-01
+  Random Opt (n=434,396): Infidelity = 7.491079e-01
+  Random Opt (n=693,934): Infidelity = 7.482975e-01
+  Random Opt (n=988,205): Infidelity = 7.483606e-01
+  Random Opt (n=893,634): Infidelity = 7.476899e-01
+  Random Opt (n=965,794): Infidelity = 7.496156e-01
+  Random Opt (n=484,434): Infidelity = 7.484250e-01
+  Random Opt (n=157,844): Infidelity = 7.499934e-01
+  Best Optimized (Ideal): 7.467778e-01
+
+Gate Time: 5120.0 tau (Tg/T2q1=6.6407, Tg/T2q2=6.6534)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+2026-06-11 15:10:52.736487: E external/xla/xla/service/slow_operation_alarm.cc:73] Trying algorithm eng28{k2=4,k3=0} for conv (f64[1,1,81921]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,40961]{2,1,0}, f64[1,1,40961]{2,1,0}), window={size=40961 pad=40960_40960}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:10:56.523824: E external/xla/xla/service/slow_operation_alarm.cc:140] The operation took 4.787494855s
+Trying algorithm eng28{k2=4,k3=0} for conv (f64[1,1,81921]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,40961]{2,1,0}, f64[1,1,40961]{2,1,0}), window={size=40961 pad=40960_40960}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:10:57.524088: E external/xla/xla/service/slow_operation_alarm.cc:73] Trying algorithm eng28{k2=3,k3=0} for conv (f64[1,1,81921]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,40961]{2,1,0}, f64[1,1,40961]{2,1,0}), window={size=40961 pad=40960_40960}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:10:57.721771: E external/xla/xla/service/slow_operation_alarm.cc:140] The operation took 1.197847211s
+Trying algorithm eng28{k2=3,k3=0} for conv (f64[1,1,81921]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,40961]{2,1,0}, f64[1,1,40961]{2,1,0}), window={size=40961 pad=40960_40960}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:10:58.749219: E external/xla/xla/service/slow_operation_alarm.cc:73] Trying algorithm eng28{k2=0,k3=0} for conv (f64[1,1,81921]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,40961]{2,1,0}, f64[1,1,40961]{2,1,0}), window={size=40961 pad=40960_40960}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:11:02.425867: E external/xla/xla/service/slow_operation_alarm.cc:140] The operation took 4.676760837s
+Trying algorithm eng28{k2=0,k3=0} for conv (f64[1,1,81921]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,40961]{2,1,0}, f64[1,1,40961]{2,1,0}), window={size=40961 pad=40960_40960}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:11:03.426106: E external/xla/xla/service/slow_operation_alarm.cc:73] Trying algorithm eng28{k2=1,k3=0} for conv (f64[1,1,81921]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,40961]{2,1,0}, f64[1,1,40961]{2,1,0}), window={size=40961 pad=40960_40960}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+2026-06-11 15:11:11.769341: E external/xla/xla/service/slow_operation_alarm.cc:140] The operation took 9.343379692s
+Trying algorithm eng28{k2=1,k3=0} for conv (f64[1,1,81921]{2,1,0}, u8[0]{0}) custom-call(f64[1,1,40961]{2,1,0}, f64[1,1,40961]{2,1,0}), window={size=40961 pad=40960_40960}, dim_labels=bf0_oi0->bf0, custom_call_target="__cudnn$convForward", backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"cudnn_conv_backend_config":{"activation_mode":"kNone","conv_result_scale":1,"side_input_scale":0,"leakyrelu_alpha":0},"force_earliest_schedule":false,"reification_cost":[]} is taking a while...
+  No Pulse (Ideal): 7.498695e-01
+Evaluating 134 known sequences...
+Using Folded Noise Matrix (M=1)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 6.911593e-01 (CDD(10, 8))
+  Best Known (Ideal): 6.919784e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(786, 924), (70, 152), (147, 236), (556, 529), (801, 908), (143, 92), (782, 366), (133, 131), (317, 271), (808, 260), (160, 839), (830, 222), (777, 531), (571, 377), (523, 354), (183, 861), (153, 433), (922, 823), (927, 816), (183, 728)]
+Using Folded Noise Matrix (M=1)...
+  Random Opt (n=786,924): Infidelity = 6.674915e-01
+  Random Opt (n=70,152): Infidelity = 7.428688e-01
+  Random Opt (n=147,236): Infidelity = 7.230165e-01
+  Random Opt (n=556,529): Infidelity = 6.750634e-01
+  Random Opt (n=801,908): Infidelity = 6.829494e-01
+  Random Opt (n=143,92): Infidelity = 7.408022e-01
+  Random Opt (n=782,366): Infidelity = 6.838538e-01
+  Random Opt (n=133,131): Infidelity = 7.376810e-01
+  Random Opt (n=317,271): Infidelity = 6.986068e-01
+  Random Opt (n=808,260): Infidelity = 6.661312e-01
+  Random Opt (n=160,839): Infidelity = 7.335953e-01
+  Random Opt (n=830,222): Infidelity = 6.808200e-01
+  Random Opt (n=777,531): Infidelity = 6.455839e-01
+  Random Opt (n=571,377): Infidelity = 6.918864e-01
+  Random Opt (n=523,354): Infidelity = 6.990153e-01
+  Random Opt (n=183,861): Infidelity = 7.334138e-01
+  Random Opt (n=153,433): Infidelity = 7.439614e-01
+  Random Opt (n=922,823): Infidelity = 6.768842e-01
+  Random Opt (n=927,816): Infidelity = 6.687869e-01
+  Random Opt (n=183,728): Infidelity = 6.769044e-01
+  Best Optimized (Ideal): 6.076023e-01
+
+Gate Time: 2560.0 tau (Tg/T2q1=3.3204, Tg/T2q2=3.3267)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.456284e-01
+Evaluating 134 known sequences...
+Using Folded Noise Matrix (M=1)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 4.460025e-01 (CDD(9, 10))
+  Best Known (Ideal): 4.568997e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(770, 759), (482, 947), (118, 424), (213, 277), (852, 864), (632, 628), (894, 607), (254, 870), (896, 390), (674, 544), (569, 100), (922, 580), (339, 313), (232, 483), (677, 214), (592, 200), (607, 640), (344, 554), (186, 102), (415, 772)]
+Using Folded Noise Matrix (M=1)...
+  Random Opt (n=770,759): Infidelity = 3.450565e-01
+  Random Opt (n=482,947): Infidelity = 3.239212e-01
+  Random Opt (n=118,424): Infidelity = 6.225964e-01
+  Random Opt (n=213,277): Infidelity = 6.098271e-01
+  Random Opt (n=852,864): Infidelity = 3.363924e-01
+  Random Opt (n=632,628): Infidelity = 3.623983e-01
+  Random Opt (n=894,607): Infidelity = 3.239859e-01
+  Random Opt (n=254,870): Infidelity = 4.213976e-01
+  Random Opt (n=896,390): Infidelity = 4.011257e-01
+  Random Opt (n=674,544): Infidelity = 3.317802e-01
+  Random Opt (n=569,100): Infidelity = 4.902236e-01
+  Random Opt (n=922,580): Infidelity = 3.293502e-01
+  Random Opt (n=339,313): Infidelity = 4.311613e-01
+  Random Opt (n=232,483): Infidelity = 5.650461e-01
+  Random Opt (n=677,214): Infidelity = 5.852772e-01
+  Random Opt (n=592,200): Infidelity = 5.788689e-01
+  Random Opt (n=607,640): Infidelity = 3.282922e-01
+  Random Opt (n=344,554): Infidelity = 3.877235e-01
+  Random Opt (n=186,102): Infidelity = 6.153518e-01
+  Random Opt (n=415,772): Infidelity = 4.087241e-01
+  Best Optimized (Ideal): 3.255209e-01
+
+Gate Time: 1280.0 tau (Tg/T2q1=1.6602, Tg/T2q2=1.6634)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.148716e-01
+Evaluating 134 known sequences...
+Using Folded Noise Matrix (M=1)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 1.754736e-01 (CDD(9, 10))
+  Best Known (Ideal): 1.781886e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(485, 179), (146, 116), (748, 118), (963, 569), (803, 818), (435, 141), (608, 755), (654, 132), (449, 199), (598, 265), (604, 193), (234, 686), (622, 377), (607, 648), (984, 332), (470, 749), (329, 999), (555, 917), (68, 529), (13, 124)]
+Using Folded Noise Matrix (M=1)...
+  Random Opt (n=485,179): Infidelity = 2.158715e-01
+  Random Opt (n=146,116): Infidelity = 5.288695e-01
+  Random Opt (n=748,118): Infidelity = 4.735863e-01
+  Random Opt (n=963,569): Infidelity = 1.516255e-01
+  Random Opt (n=803,818): Infidelity = 1.527332e-01
+  Random Opt (n=435,141): Infidelity = 2.405574e-01
+  Random Opt (n=608,755): Infidelity = 1.517364e-01
+  Random Opt (n=654,132): Infidelity = 2.706282e-01
+  Random Opt (n=449,199): Infidelity = 2.813752e-01
+  Random Opt (n=598,265): Infidelity = 1.882999e-01
+  Random Opt (n=604,193): Infidelity = 2.289834e-01
+  Random Opt (n=234,686): Infidelity = 1.979287e-01
+  Random Opt (n=622,377): Infidelity = 1.750116e-01
+  Random Opt (n=607,648): Infidelity = 1.576242e-01
+  Random Opt (n=984,332): Infidelity = 1.700315e-01
+  Random Opt (n=470,749): Infidelity = 1.565018e-01
+  Random Opt (n=329,999): Infidelity = 1.483034e-01
+  Random Opt (n=555,917): Infidelity = 1.448744e-01
+  Random Opt (n=68,529): Infidelity = 2.869367e-01
+  Random Opt (n=13,124): Infidelity = 6.019068e-01
+  Best Optimized (Ideal): 1.246196e-01
+
+Gate Time: 640.0 tau (Tg/T2q1=0.8301, Tg/T2q2=0.8317)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 6.173731e-01
+Evaluating 108 known sequences...
+Using Folded Noise Matrix (M=1)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 8.762452e-02 (mqCDD(n=8, m=1))
+  Best Known (Ideal): 8.822112e-02
+  Running Random Optimization...
+  Randomly selected pulse counts: [(282, 467), (494, 281), (37, 436), (514, 384), (383, 263), (404, 521), (30, 19), (576, 36), (307, 373), (87, 405), (432, 561), (109, 346), (215, 632), (61, 473), (487, 274), (190, 467), (146, 193), (332, 253), (484, 78), (237, 173)]
+Using Folded Noise Matrix (M=1)...
+  Random Opt (n=282,467): Infidelity = 7.656623e-02
+  Random Opt (n=494,281): Infidelity = 8.055409e-02
+  Random Opt (n=37,436): Infidelity = 1.511606e-01
+  Random Opt (n=514,384): Infidelity = 7.703853e-02
+  Random Opt (n=383,263): Infidelity = 8.706550e-02
+  Random Opt (n=404,521): Infidelity = 7.496658e-02
+  Random Opt (n=30,19): Infidelity = 2.854976e-01
+  Random Opt (n=576,36): Infidelity = 1.678659e-01
+  Random Opt (n=307,373): Infidelity = 7.980958e-02
+  Random Opt (n=87,405): Infidelity = 1.053501e-01
+  Random Opt (n=432,561): Infidelity = 7.314937e-02
+  Random Opt (n=109,346): Infidelity = 1.346258e-01
+  Random Opt (n=215,632): Infidelity = 7.334208e-02
+  Random Opt (n=61,473): Infidelity = 1.642382e-01
+  Random Opt (n=487,274): Infidelity = 8.208369e-02
+  Random Opt (n=190,467): Infidelity = 7.886043e-02
+  Random Opt (n=146,193): Infidelity = 9.725755e-02
+  Random Opt (n=332,253): Infidelity = 8.737698e-02
+  Random Opt (n=484,78): Infidelity = 1.146386e-01
+  Random Opt (n=237,173): Infidelity = 9.636496e-02
+  Best Optimized (Ideal): 5.425652e-02
+
+Gate Time: 320.0 tau (Tg/T2q1=0.4150, Tg/T2q2=0.4158)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 4.489399e-01
+Evaluating 84 known sequences...
+Using Folded Noise Matrix (M=1)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 4.542180e-02 (mqCDD(n=7, m=1))
+  Best Known (Ideal): 4.568752e-02
+  Running Random Optimization...
+  Randomly selected pulse counts: [(271, 17), (9, 58), (85, 78), (65, 9), (34, 311), (115, 312), (152, 94), (72, 275), (95, 80), (90, 24), (39, 241), (239, 198), (21, 17), (63, 39), (310, 151), (148, 45), (197, 268), (146, 283), (105, 149), (179, 94)]
+Using Folded Noise Matrix (M=1)...
+  Random Opt (n=271,17): Infidelity = 9.085617e-02
+  Random Opt (n=9,58): Infidelity = 1.564273e-01
+  Random Opt (n=85,78): Infidelity = 5.283503e-02
+  Random Opt (n=65,9): Infidelity = 1.222868e-01
+  Random Opt (n=34,311): Infidelity = 6.042021e-02
+  Random Opt (n=115,312): Infidelity = 3.794603e-02
+  Random Opt (n=152,94): Infidelity = 4.953901e-02
+  Random Opt (n=72,275): Infidelity = 4.132033e-02
+  Random Opt (n=95,80): Infidelity = 5.217718e-02
+  Random Opt (n=90,24): Infidelity = 1.892690e-01
+  Random Opt (n=39,241): Infidelity = 5.522687e-02
+  Random Opt (n=239,198): Infidelity = 4.051259e-02
+  Random Opt (n=21,17): Infidelity = 1.430712e-01
+  Random Opt (n=63,39): Infidelity = 6.629857e-02
+  Random Opt (n=310,151): Infidelity = 4.102609e-02
+  Random Opt (n=148,45): Infidelity = 6.259000e-02
+  Random Opt (n=197,268): Infidelity = 3.854916e-02
+  Random Opt (n=146,283): Infidelity = 3.936707e-02
+  Random Opt (n=105,149): Infidelity = 4.511356e-02
+  Random Opt (n=179,94): Infidelity = 4.846714e-02
+  Best Optimized (Ideal): 3.358354e-02
+Saved all plotting data to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured/plotting_data/plotting_data_id_v4.npz
+
+================================================================================
+                        FINAL COMPARISON (Best Overall)                         
+================================================================================
+Infidelity                | 4.568752e-02              | 3.358354e-02             
+Sequence                  | mqCDD(n=7, m=1)^1         | NT(115,312)^1            
+================================================================================
+
+To generate plots, run:
+  python plot_optimization.py --data-dir /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured --gate-type id
+
+========================================
+Running Optimization for M = 2
+========================================
+Loading reconstructed spectra from /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured/specs.npz
+  specs spam_protocol: none
+[idle] NOTE: flagged (undetermined) DC points in specs: S112, S12, S212
+Calculated T2 times (Ideal): Q1=7.71e+02 tau, Q2=7.70e+02 tau
+Configuration loaded for M=2.
+
+============================================================
+RUNNING OPTIMIZATION PIPELINE
+M (Repetitions): 2
+Total Pulse Limit: 1000
+Pulse Limit Per Repetition: 500
+============================================================
+
+Gate Time: 10240.0 tau (Tg/T2q1=13.2815, Tg/T2q2=13.3069)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.499998e-01
+Evaluating 107 known sequences...
+Using Folded Noise Matrix (M=2)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 7.473785e-01 (mqCDD(n=7, m=2))
+  Best Known (Ideal): 7.477358e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(485, 16), (426, 73), (94, 432), (88, 364), (468, 321), (239, 420), (6, 238), (389, 443), (185, 9), (390, 430), (246, 397), (427, 90), (103, 122), (339, 151), (169, 252), (380, 224), (306, 158), (123, 433), (405, 447), (8, 153)]
+Using Folded Noise Matrix (M=2)...
+  Random Opt (n=485,16): Infidelity = 7.494614e-01
+  Random Opt (n=426,73): Infidelity = 7.499260e-01
+  Random Opt (n=94,432): Infidelity = 7.499811e-01
+  Random Opt (n=88,364): Infidelity = 7.499509e-01
+  Random Opt (n=468,321): Infidelity = 7.478755e-01
+  Random Opt (n=239,420): Infidelity = 7.485899e-01
+  Random Opt (n=6,238): Infidelity = 7.482893e-01
+  Random Opt (n=389,443): Infidelity = 7.496694e-01
+  Random Opt (n=185,9): Infidelity = 7.496547e-01
+  Random Opt (n=390,430): Infidelity = 7.497307e-01
+  Random Opt (n=246,397): Infidelity = 7.483505e-01
+  Random Opt (n=427,90): Infidelity = 7.499031e-01
+  Random Opt (n=103,122): Infidelity = 7.496707e-01
+  Random Opt (n=339,151): Infidelity = 7.477507e-01
+  Random Opt (n=169,252): Infidelity = 7.475016e-01
+  Random Opt (n=380,224): Infidelity = 7.481550e-01
+  Random Opt (n=306,158): Infidelity = 7.469647e-01
+  Random Opt (n=123,433): Infidelity = 7.498746e-01
+  Random Opt (n=405,447): Infidelity = 7.498899e-01
+  Random Opt (n=8,153): Infidelity = 7.498431e-01
+  Best Optimized (Ideal): 7.456198e-01
+
+Gate Time: 5120.0 tau (Tg/T2q1=6.6407, Tg/T2q2=6.6534)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.498696e-01
+Evaluating 107 known sequences...
+Using Folded Noise Matrix (M=2)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 6.909788e-01 (CDD(9, 7))
+  Best Known (Ideal): 6.916173e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(20, 264), (259, 103), (167, 69), (450, 260), (208, 335), (498, 361), (474, 422), (221, 167), (2, 379), (306, 492), (72, 85), (380, 162), (432, 73), (68, 34), (152, 308), (195, 330), (204, 401), (405, 294), (288, 426), (3, 234)]
+Using Folded Noise Matrix (M=2)...
+  Random Opt (n=20,264): Infidelity = 7.223733e-01
+  Random Opt (n=259,103): Infidelity = 6.854889e-01
+  Random Opt (n=167,69): Infidelity = 7.174048e-01
+  Random Opt (n=450,260): Infidelity = 6.758510e-01
+  Random Opt (n=208,335): Infidelity = 6.839774e-01
+  Random Opt (n=498,361): Infidelity = 5.494431e-01
+  Random Opt (n=474,422): Infidelity = 6.557871e-01
+  Random Opt (n=221,167): Infidelity = 7.357695e-01
+  Random Opt (n=2,379): Infidelity = 6.862873e-01
+  Random Opt (n=306,492): Infidelity = 5.851028e-01
+  Random Opt (n=72,85): Infidelity = 7.353494e-01
+  Random Opt (n=380,162): Infidelity = 6.602646e-01
+  Random Opt (n=432,73): Infidelity = 7.016163e-01
+  Random Opt (n=68,34): Infidelity = 7.424787e-01
+  Random Opt (n=152,308): Infidelity = 6.590157e-01
+  Random Opt (n=195,330): Infidelity = 6.780733e-01
+  Random Opt (n=204,401): Infidelity = 7.205191e-01
+  Random Opt (n=405,294): Infidelity = 6.283123e-01
+  Random Opt (n=288,426): Infidelity = 6.813625e-01
+  Random Opt (n=3,234): Infidelity = 7.499546e-01
+  Best Optimized (Ideal): 5.562851e-01
+
+Gate Time: 2560.0 tau (Tg/T2q1=3.3204, Tg/T2q2=3.3267)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.456299e-01
+Evaluating 107 known sequences...
+Using Folded Noise Matrix (M=2)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 4.464978e-01 (CDD(8, 9))
+  Best Known (Ideal): 4.579738e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(157, 86), (235, 369), (358, 58), (214, 245), (230, 272), (152, 73), (152, 155), (448, 370), (351, 442), (114, 195), (173, 63), (411, 208), (10, 278), (280, 203), (215, 198), (237, 372), (218, 293), (14, 285), (260, 154), (346, 495)]
+Using Folded Noise Matrix (M=2)...
+  Random Opt (n=157,86): Infidelity = 5.548051e-01
+  Random Opt (n=235,369): Infidelity = 3.582415e-01
+  Random Opt (n=358,58): Infidelity = 4.636544e-01
+  Random Opt (n=214,245): Infidelity = 4.459334e-01
+  Random Opt (n=230,272): Infidelity = 4.099265e-01
+  Random Opt (n=152,73): Infidelity = 5.196335e-01
+  Random Opt (n=152,155): Infidelity = 4.641955e-01
+  Random Opt (n=448,370): Infidelity = 3.101738e-01
+  Random Opt (n=351,442): Infidelity = 3.020409e-01
+  Random Opt (n=114,195): Infidelity = 6.065314e-01
+  Random Opt (n=173,63): Infidelity = 4.956462e-01
+  Random Opt (n=411,208): Infidelity = 4.958117e-01
+  Random Opt (n=10,278): Infidelity = 6.026105e-01
+  Random Opt (n=280,203): Infidelity = 4.775602e-01
+  Random Opt (n=215,198): Infidelity = 5.218610e-01
+  Random Opt (n=237,372): Infidelity = 3.453074e-01
+  Random Opt (n=218,293): Infidelity = 4.352695e-01
+  Random Opt (n=14,285): Infidelity = 5.932735e-01
+  Random Opt (n=260,154): Infidelity = 3.820240e-01
+  Random Opt (n=346,495): Infidelity = 2.993003e-01
+  Best Optimized (Ideal): 2.930184e-01
+
+Gate Time: 1280.0 tau (Tg/T2q1=1.6602, Tg/T2q2=1.6634)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.148876e-01
+Evaluating 107 known sequences...
+Using Folded Noise Matrix (M=2)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 1.755663e-01 (CDD(8, 9))
+  Best Known (Ideal): 1.780254e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(274, 194), (0, 370), (357, 315), (355, 12), (430, 350), (11, 273), (69, 38), (375, 457), (171, 127), (140, 73), (492, 272), (300, 278), (383, 330), (412, 316), (433, 114), (146, 275), (282, 448), (57, 171), (393, 432), (103, 484)]
+Using Folded Noise Matrix (M=2)...
+  Random Opt (n=274,194): Infidelity = 1.745367e-01
+  Random Opt (n=0,370): Infidelity = 5.235164e-01
+  Random Opt (n=357,315): Infidelity = 1.540112e-01
+  Random Opt (n=355,12): Infidelity = 3.581169e-01
+  Random Opt (n=430,350): Infidelity = 1.477922e-01
+  Random Opt (n=11,273): Infidelity = 4.052661e-01
+  Random Opt (n=69,38): Infidelity = 3.517843e-01
+  Random Opt (n=375,457): Infidelity = 1.439321e-01
+  Random Opt (n=171,127): Infidelity = 1.918354e-01
+  Random Opt (n=140,73): Infidelity = 2.333568e-01
+  Random Opt (n=492,272): Infidelity = 1.536114e-01
+  Random Opt (n=300,278): Infidelity = 1.646473e-01
+  Random Opt (n=383,330): Infidelity = 1.560587e-01
+  Random Opt (n=412,316): Infidelity = 1.550133e-01
+  Random Opt (n=433,114): Infidelity = 3.105399e-01
+  Random Opt (n=146,275): Infidelity = 1.728024e-01
+  Random Opt (n=282,448): Infidelity = 1.450619e-01
+  Random Opt (n=57,171): Infidelity = 3.971023e-01
+  Random Opt (n=393,432): Infidelity = 1.488583e-01
+  Random Opt (n=103,484): Infidelity = 2.206124e-01
+  Best Optimized (Ideal): 1.107367e-01
+
+Gate Time: 640.0 tau (Tg/T2q1=0.8301, Tg/T2q2=0.8317)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 6.174506e-01
+Evaluating 84 known sequences...
+Using Folded Noise Matrix (M=2)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 8.760338e-02 (mqCDD(n=7, m=1))
+  Best Known (Ideal): 8.837565e-02
+  Running Random Optimization...
+  Randomly selected pulse counts: [(111, 108), (314, 267), (103, 188), (228, 254), (264, 74), (169, 145), (243, 222), (181, 106), (116, 23), (2, 296), (32, 165), (142, 162), (93, 2), (127, 149), (317, 197), (52, 0), (285, 168), (186, 245), (255, 129), (133, 69)]
+Using Folded Noise Matrix (M=2)...
+  Random Opt (n=111,108): Infidelity = 9.728120e-02
+  Random Opt (n=314,267): Infidelity = 7.114743e-02
+  Random Opt (n=103,188): Infidelity = 8.355289e-02
+  Random Opt (n=228,254): Infidelity = 7.142799e-02
+  Random Opt (n=264,74): Infidelity = 9.645449e-02
+  Random Opt (n=169,145): Infidelity = 8.309858e-02
+  Random Opt (n=243,222): Infidelity = 7.245629e-02
+  Random Opt (n=181,106): Infidelity = 9.101909e-02
+  Random Opt (n=116,23): Infidelity = 2.752039e-01
+  Random Opt (n=2,296): Infidelity = 3.517751e-01
+  Random Opt (n=32,165): Infidelity = 1.389092e-01
+  Random Opt (n=142,162): Infidelity = 8.296700e-02
+  Random Opt (n=93,2): Infidelity = 3.507255e-01
+  Random Opt (n=127,149): Infidelity = 8.437861e-02
+  Random Opt (n=317,197): Infidelity = 7.547230e-02
+  Random Opt (n=52,0): Infidelity = 4.597760e-01
+  Random Opt (n=285,168): Infidelity = 8.072969e-02
+  Random Opt (n=186,245): Infidelity = 7.618824e-02
+  Random Opt (n=255,129): Infidelity = 8.145136e-02
+  Random Opt (n=133,69): Infidelity = 1.030367e-01
+  Best Optimized (Ideal): 5.336963e-02
+
+Gate Time: 320.0 tau (Tg/T2q1=0.4150, Tg/T2q2=0.4158)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 4.491487e-01
+Evaluating 63 known sequences...
+Using Folded Noise Matrix (M=2)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 4.554936e-02 (mqCDD(n=6, m=1))
+  Best Known (Ideal): 4.557198e-02
+  Running Random Optimization...
+  Randomly selected pulse counts: [(79, 158), (122, 120), (21, 54), (151, 5), (15, 6), (100, 65), (124, 62), (90, 40), (75, 60), (65, 51), (78, 7), (134, 40), (1, 105), (85, 126), (124, 133), (73, 136), (84, 40), (7, 89), (89, 157), (132, 136)]
+Using Folded Noise Matrix (M=2)...
+  Random Opt (n=79,158): Infidelity = 3.693938e-02
+  Random Opt (n=122,120): Infidelity = 3.806234e-02
+  Random Opt (n=21,54): Infidelity = 6.301787e-02
+  Random Opt (n=151,5): Infidelity = 1.016786e-01
+  Random Opt (n=15,6): Infidelity = 1.371684e-01
+  Random Opt (n=100,65): Infidelity = 4.513783e-02
+  Random Opt (n=124,62): Infidelity = 4.400540e-02
+  Random Opt (n=90,40): Infidelity = 5.197992e-02
+  Random Opt (n=75,60): Infidelity = 4.788317e-02
+  Random Opt (n=65,51): Infidelity = 4.909020e-02
+  Random Opt (n=78,7): Infidelity = 8.952746e-02
+  Random Opt (n=134,40): Infidelity = 4.925048e-02
+  Random Opt (n=1,105): Infidelity = 1.869230e-01
+  Random Opt (n=85,126): Infidelity = 3.881357e-02
+  Random Opt (n=124,133): Infidelity = 3.664379e-02
+  Random Opt (n=73,136): Infidelity = 3.814652e-02
+  Random Opt (n=84,40): Infidelity = 5.215353e-02
+  Random Opt (n=7,89): Infidelity = 9.083521e-02
+  Random Opt (n=89,157): Infidelity = 3.689760e-02
+  Random Opt (n=132,136): Infidelity = 3.635759e-02
+  Best Optimized (Ideal): 2.797560e-02
+Saved all plotting data to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured/plotting_data/plotting_data_id_v4.npz
+
+================================================================================
+                        FINAL COMPARISON (Best Overall)                         
+================================================================================
+Infidelity                | 4.557198e-02              | 2.797560e-02             
+Sequence                  | mqCDD(n=6, m=1)^2         | NT(132,136)^2            
+================================================================================
+
+To generate plots, run:
+  python plot_optimization.py --data-dir /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured --gate-type id
+
+========================================
+Running Optimization for M = 4
+========================================
+Loading reconstructed spectra from /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured/specs.npz
+  specs spam_protocol: none
+[idle] NOTE: flagged (undetermined) DC points in specs: S112, S12, S212
+Calculated T2 times (Ideal): Q1=7.71e+02 tau, Q2=7.70e+02 tau
+Configuration loaded for M=4.
+
+============================================================
+RUNNING OPTIMIZATION PIPELINE
+M (Repetitions): 4
+Total Pulse Limit: 1000
+Pulse Limit Per Repetition: 250
+============================================================
+
+Gate Time: 10240.0 tau (Tg/T2q1=13.2815, Tg/T2q2=13.3069)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.499998e-01
+Evaluating 83 known sequences...
+Using Folded Noise Matrix (M=4)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 7.473839e-01 (mqCDD(n=6, m=2))
+  Best Known (Ideal): 7.477372e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(214, 219), (187, 183), (27, 126), (52, 34), (129, 111), (48, 22), (177, 157), (31, 75), (13, 113), (198, 44), (21, 28), (249, 2), (228, 186), (123, 5), (250, 161), (67, 210), (241, 119), (72, 8), (100, 102), (101, 115)]
+Using Folded Noise Matrix (M=4)...
+  Random Opt (n=214,219): Infidelity = 7.499798e-01
+  Random Opt (n=187,183): Infidelity = 7.495982e-01
+  Random Opt (n=27,126): Infidelity = 7.477497e-01
+  Random Opt (n=52,34): Infidelity = 7.499609e-01
+  Random Opt (n=129,111): Infidelity = 7.475340e-01
+  Random Opt (n=48,22): Infidelity = 7.499827e-01
+  Random Opt (n=177,157): Infidelity = 7.472659e-01
+  Random Opt (n=31,75): Infidelity = 7.498618e-01
+  Random Opt (n=13,113): Infidelity = 7.486722e-01
+  Random Opt (n=198,44): Infidelity = 7.497219e-01
+  Random Opt (n=21,28): Infidelity = 7.499986e-01
+  Random Opt (n=249,2): Infidelity = 7.475940e-01
+  Random Opt (n=228,186): Infidelity = 7.499483e-01
+  Random Opt (n=123,5): Infidelity = 7.482429e-01
+  Random Opt (n=250,161): Infidelity = 7.457434e-01
+  Random Opt (n=67,210): Infidelity = 7.498614e-01
+  Random Opt (n=241,119): Infidelity = 7.477515e-01
+  Random Opt (n=72,8): Infidelity = 7.498912e-01
+  Random Opt (n=100,102): Infidelity = 7.493217e-01
+  Random Opt (n=101,115): Infidelity = 7.487178e-01
+  Best Optimized (Ideal): 7.421880e-01
+
+Gate Time: 5120.0 tau (Tg/T2q1=6.6407, Tg/T2q2=6.6534)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.498697e-01
+Evaluating 83 known sequences...
+Using Folded Noise Matrix (M=4)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 6.915720e-01 (CDD(8, 6))
+  Best Known (Ideal): 6.927180e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(175, 191), (245, 168), (156, 136), (111, 125), (212, 165), (203, 201), (79, 97), (221, 188), (80, 118), (7, 96), (215, 203), (103, 210), (22, 202), (191, 216), (23, 34), (45, 103), (12, 217), (28, 194), (28, 50), (225, 126)]
+Using Folded Noise Matrix (M=4)...
+  Random Opt (n=175,191): Infidelity = 5.921726e-01
+  Random Opt (n=245,168): Infidelity = 5.571702e-01
+  Random Opt (n=156,136): Infidelity = 6.415564e-01
+  Random Opt (n=111,125): Infidelity = 7.418445e-01
+  Random Opt (n=212,165): Infidelity = 6.308766e-01
+  Random Opt (n=203,201): Infidelity = 6.903652e-01
+  Random Opt (n=79,97): Infidelity = 7.186650e-01
+  Random Opt (n=221,188): Infidelity = 6.374161e-01
+  Random Opt (n=80,118): Infidelity = 7.224526e-01
+  Random Opt (n=7,96): Infidelity = 7.490603e-01
+  Random Opt (n=215,203): Infidelity = 6.919643e-01
+  Random Opt (n=103,210): Infidelity = 7.363859e-01
+  Random Opt (n=22,202): Infidelity = 7.308681e-01
+  Random Opt (n=191,216): Infidelity = 6.720570e-01
+  Random Opt (n=23,34): Infidelity = 7.413937e-01
+  Random Opt (n=45,103): Infidelity = 7.405879e-01
+  Random Opt (n=12,217): Infidelity = 7.438099e-01
+  Random Opt (n=28,194): Infidelity = 7.040295e-01
+  Random Opt (n=28,50): Infidelity = 7.323622e-01
+  Random Opt (n=225,126): Infidelity = 6.937761e-01
+  Best Optimized (Ideal): 5.637789e-01
+
+Gate Time: 2560.0 tau (Tg/T2q1=3.3204, Tg/T2q2=3.3267)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.456331e-01
+Evaluating 83 known sequences...
+Using Folded Noise Matrix (M=4)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 4.453001e-01 (CDD(7, 8))
+  Best Known (Ideal): 4.548678e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(35, 42), (103, 155), (205, 49), (75, 1), (28, 34), (180, 76), (67, 57), (106, 76), (218, 209), (75, 65), (190, 210), (103, 162), (201, 161), (157, 40), (104, 165), (237, 49), (108, 147), (159, 17), (28, 205), (102, 67)]
+Using Folded Noise Matrix (M=4)...
+  Random Opt (n=35,42): Infidelity = 6.112502e-01
+  Random Opt (n=103,155): Infidelity = 4.201180e-01
+  Random Opt (n=205,49): Infidelity = 5.705664e-01
+  Random Opt (n=75,1): Infidelity = 6.226749e-01
+  Random Opt (n=28,34): Infidelity = 6.055584e-01
+  Random Opt (n=180,76): Infidelity = 3.871512e-01
+  Random Opt (n=67,57): Infidelity = 6.354119e-01
+  Random Opt (n=106,76): Infidelity = 4.751673e-01
+  Random Opt (n=218,209): Infidelity = 3.071029e-01
+  Random Opt (n=75,65): Infidelity = 4.955176e-01
+  Random Opt (n=190,210): Infidelity = 3.094352e-01
+  Random Opt (n=103,162): Infidelity = 4.203280e-01
+  Random Opt (n=201,161): Infidelity = 3.174354e-01
+  Random Opt (n=157,40): Infidelity = 4.763628e-01
+  Random Opt (n=104,165): Infidelity = 4.184825e-01
+  Random Opt (n=237,49): Infidelity = 5.690346e-01
+  Random Opt (n=108,147): Infidelity = 4.339729e-01
+  Random Opt (n=159,17): Infidelity = 5.144127e-01
+  Random Opt (n=28,205): Infidelity = 4.883728e-01
+  Random Opt (n=102,67): Infidelity = 4.981059e-01
+  Best Optimized (Ideal): 2.965539e-01
+
+Gate Time: 1280.0 tau (Tg/T2q1=1.6602, Tg/T2q2=1.6634)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.149203e-01
+Evaluating 83 known sequences...
+Using Folded Noise Matrix (M=4)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 1.755076e-01 (CDD(7, 8))
+  Best Known (Ideal): 1.786408e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(245, 112), (126, 127), (225, 149), (44, 208), (30, 245), (180, 122), (172, 203), (77, 236), (213, 248), (233, 188), (131, 42), (186, 186), (197, 207), (56, 147), (60, 114), (186, 190), (104, 121), (122, 16), (9, 196), (67, 73)]
+Using Folded Noise Matrix (M=4)...
+  Random Opt (n=245,112): Infidelity = 1.613010e-01
+  Random Opt (n=126,127): Infidelity = 1.783987e-01
+  Random Opt (n=225,149): Infidelity = 1.501894e-01
+  Random Opt (n=44,208): Infidelity = 2.006382e-01
+  Random Opt (n=30,245): Infidelity = 2.924148e-01
+  Random Opt (n=180,122): Infidelity = 1.693202e-01
+  Random Opt (n=172,203): Infidelity = 1.498395e-01
+  Random Opt (n=77,236): Infidelity = 1.497249e-01
+  Random Opt (n=213,248): Infidelity = 1.346104e-01
+  Random Opt (n=233,188): Infidelity = 1.470644e-01
+  Random Opt (n=131,42): Infidelity = 2.256349e-01
+  Random Opt (n=186,186): Infidelity = 2.486466e-01
+  Random Opt (n=197,207): Infidelity = 1.499379e-01
+  Random Opt (n=56,147): Infidelity = 2.334062e-01
+  Random Opt (n=60,114): Infidelity = 1.942833e-01
+  Random Opt (n=186,190): Infidelity = 1.530446e-01
+  Random Opt (n=104,121): Infidelity = 1.715292e-01
+  Random Opt (n=122,16): Infidelity = 3.029045e-01
+  Random Opt (n=9,196): Infidelity = 3.551760e-01
+  Random Opt (n=67,73): Infidelity = 1.989692e-01
+  Best Optimized (Ideal): 1.057680e-01
+
+Gate Time: 640.0 tau (Tg/T2q1=0.8301, Tg/T2q2=0.8317)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 6.176063e-01
+Evaluating 63 known sequences...
+Using Folded Noise Matrix (M=4)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 8.796195e-02 (mqCDD(n=6, m=1))
+  Best Known (Ideal): 8.804368e-02
+  Running Random Optimization...
+  Randomly selected pulse counts: [(35, 3), (28, 25), (69, 129), (110, 120), (7, 126), (152, 61), (153, 62), (47, 47), (151, 101), (19, 89), (114, 53), (107, 78), (80, 117), (23, 134), (45, 26), (4, 113), (49, 43), (18, 77), (53, 2), (56, 91)]
+Using Folded Noise Matrix (M=4)...
+  Random Opt (n=35,3): Infidelity = 2.071681e-01
+  Random Opt (n=28,25): Infidelity = 2.268281e-01
+  Random Opt (n=69,129): Infidelity = 7.475671e-02
+  Random Opt (n=110,120): Infidelity = 7.211431e-02
+  Random Opt (n=7,126): Infidelity = 1.579364e-01
+  Random Opt (n=152,61): Infidelity = 8.293055e-02
+  Random Opt (n=153,62): Infidelity = 8.431991e-02
+  Random Opt (n=47,47): Infidelity = 1.473360e-01
+  Random Opt (n=151,101): Infidelity = 7.510394e-02
+  Random Opt (n=19,89): Infidelity = 1.107406e-01
+  Random Opt (n=114,53): Infidelity = 8.703618e-02
+  Random Opt (n=107,78): Infidelity = 8.161687e-02
+  Random Opt (n=80,117): Infidelity = 7.659348e-02
+  Random Opt (n=23,134): Infidelity = 1.026993e-01
+  Random Opt (n=45,26): Infidelity = 2.034714e-01
+  Random Opt (n=4,113): Infidelity = 2.338076e-01
+  Random Opt (n=49,43): Infidelity = 9.791264e-02
+  Random Opt (n=18,77): Infidelity = 1.275232e-01
+  Random Opt (n=53,2): Infidelity = 2.809155e-01
+  Random Opt (n=56,91): Infidelity = 8.465631e-02
+  Best Optimized (Ideal): 5.563392e-02
+
+Gate Time: 320.0 tau (Tg/T2q1=0.4150, Tg/T2q2=0.4158)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 4.495566e-01
+Evaluating 45 known sequences...
+Using Folded Noise Matrix (M=4)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 4.547061e-02 (mqCDD(n=5, m=1))
+  Best Known (Ideal): 4.537771e-02
+  Running Random Optimization...
+  Randomly selected pulse counts: [(61, 54), (49, 72), (48, 35), (29, 30), (64, 37), (37, 48), (46, 11), (51, 58), (14, 22), (45, 6), (21, 45), (4, 2), (10, 17), (68, 3), (56, 55), (1, 37), (27, 11), (18, 38), (73, 54), (30, 5)]
+Using Folded Noise Matrix (M=4)...
+  Random Opt (n=61,54): Infidelity = 3.763945e-02
+  Random Opt (n=49,72): Infidelity = 3.838452e-02
+  Random Opt (n=48,35): Infidelity = 4.480172e-02
+  Random Opt (n=29,30): Infidelity = 4.840518e-02
+  Random Opt (n=64,37): Infidelity = 4.125546e-02
+  Random Opt (n=37,48): Infidelity = 4.260855e-02
+  Random Opt (n=46,11): Infidelity = 6.521944e-02
+  Random Opt (n=51,58): Infidelity = 3.962720e-02
+  Random Opt (n=14,22): Infidelity = 7.044019e-02
+  Random Opt (n=45,6): Infidelity = 1.523018e-01
+  Random Opt (n=21,45): Infidelity = 4.378589e-02
+  Random Opt (n=4,2): Infidelity = 1.818800e-01
+  Random Opt (n=10,17): Infidelity = 7.594021e-02
+  Random Opt (n=68,3): Infidelity = 8.670033e-02
+  Random Opt (n=56,55): Infidelity = 3.812451e-02
+  Random Opt (n=1,37): Infidelity = 1.326531e-01
+  Random Opt (n=27,11): Infidelity = 6.698227e-02
+  Random Opt (n=18,38): Infidelity = 5.047808e-02
+  Random Opt (n=73,54): Infidelity = 3.771982e-02
+  Random Opt (n=30,5): Infidelity = 1.613753e-01
+  Best Optimized (Ideal): 2.847459e-02
+Saved all plotting data to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured/plotting_data/plotting_data_id_v4.npz
+
+================================================================================
+                        FINAL COMPARISON (Best Overall)                         
+================================================================================
+Infidelity                | 4.537771e-02              | 2.847459e-02             
+Sequence                  | mqCDD(n=5, m=1)^4         | NT(61,54)^4              
+================================================================================
+
+To generate plots, run:
+  python plot_optimization.py --data-dir /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured --gate-type id
+
+========================================
+Running Optimization for M = 8
+========================================
+Loading reconstructed spectra from /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured/specs.npz
+  specs spam_protocol: none
+[idle] NOTE: flagged (undetermined) DC points in specs: S112, S12, S212
+Calculated T2 times (Ideal): Q1=7.71e+02 tau, Q2=7.70e+02 tau
+Configuration loaded for M=8.
+
+============================================================
+RUNNING OPTIMIZATION PIPELINE
+M (Repetitions): 8
+Total Pulse Limit: 1000
+Pulse Limit Per Repetition: 125
+============================================================
+
+Gate Time: 10240.0 tau (Tg/T2q1=13.2815, Tg/T2q2=13.3069)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.499998e-01
+Evaluating 62 known sequences...
+Using Folded Noise Matrix (M=8)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 7.473773e-01 (mqCDD(n=5, m=2))
+  Best Known (Ideal): 7.477367e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(16, 124), (81, 37), (78, 97), (115, 67), (101, 66), (95, 96), (51, 79), (47, 110), (69, 30), (97, 23), (118, 79), (6, 60), (52, 101), (101, 88), (49, 6), (85, 103), (29, 57), (26, 93), (44, 30), (124, 66)]
+Using Folded Noise Matrix (M=8)...
+  Random Opt (n=16,124): Infidelity = 7.499571e-01
+  Random Opt (n=81,37): Infidelity = 7.469393e-01
+  Random Opt (n=78,97): Infidelity = 7.468768e-01
+  Random Opt (n=115,67): Infidelity = 7.481000e-01
+  Random Opt (n=101,66): Infidelity = 7.480962e-01
+  Random Opt (n=95,96): Infidelity = 7.496324e-01
+  Random Opt (n=51,79): Infidelity = 7.468814e-01
+  Random Opt (n=47,110): Infidelity = 7.495944e-01
+  Random Opt (n=69,30): Infidelity = 7.472393e-01
+  Random Opt (n=97,23): Infidelity = 7.495625e-01
+  Random Opt (n=118,79): Infidelity = 7.474259e-01
+  Random Opt (n=6,60): Infidelity = 7.482752e-01
+  Random Opt (n=52,101): Infidelity = 7.493936e-01
+  Random Opt (n=101,88): Infidelity = 7.497991e-01
+  Random Opt (n=49,6): Infidelity = 7.495090e-01
+  Random Opt (n=85,103): Infidelity = 7.480871e-01
+  Random Opt (n=29,57): Infidelity = 7.483740e-01
+  Random Opt (n=26,93): Infidelity = 7.499502e-01
+  Random Opt (n=44,30): Infidelity = 7.493944e-01
+  Random Opt (n=124,66): Infidelity = 7.460849e-01
+  Best Optimized (Ideal): 7.446730e-01
+
+Gate Time: 5120.0 tau (Tg/T2q1=6.6407, Tg/T2q2=6.6534)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.498698e-01
+Evaluating 62 known sequences...
+Using Folded Noise Matrix (M=8)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 6.902406e-01 (CDD(7, 5))
+  Best Known (Ideal): 6.901393e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(51, 124), (10, 3), (20, 37), (58, 57), (47, 90), (105, 21), (58, 22), (89, 11), (5, 50), (45, 22), (111, 85), (82, 20), (75, 53), (43, 30), (12, 35), (35, 98), (29, 20), (58, 77), (42, 45), (54, 23)]
+Using Folded Noise Matrix (M=8)...
+  Random Opt (n=51,124): Infidelity = 6.721209e-01
+  Random Opt (n=10,3): Infidelity = 7.489481e-01
+  Random Opt (n=20,37): Infidelity = 7.234707e-01
+  Random Opt (n=58,57): Infidelity = 7.450195e-01
+  Random Opt (n=47,90): Infidelity = 6.768112e-01
+  Random Opt (n=105,21): Infidelity = 6.919022e-01
+  Random Opt (n=58,22): Infidelity = 7.329902e-01
+  Random Opt (n=89,11): Infidelity = 6.740978e-01
+  Random Opt (n=5,50): Infidelity = 7.497080e-01
+  Random Opt (n=45,22): Infidelity = 7.236883e-01
+  Random Opt (n=111,85): Infidelity = 6.374644e-01
+  Random Opt (n=82,20): Infidelity = 6.731924e-01
+  Random Opt (n=75,53): Infidelity = 6.884928e-01
+  Random Opt (n=43,30): Infidelity = 7.080852e-01
+  Random Opt (n=12,35): Infidelity = 7.281840e-01
+  Random Opt (n=35,98): Infidelity = 6.894848e-01
+  Random Opt (n=29,20): Infidelity = 7.212603e-01
+  Random Opt (n=58,77): Infidelity = 6.848607e-01
+  Random Opt (n=42,45): Infidelity = 7.299219e-01
+  Random Opt (n=54,23): Infidelity = 7.348210e-01
+  Best Optimized (Ideal): 6.400094e-01
+
+Gate Time: 2560.0 tau (Tg/T2q1=3.3204, Tg/T2q2=3.3267)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.456396e-01
+Evaluating 62 known sequences...
+Using Folded Noise Matrix (M=8)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 4.484338e-01 (CDD(6, 7))
+  Best Known (Ideal): 4.622482e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(49, 42), (97, 30), (6, 70), (86, 13), (81, 7), (123, 101), (46, 63), (72, 125), (71, 45), (35, 60), (46, 37), (96, 5), (32, 100), (91, 18), (52, 81), (38, 40), (7, 74), (117, 42), (14, 108), (91, 67)]
+Using Folded Noise Matrix (M=8)...
+  Random Opt (n=49,42): Infidelity = 4.536773e-01
+  Random Opt (n=97,30): Infidelity = 5.513889e-01
+  Random Opt (n=6,70): Infidelity = 5.770503e-01
+  Random Opt (n=86,13): Infidelity = 4.719568e-01
+  Random Opt (n=81,7): Infidelity = 4.925423e-01
+  Random Opt (n=123,101): Infidelity = 3.013668e-01
+  Random Opt (n=46,63): Infidelity = 3.957023e-01
+  Random Opt (n=72,125): Infidelity = 3.125567e-01
+  Random Opt (n=71,45): Infidelity = 3.722682e-01
+  Random Opt (n=35,60): Infidelity = 4.398833e-01
+  Random Opt (n=46,37): Infidelity = 4.364518e-01
+  Random Opt (n=96,5): Infidelity = 5.254509e-01
+  Random Opt (n=32,100): Infidelity = 4.357686e-01
+  Random Opt (n=91,18): Infidelity = 4.724273e-01
+  Random Opt (n=52,81): Infidelity = 4.238415e-01
+  Random Opt (n=38,40): Infidelity = 4.738033e-01
+  Random Opt (n=7,74): Infidelity = 5.483477e-01
+  Random Opt (n=117,42): Infidelity = 3.804066e-01
+  Random Opt (n=14,108): Infidelity = 4.914938e-01
+  Random Opt (n=91,67): Infidelity = 3.252972e-01
+  Best Optimized (Ideal): 2.806084e-01
+
+Gate Time: 1280.0 tau (Tg/T2q1=1.6602, Tg/T2q2=1.6634)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.149856e-01
+Evaluating 62 known sequences...
+Using Folded Noise Matrix (M=8)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 1.763109e-01 (CDD(6, 7))
+  Best Known (Ideal): 1.774195e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(0, 119), (79, 29), (113, 78), (65, 87), (87, 104), (87, 49), (58, 28), (87, 54), (112, 118), (121, 40), (24, 123), (52, 50), (114, 23), (96, 53), (110, 13), (75, 17), (17, 11), (102, 121), (52, 69), (48, 13)]
+Using Folded Noise Matrix (M=8)...
+  Random Opt (n=0,119): Infidelity = 5.176311e-01
+  Random Opt (n=79,29): Infidelity = 2.088327e-01
+  Random Opt (n=113,78): Infidelity = 1.543245e-01
+  Random Opt (n=65,87): Infidelity = 1.563147e-01
+  Random Opt (n=87,104): Infidelity = 1.485272e-01
+  Random Opt (n=87,49): Infidelity = 1.710563e-01
+  Random Opt (n=58,28): Infidelity = 3.049344e-01
+  Random Opt (n=87,54): Infidelity = 1.723837e-01
+  Random Opt (n=112,118): Infidelity = 1.407049e-01
+  Random Opt (n=121,40): Infidelity = 1.787427e-01
+  Random Opt (n=24,123): Infidelity = 2.090081e-01
+  Random Opt (n=52,50): Infidelity = 1.840381e-01
+  Random Opt (n=114,23): Infidelity = 2.060815e-01
+  Random Opt (n=96,53): Infidelity = 1.687417e-01
+  Random Opt (n=110,13): Infidelity = 5.113450e-01
+  Random Opt (n=75,17): Infidelity = 2.277402e-01
+  Random Opt (n=17,11): Infidelity = 4.619361e-01
+  Random Opt (n=102,121): Infidelity = 1.434260e-01
+  Random Opt (n=52,69): Infidelity = 1.658236e-01
+  Random Opt (n=48,13): Infidelity = 5.216337e-01
+  Best Optimized (Ideal): 1.080262e-01
+
+Gate Time: 640.0 tau (Tg/T2q1=0.8301, Tg/T2q2=0.8317)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 6.179135e-01
+Evaluating 45 known sequences...
+Using Folded Noise Matrix (M=8)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 8.773485e-02 (mqCDD(n=5, m=1))
+  Best Known (Ideal): 8.759437e-02
+  Running Random Optimization...
+  Randomly selected pulse counts: [(34, 15), (22, 59), (45, 56), (9, 52), (12, 7), (59, 52), (63, 4), (52, 38), (36, 7), (28, 31), (13, 19), (42, 72), (20, 20), (36, 21), (57, 38), (24, 17), (64, 40), (1, 48), (10, 72), (29, 76)]
+Using Folded Noise Matrix (M=8)...
+  Random Opt (n=34,15): Infidelity = 1.052613e-01
+  Random Opt (n=22,59): Infidelity = 8.175988e-02
+  Random Opt (n=45,56): Infidelity = 7.742684e-02
+  Random Opt (n=9,52): Infidelity = 1.087274e-01
+  Random Opt (n=12,7): Infidelity = 2.262178e-01
+  Random Opt (n=59,52): Infidelity = 7.494115e-02
+  Random Opt (n=63,4): Infidelity = 2.111809e-01
+  Random Opt (n=52,38): Infidelity = 8.848231e-02
+  Random Opt (n=36,7): Infidelity = 1.866434e-01
+  Random Opt (n=28,31): Infidelity = 9.218501e-02
+  Random Opt (n=13,19): Infidelity = 1.475338e-01
+  Random Opt (n=42,72): Infidelity = 7.696740e-02
+  Random Opt (n=20,20): Infidelity = 1.636729e-01
+  Random Opt (n=36,21): Infidelity = 9.797922e-02
+  Random Opt (n=57,38): Infidelity = 8.380793e-02
+  Random Opt (n=24,17): Infidelity = 1.061152e-01
+  Random Opt (n=64,40): Infidelity = 8.135964e-02
+  Random Opt (n=1,48): Infidelity = 2.248037e-01
+  Random Opt (n=10,72): Infidelity = 1.178267e-01
+  Random Opt (n=29,76): Infidelity = 7.498991e-02
+  Best Optimized (Ideal): 5.683135e-02
+
+Gate Time: 320.0 tau (Tg/T2q1=0.4150, Tg/T2q2=0.4158)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 4.503324e-01
+Evaluating 30 known sequences...
+Using Folded Noise Matrix (M=8)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 4.451518e-02 (mqCDD(n=4, m=1))
+  Best Known (Ideal): 4.371235e-02
+  Running Random Optimization...
+  Randomly selected pulse counts: [(37, 28), (15, 25), (37, 20), (32, 9), (25, 4), (2, 11), (31, 21), (15, 11), (2, 30), (16, 36), (18, 21), (23, 13), (33, 17), (32, 38), (7, 6), (28, 11), (23, 33), (26, 9), (36, 38), (27, 35)]
+Using Folded Noise Matrix (M=8)...
+  Random Opt (n=37,28): Infidelity = 3.873679e-02
+  Random Opt (n=15,25): Infidelity = 4.179570e-02
+  Random Opt (n=37,20): Infidelity = 4.175895e-02
+  Random Opt (n=32,9): Infidelity = 4.818094e-02
+  Random Opt (n=25,4): Infidelity = 9.938749e-02
+  Random Opt (n=2,11): Infidelity = 1.239110e-01
+  Random Opt (n=31,21): Infidelity = 4.018930e-02
+  Random Opt (n=15,11): Infidelity = 4.893252e-02
+  Random Opt (n=2,30): Infidelity = 1.157977e-01
+  Random Opt (n=16,36): Infidelity = 4.232530e-02
+  Random Opt (n=18,21): Infidelity = 4.500483e-02
+  Random Opt (n=23,13): Infidelity = 4.647720e-02
+  Random Opt (n=33,17): Infidelity = 4.097073e-02
+  Random Opt (n=32,38): Infidelity = 3.707022e-02
+  Random Opt (n=7,6): Infidelity = 7.741669e-02
+  Random Opt (n=28,11): Infidelity = 4.754518e-02
+  Random Opt (n=23,33): Infidelity = 3.749466e-02
+  Random Opt (n=26,9): Infidelity = 4.978894e-02
+  Random Opt (n=36,38): Infidelity = 3.717407e-02
+  Random Opt (n=27,35): Infidelity = 3.771703e-02
+  Best Optimized (Ideal): 2.853163e-02
+Saved all plotting data to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured/plotting_data/plotting_data_id_v4.npz
+
+================================================================================
+                        FINAL COMPARISON (Best Overall)                         
+================================================================================
+Infidelity                | 4.371235e-02              | 2.853163e-02             
+Sequence                  | mqCDD(n=4, m=1)^8         | NT(32,38)^8              
+================================================================================
+
+To generate plots, run:
+  python plot_optimization.py --data-dir /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured --gate-type id
+
+========================================
+Running Optimization for M = 16
+========================================
+Loading reconstructed spectra from /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured/specs.npz
+  specs spam_protocol: none
+[idle] NOTE: flagged (undetermined) DC points in specs: S112, S12, S212
+Calculated T2 times (Ideal): Q1=7.71e+02 tau, Q2=7.70e+02 tau
+Configuration loaded for M=16.
+
+============================================================
+RUNNING OPTIMIZATION PIPELINE
+M (Repetitions): 16
+Total Pulse Limit: 1000
+Pulse Limit Per Repetition: 62
+============================================================
+
+Gate Time: 10240.0 tau (Tg/T2q1=13.2815, Tg/T2q2=13.3069)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.499998e-01
+Evaluating 44 known sequences...
+Using Frequency Comb Approximation (M=16)...
+  Best Known (Char): 7.473490e-01 (mqCDD(n=4, m=2))
+  Best Known (Ideal): 7.477431e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(32, 26), (30, 35), (0, 55), (16, 47), (60, 3), (16, 7), (53, 20), (11, 1), (29, 36), (26, 17), (6, 52), (39, 28), (48, 20), (28, 31), (11, 15), (45, 20), (46, 30), (56, 37), (34, 41), (32, 1)]
+Using Frequency Comb Approximation (M=16)...
+  Random Opt (n=32,26): Infidelity = 7.479147e-01
+  Random Opt (n=30,35): Infidelity = 7.475915e-01
+  Random Opt (n=0,55): Infidelity = 7.500000e-01
+  Random Opt (n=16,47): Infidelity = 7.499139e-01
+  Random Opt (n=60,3): Infidelity = 7.463814e-01
+  Random Opt (n=16,7): Infidelity = 7.499154e-01
+  Random Opt (n=53,20): Infidelity = 7.496246e-01
+  Random Opt (n=11,1): Infidelity = 7.499823e-01
+  Random Opt (n=29,36): Infidelity = 7.474823e-01
+  Random Opt (n=26,17): Infidelity = 7.492094e-01
+  Random Opt (n=6,52): Infidelity = 7.499999e-01
+  Random Opt (n=39,28): Infidelity = 7.446825e-01
+  Random Opt (n=48,20): Infidelity = 7.493182e-01
+  Random Opt (n=28,31): Infidelity = 7.475665e-01
+  Random Opt (n=11,15): Infidelity = 7.495640e-01
+  Random Opt (n=45,20): Infidelity = 7.487398e-01
+  Random Opt (n=46,30): Infidelity = 7.477024e-01
+  Random Opt (n=56,37): Infidelity = 7.483530e-01
+  Random Opt (n=34,41): Infidelity = 7.476493e-01
+  Random Opt (n=32,1): Infidelity = 7.482616e-01
+  Best Optimized (Ideal): 7.438467e-01
+
+Gate Time: 5120.0 tau (Tg/T2q1=6.6407, Tg/T2q2=6.6534)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.498702e-01
+Evaluating 44 known sequences...
+Using Frequency Comb Approximation (M=16)...
+  Best Known (Char): 6.903954e-01 (mqCDD(n=3, m=3))
+  Best Known (Ideal): 6.911797e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(62, 21), (41, 37), (50, 28), (43, 5), (30, 24), (34, 2), (27, 46), (9, 6), (57, 6), (28, 10), (45, 43), (11, 4), (0, 16), (35, 55), (50, 11), (41, 12), (40, 52), (22, 8), (17, 45), (30, 4)]
+Using Frequency Comb Approximation (M=16)...
+  Random Opt (n=62,21): Infidelity = 6.383486e-01
+  Random Opt (n=41,37): Infidelity = 5.784537e-01
+  Random Opt (n=50,28): Infidelity = 6.703508e-01
+  Random Opt (n=43,5): Infidelity = 6.716017e-01
+  Random Opt (n=30,24): Infidelity = 7.080865e-01
+  Random Opt (n=34,2): Infidelity = 6.970985e-01
+  Random Opt (n=27,46): Infidelity = 6.840737e-01
+  Random Opt (n=9,6): Infidelity = 7.367753e-01
+  Random Opt (n=57,6): Infidelity = 6.514993e-01
+  Random Opt (n=28,10): Infidelity = 6.977197e-01
+  Random Opt (n=45,43): Infidelity = 5.673194e-01
+  Random Opt (n=11,4): Infidelity = 7.390090e-01
+  Random Opt (n=0,16): Infidelity = 7.221076e-01
+  Random Opt (n=35,55): Infidelity = 5.853656e-01
+  Random Opt (n=50,11): Infidelity = 6.565941e-01
+  Random Opt (n=41,12): Infidelity = 6.611509e-01
+  Random Opt (n=40,52): Infidelity = 5.734844e-01
+  Random Opt (n=22,8): Infidelity = 7.177270e-01
+  Random Opt (n=17,45): Infidelity = 6.553040e-01
+  Random Opt (n=30,4): Infidelity = 7.079069e-01
+  Best Optimized (Ideal): 5.429257e-01
+
+Gate Time: 2560.0 tau (Tg/T2q1=3.3204, Tg/T2q2=3.3267)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.456525e-01
+Evaluating 44 known sequences...
+Using Frequency Comb Approximation (M=16)...
+  Best Known (Char): 4.421228e-01 (CDD(5, 6))
+  Best Known (Ideal): 4.465209e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(32, 36), (45, 1), (26, 57), (53, 2), (11, 10), (9, 3), (20, 16), (4, 43), (44, 50), (53, 6), (51, 13), (50, 25), (33, 50), (29, 5), (54, 24), (36, 15), (33, 17), (50, 15), (16, 7), (23, 10)]
+Using Frequency Comb Approximation (M=16)...
+  Random Opt (n=32,36): Infidelity = 3.031283e-01
+  Random Opt (n=45,1): Infidelity = 5.480415e-01
+  Random Opt (n=26,57): Infidelity = 3.417570e-01
+  Random Opt (n=53,2): Infidelity = 5.452338e-01
+  Random Opt (n=11,10): Infidelity = 5.566815e-01
+  Random Opt (n=9,3): Infidelity = 5.857492e-01
+  Random Opt (n=20,16): Infidelity = 4.555101e-01
+  Random Opt (n=4,43): Infidelity = 5.313004e-01
+  Random Opt (n=44,50): Infidelity = 2.921999e-01
+  Random Opt (n=53,6): Infidelity = 4.790700e-01
+  Random Opt (n=51,13): Infidelity = 5.814085e-01
+  Random Opt (n=50,25): Infidelity = 3.502551e-01
+  Random Opt (n=33,50): Infidelity = 3.013787e-01
+  Random Opt (n=29,5): Infidelity = 5.009957e-01
+  Random Opt (n=54,24): Infidelity = 3.534389e-01
+  Random Opt (n=36,15): Infidelity = 4.032231e-01
+  Random Opt (n=33,17): Infidelity = 3.823233e-01
+  Random Opt (n=50,15): Infidelity = 4.026776e-01
+  Random Opt (n=16,7): Infidelity = 5.218593e-01
+  Random Opt (n=23,10): Infidelity = 4.798725e-01
+  Best Optimized (Ideal): 2.986863e-01
+
+Gate Time: 1280.0 tau (Tg/T2q1=1.6602, Tg/T2q2=1.6634)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.151152e-01
+Evaluating 44 known sequences...
+Using Folded Noise Matrix (M=16)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 1.765232e-01 (CDD(5, 6))
+  Best Known (Ideal): 1.771715e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(33, 46), (4, 52), (26, 21), (56, 26), (27, 11), (52, 11), (49, 60), (2, 29), (4, 44), (45, 21), (15, 3), (37, 43), (46, 6), (11, 37), (16, 25), (26, 23), (10, 17), (51, 1), (17, 6), (56, 49)]
+Using Folded Noise Matrix (M=16)...
+  Random Opt (n=33,46): Infidelity = 1.582300e-01
+  Random Opt (n=4,52): Infidelity = 3.278452e-01
+  Random Opt (n=26,21): Infidelity = 1.837119e-01
+  Random Opt (n=56,26): Infidelity = 1.710829e-01
+  Random Opt (n=27,11): Infidelity = 2.182531e-01
+  Random Opt (n=52,11): Infidelity = 2.103406e-01
+  Random Opt (n=49,60): Infidelity = 1.485611e-01
+  Random Opt (n=2,29): Infidelity = 4.007267e-01
+  Random Opt (n=4,44): Infidelity = 3.356174e-01
+  Random Opt (n=45,21): Infidelity = 1.754551e-01
+  Random Opt (n=15,3): Infidelity = 2.860436e-01
+  Random Opt (n=37,43): Infidelity = 1.514162e-01
+  Random Opt (n=46,6): Infidelity = 3.885376e-01
+  Random Opt (n=11,37): Infidelity = 2.065032e-01
+  Random Opt (n=16,25): Infidelity = 1.964066e-01
+  Random Opt (n=26,23): Infidelity = 1.814779e-01
+  Random Opt (n=10,17): Infidelity = 2.568746e-01
+  Random Opt (n=51,1): Infidelity = 3.254009e-01
+  Random Opt (n=17,6): Infidelity = 3.965089e-01
+  Random Opt (n=56,49): Infidelity = 1.436773e-01
+  Best Optimized (Ideal): 1.108424e-01
+
+Gate Time: 640.0 tau (Tg/T2q1=0.8301, Tg/T2q2=0.8317)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 6.185104e-01
+Evaluating 30 known sequences...
+Using Folded Noise Matrix (M=16)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 8.569621e-02 (mqCDD(n=4, m=1))
+  Best Known (Ideal): 8.445973e-02
+  Running Random Optimization...
+  Randomly selected pulse counts: [(2, 29), (4, 30), (20, 8), (13, 3), (35, 27), (4, 12), (1, 34), (35, 8), (6, 28), (18, 25), (23, 31), (21, 26), (31, 38), (10, 34), (17, 4), (1, 27), (9, 17), (5, 24), (10, 12), (32, 38)]
+Using Folded Noise Matrix (M=16)...
+  Random Opt (n=2,29): Infidelity = 2.070335e-01
+  Random Opt (n=4,30): Infidelity = 1.539958e-01
+  Random Opt (n=20,8): Infidelity = 1.175546e-01
+  Random Opt (n=13,3): Infidelity = 1.878878e-01
+  Random Opt (n=35,27): Infidelity = 7.484385e-02
+  Random Opt (n=4,12): Infidelity = 1.756833e-01
+  Random Opt (n=1,34): Infidelity = 1.581008e-01
+  Random Opt (n=35,8): Infidelity = 1.101478e-01
+  Random Opt (n=6,28): Infidelity = 1.200916e-01
+  Random Opt (n=18,25): Infidelity = 8.497270e-02
+  Random Opt (n=23,31): Infidelity = 7.513259e-02
+  Random Opt (n=21,26): Infidelity = 8.005262e-02
+  Random Opt (n=31,38): Infidelity = 7.032588e-02
+  Random Opt (n=10,34): Infidelity = 8.596826e-02
+  Random Opt (n=17,4): Infidelity = 1.813282e-01
+  Random Opt (n=1,27): Infidelity = 1.594565e-01
+  Random Opt (n=9,17): Infidelity = 8.859388e-02
+  Random Opt (n=5,24): Infidelity = 1.129171e-01
+  Random Opt (n=10,12): Infidelity = 1.122247e-01
+  Random Opt (n=32,38): Infidelity = 7.213350e-02
+  Best Optimized (Ideal): 5.422724e-02
+
+Gate Time: 320.0 tau (Tg/T2q1=0.4150, Tg/T2q2=0.4158)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 4.518662e-01
+Evaluating 18 known sequences...
+Using Folded Noise Matrix (M=16)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 4.535011e-02 (mqCDD(n=3, m=1))
+  Best Known (Ideal): 4.411463e-02
+  Running Random Optimization...
+  Randomly selected pulse counts: [(15, 12), (1, 7), (10, 7), (6, 2), (5, 13), (4, 18), (10, 5), (16, 16), (13, 3), (5, 4), (16, 16), (3, 18), (14, 16), (10, 6), (4, 14), (16, 10), (5, 14), (2, 3), (3, 17), (5, 0)]
+Using Folded Noise Matrix (M=16)...
+  Random Opt (n=15,12): Infidelity = 4.500979e-02
+  Random Opt (n=1,7): Infidelity = 8.143793e-02
+  Random Opt (n=10,7): Infidelity = 4.951770e-02
+  Random Opt (n=6,2): Infidelity = 1.401411e-01
+  Random Opt (n=5,13): Infidelity = 4.098966e-02
+  Random Opt (n=4,18): Infidelity = 6.345110e-02
+  Random Opt (n=10,5): Infidelity = 5.255778e-02
+  Random Opt (n=16,16): Infidelity = 6.912955e-02
+  Random Opt (n=13,3): Infidelity = 5.211476e-02
+  Random Opt (n=5,4): Infidelity = 7.549153e-02
+  Random Opt (n=16,16): Infidelity = 6.912955e-02
+  Random Opt (n=3,18): Infidelity = 4.420538e-02
+  Random Opt (n=14,16): Infidelity = 4.335169e-02
+  Random Opt (n=10,6): Infidelity = 6.763166e-02
+  Random Opt (n=4,14): Infidelity = 6.941972e-02
+  Random Opt (n=16,10): Infidelity = 4.906687e-02
+  Random Opt (n=5,14): Infidelity = 4.552137e-02
+  Random Opt (n=2,3): Infidelity = 1.148043e-01
+  Random Opt (n=3,17): Infidelity = 4.089249e-02
+  Random Opt (n=5,0): Infidelity = 2.877762e-01
+  Best Optimized (Ideal): 4.320949e-02
+Saved all plotting data to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured/plotting_data/plotting_data_id_v4.npz
+
+================================================================================
+                        FINAL COMPARISON (Best Overall)                         
+================================================================================
+Infidelity                | 4.411463e-02              | 4.320949e-02             
+Sequence                  | mqCDD(n=3, m=1)^16        | NT(3,17)^16              
+================================================================================
+
+To generate plots, run:
+  python plot_optimization.py --data-dir /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured --gate-type id
+
+========================================
+Running Optimization for M = 32
+========================================
+Loading reconstructed spectra from /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured/specs.npz
+  specs spam_protocol: none
+[idle] NOTE: flagged (undetermined) DC points in specs: S112, S12, S212
+Calculated T2 times (Ideal): Q1=7.71e+02 tau, Q2=7.70e+02 tau
+Configuration loaded for M=32.
+
+============================================================
+RUNNING OPTIMIZATION PIPELINE
+M (Repetitions): 32
+Total Pulse Limit: 1000
+Pulse Limit Per Repetition: 31
+============================================================
+
+Gate Time: 10240.0 tau (Tg/T2q1=13.2815, Tg/T2q2=13.3069)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.499998e-01
+Evaluating 30 known sequences...
+Using Frequency Comb Approximation (M=32)...
+  Best Known (Char): 7.473045e-01 (mqCDD(n=3, m=2))
+  Best Known (Ideal): 7.477392e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(30, 30), (14, 9), (18, 24), (26, 4), (7, 29), (14, 19), (28, 28), (2, 22), (27, 0), (31, 6), (2, 11), (11, 7), (12, 22), (19, 29), (14, 16), (20, 7), (6, 11), (30, 23), (30, 28), (3, 26)]
+Using Frequency Comb Approximation (M=32)...
+  Random Opt (n=30,30): Infidelity = 7.231771e-01
+  Random Opt (n=14,9): Infidelity = 7.488945e-01
+  Random Opt (n=18,24): Infidelity = 7.481500e-01
+  Random Opt (n=26,4): Infidelity = 7.499354e-01
+  Random Opt (n=7,29): Infidelity = 7.498407e-01
+  Random Opt (n=14,19): Infidelity = 7.466706e-01
+  Random Opt (n=28,28): Infidelity = 7.499739e-01
+  Random Opt (n=2,22): Infidelity = 7.499636e-01
+  Random Opt (n=27,0): Infidelity = 7.499896e-01
+  Random Opt (n=31,6): Infidelity = 7.418232e-01
+  Random Opt (n=2,11): Infidelity = 7.494377e-01
+  Random Opt (n=11,7): Infidelity = 7.489821e-01
+  Random Opt (n=12,22): Infidelity = 7.496070e-01
+  Random Opt (n=19,29): Infidelity = 7.461550e-01
+  Random Opt (n=14,16): Infidelity = 7.484670e-01
+  Random Opt (n=20,7): Infidelity = 7.458855e-01
+  Random Opt (n=6,11): Infidelity = 7.493881e-01
+  Random Opt (n=30,23): Infidelity = 7.427718e-01
+  Random Opt (n=30,28): Infidelity = 7.254399e-01
+  Random Opt (n=3,26): Infidelity = 7.499977e-01
+  Best Optimized (Ideal): 7.089653e-01
+
+Gate Time: 5120.0 tau (Tg/T2q1=6.6407, Tg/T2q2=6.6534)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.498709e-01
+Evaluating 30 known sequences...
+Using Frequency Comb Approximation (M=32)...
+  Best Known (Char): 6.428678e-01 (mqCDD(n=4, m=1))
+  Best Known (Ideal): 6.403779e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(27, 15), (11, 7), (19, 9), (27, 25), (2, 16), (27, 14), (9, 20), (26, 7), (0, 28), (2, 18), (25, 3), (2, 6), (3, 30), (6, 11), (26, 6), (13, 17), (14, 29), (3, 25), (23, 29), (28, 17)]
+Using Frequency Comb Approximation (M=32)...
+  Random Opt (n=27,15): Infidelity = 5.928684e-01
+  Random Opt (n=11,7): Infidelity = 6.726627e-01
+  Random Opt (n=19,9): Infidelity = 6.450079e-01
+  Random Opt (n=27,25): Infidelity = 5.358975e-01
+  Random Opt (n=2,16): Infidelity = 7.069026e-01
+  Random Opt (n=27,14): Infidelity = 6.020369e-01
+  Random Opt (n=9,20): Infidelity = 6.443656e-01
+  Random Opt (n=26,7): Infidelity = 6.317086e-01
+  Random Opt (n=0,28): Infidelity = 6.715891e-01
+  Random Opt (n=2,18): Infidelity = 6.948268e-01
+  Random Opt (n=25,3): Infidelity = 6.502136e-01
+  Random Opt (n=2,6): Infidelity = 7.362576e-01
+  Random Opt (n=3,30): Infidelity = 6.657205e-01
+  Random Opt (n=6,11): Infidelity = 7.091606e-01
+  Random Opt (n=26,6): Infidelity = 6.509380e-01
+  Random Opt (n=13,17): Infidelity = 6.950751e-01
+  Random Opt (n=14,29): Infidelity = 6.179123e-01
+  Random Opt (n=3,25): Infidelity = 6.711166e-01
+  Random Opt (n=23,29): Infidelity = 5.445391e-01
+  Random Opt (n=28,17): Infidelity = 5.733300e-01
+  Best Optimized (Ideal): 5.421105e-01
+
+Gate Time: 2560.0 tau (Tg/T2q1=3.3204, Tg/T2q2=3.3267)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.456781e-01
+Evaluating 30 known sequences...
+Using Frequency Comb Approximation (M=32)...
+  Best Known (Char): 4.117727e-01 (mqCDD(n=4, m=1))
+  Best Known (Ideal): 4.105611e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(0, 15), (8, 17), (15, 3), (1, 25), (16, 31), (3, 2), (0, 19), (18, 4), (4, 23), (26, 5), (22, 22), (12, 27), (3, 11), (12, 19), (16, 3), (6, 14), (27, 8), (16, 7), (31, 26), (9, 20)]
+Using Frequency Comb Approximation (M=32)...
+  Random Opt (n=0,15): Infidelity = 6.032041e-01
+  Random Opt (n=8,17): Infidelity = 4.189998e-01
+  Random Opt (n=15,3): Infidelity = 4.413404e-01
+  Random Opt (n=1,25): Infidelity = 5.247616e-01
+  Random Opt (n=16,31): Infidelity = 2.897049e-01
+  Random Opt (n=3,2): Infidelity = 5.940821e-01
+  Random Opt (n=0,19): Infidelity = 5.960178e-01
+  Random Opt (n=18,4): Infidelity = 4.409038e-01
+  Random Opt (n=4,23): Infidelity = 4.627950e-01
+  Random Opt (n=26,5): Infidelity = 4.235844e-01
+  Random Opt (n=22,22): Infidelity = 2.913684e-01
+  Random Opt (n=12,27): Infidelity = 3.591977e-01
+  Random Opt (n=3,11): Infidelity = 4.978824e-01
+  Random Opt (n=12,19): Infidelity = 3.731984e-01
+  Random Opt (n=16,3): Infidelity = 4.414102e-01
+  Random Opt (n=6,14): Infidelity = 4.725094e-01
+  Random Opt (n=27,8): Infidelity = 3.998191e-01
+  Random Opt (n=16,7): Infidelity = 4.133189e-01
+  Random Opt (n=31,26): Infidelity = 2.909224e-01
+  Random Opt (n=9,20): Infidelity = 3.771194e-01
+  Best Optimized (Ideal): 3.189326e-01
+
+Gate Time: 1280.0 tau (Tg/T2q1=1.6602, Tg/T2q2=1.6634)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.153692e-01
+Evaluating 30 known sequences...
+Using Folded Noise Matrix (M=32)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 1.601391e-01 (mqCDD(n=4, m=1))
+  Best Known (Ideal): 1.586153e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(11, 26), (3, 20), (31, 5), (21, 15), (0, 16), (12, 15), (19, 25), (21, 31), (5, 19), (2, 14), (16, 19), (12, 28), (23, 13), (15, 11), (19, 16), (17, 8), (27, 8), (24, 7), (11, 6), (5, 21)]
+Using Folded Noise Matrix (M=32)...
+  Random Opt (n=11,26): Infidelity = 1.562953e-01
+  Random Opt (n=3,20): Infidelity = 2.502972e-01
+  Random Opt (n=31,5): Infidelity = 2.032282e-01
+  Random Opt (n=21,15): Infidelity = 1.629777e-01
+  Random Opt (n=0,16): Infidelity = 5.374298e-01
+  Random Opt (n=12,15): Infidelity = 1.802990e-01
+  Random Opt (n=19,25): Infidelity = 1.488409e-01
+  Random Opt (n=21,31): Infidelity = 1.416460e-01
+  Random Opt (n=5,19): Infidelity = 2.036750e-01
+  Random Opt (n=2,14): Infidelity = 3.749714e-01
+  Random Opt (n=16,19): Infidelity = 1.681044e-01
+  Random Opt (n=12,28): Infidelity = 1.687619e-01
+  Random Opt (n=23,13): Infidelity = 1.671519e-01
+  Random Opt (n=15,11): Infidelity = 1.737383e-01
+  Random Opt (n=19,16): Infidelity = 1.731067e-01
+  Random Opt (n=17,8): Infidelity = 2.122187e-01
+  Random Opt (n=27,8): Infidelity = 2.003463e-01
+  Random Opt (n=24,7): Infidelity = 1.921341e-01
+  Random Opt (n=11,6): Infidelity = 2.455704e-01
+  Random Opt (n=5,21): Infidelity = 2.012240e-01
+  Best Optimized (Ideal): 1.135879e-01
+
+Gate Time: 640.0 tau (Tg/T2q1=0.8301, Tg/T2q2=0.8317)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 6.196927e-01
+Evaluating 18 known sequences...
+Using Folded Noise Matrix (M=32)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 8.672843e-02 (mqCDD(n=3, m=1))
+  Best Known (Ideal): 8.491942e-02
+  Running Random Optimization...
+  Randomly selected pulse counts: [(2, 8), (8, 14), (6, 0), (3, 3), (7, 18), (18, 4), (15, 3), (7, 9), (10, 6), (0, 13), (0, 9), (18, 0), (11, 1), (9, 16), (14, 11), (12, 9), (12, 2), (2, 14), (18, 8), (11, 11)]
+Using Folded Noise Matrix (M=32)...
+  Random Opt (n=2,8): Infidelity = 2.117560e-01
+  Random Opt (n=8,14): Infidelity = 9.800103e-02
+  Random Opt (n=6,0): Infidelity = 4.504887e-01
+  Random Opt (n=3,3): Infidelity = 1.565706e-01
+  Random Opt (n=7,18): Infidelity = 8.208458e-02
+  Random Opt (n=18,4): Infidelity = 1.419098e-01
+  Random Opt (n=15,3): Infidelity = 9.788241e-02
+  Random Opt (n=7,9): Infidelity = 8.339525e-02
+  Random Opt (n=10,6): Infidelity = 1.293887e-01
+  Random Opt (n=0,13): Infidelity = 4.259835e-01
+  Random Opt (n=0,9): Infidelity = 4.305585e-01
+  Random Opt (n=18,0): Infidelity = 4.323493e-01
+  Random Opt (n=11,1): Infidelity = 1.843427e-01
+  Random Opt (n=9,16): Infidelity = 8.013100e-02
+  Random Opt (n=14,11): Infidelity = 8.385255e-02
+  Random Opt (n=12,9): Infidelity = 9.204501e-02
+  Random Opt (n=12,2): Infidelity = 2.287739e-01
+  Random Opt (n=2,14): Infidelity = 1.950539e-01
+  Random Opt (n=18,8): Infidelity = 1.021587e-01
+  Random Opt (n=11,11): Infidelity = 1.344694e-01
+  Best Optimized (Ideal): 6.887045e-02
+
+Gate Time: 320.0 tau (Tg/T2q1=0.4150, Tg/T2q2=0.4158)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 4.549575e-01
+Evaluating 9 known sequences...
+Using Folded Noise Matrix (M=32)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 4.195385e-02 (mqCDD(n=2, m=1))
+  Best Known (Ideal): 4.565924e-02
+  Running Random Optimization...
+  Randomly selected pulse counts: [(8, 3), (4, 3), (7, 1), (6, 8), (0, 8), (8, 3), (8, 2), (4, 3), (3, 3), (8, 4), (2, 3), (4, 4), (6, 6), (3, 7), (1, 1), (2, 6), (6, 3), (1, 7), (6, 4), (5, 8)]
+Using Folded Noise Matrix (M=32)...
+  Random Opt (n=8,3): Infidelity = 6.041083e-02
+  Random Opt (n=4,3): Infidelity = 6.299026e-02
+  Random Opt (n=7,1): Infidelity = 5.222972e-02
+  Random Opt (n=6,8): Infidelity = 6.828026e-02
+  Random Opt (n=0,8): Infidelity = 3.026273e-01
+  Random Opt (n=8,3): Infidelity = 6.041083e-02
+  Random Opt (n=8,2): Infidelity = 1.144628e-01
+  Random Opt (n=4,3): Infidelity = 6.299026e-02
+  Random Opt (n=3,3): Infidelity = 7.311478e-02
+  Random Opt (n=8,4): Infidelity = 7.874981e-02
+  Random Opt (n=2,3): Infidelity = 9.242947e-02
+  Random Opt (n=4,4): Infidelity = 1.068554e-01
+  Random Opt (n=6,6): Infidelity = 9.007310e-02
+  Random Opt (n=3,7): Infidelity = 4.001319e-02
+  Random Opt (n=1,1): Infidelity = 8.320195e-02
+  Random Opt (n=2,6): Infidelity = 9.965813e-02
+  Random Opt (n=6,3): Infidelity = 5.517129e-02
+  Random Opt (n=1,7): Infidelity = 4.139812e-02
+  Random Opt (n=6,4): Infidelity = 7.377695e-02
+  Random Opt (n=5,8): Infidelity = 5.650946e-02
+  Best Optimized (Ideal): 3.706121e-02
+Saved all plotting data to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured/plotting_data/plotting_data_id_v4.npz
+
+================================================================================
+                        FINAL COMPARISON (Best Overall)                         
+================================================================================
+Infidelity                | 4.565924e-02              | 3.706121e-02             
+Sequence                  | mqCDD(n=2, m=1)^32        | NT(3,7)^32               
+================================================================================
+
+To generate plots, run:
+  python plot_optimization.py --data-dir /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured --gate-type id
+
+========================================
+Running Optimization for M = 64
+========================================
+Loading reconstructed spectra from /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured/specs.npz
+  specs spam_protocol: none
+[idle] NOTE: flagged (undetermined) DC points in specs: S112, S12, S212
+Calculated T2 times (Ideal): Q1=7.71e+02 tau, Q2=7.70e+02 tau
+Configuration loaded for M=64.
+
+============================================================
+RUNNING OPTIMIZATION PIPELINE
+M (Repetitions): 64
+Total Pulse Limit: 1000
+Pulse Limit Per Repetition: 15
+============================================================
+
+Gate Time: 10240.0 tau (Tg/T2q1=13.2815, Tg/T2q2=13.3069)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.499998e-01
+Evaluating 18 known sequences...
+Using Frequency Comb Approximation (M=64)...
+  Best Known (Char): 7.474143e-01 (mqCDD(n=2, m=2))
+  Best Known (Ideal): 7.477648e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(10, 1), (12, 0), (5, 8), (0, 0), (10, 2), (2, 0), (11, 8), (1, 12), (1, 13), (1, 4), (10, 3), (8, 0), (6, 11), (0, 4), (4, 6), (12, 3), (6, 8), (8, 2), (2, 15), (4, 4)]
+Using Frequency Comb Approximation (M=64)...
+  Random Opt (n=10,1): Infidelity = 7.458197e-01
+  Random Opt (n=12,0): Infidelity = 7.498201e-01
+  Random Opt (n=5,8): Infidelity = 7.488428e-01
+  Random Opt failed for n=0,0: not enough values to unpack (expected 2, got 0)
+  Random Opt (n=10,2): Infidelity = 7.456299e-01
+  Random Opt (n=2,0): Infidelity = 7.499946e-01
+  Random Opt (n=11,8): Infidelity = 7.486847e-01
+  Random Opt (n=1,12): Infidelity = 7.499973e-01
+  Random Opt (n=1,13): Infidelity = 7.499976e-01
+  Random Opt (n=1,4): Infidelity = 7.499139e-01
+  Random Opt (n=10,3): Infidelity = 7.459233e-01
+  Random Opt (n=8,0): Infidelity = 7.484493e-01
+  Random Opt (n=6,11): Infidelity = 7.496869e-01
+  Random Opt (n=0,4): Infidelity = 7.498937e-01
+  Random Opt (n=4,6): Infidelity = 7.493496e-01
+  Random Opt (n=12,3): Infidelity = 7.491649e-01
+  Random Opt (n=6,8): Infidelity = 7.488260e-01
+  Random Opt (n=8,2): Infidelity = 7.485073e-01
+  Random Opt (n=2,15): Infidelity = 7.478614e-01
+  Random Opt (n=4,4): Infidelity = 7.495940e-01
+  Best Optimized (Ideal): 7.445557e-01
+
+Gate Time: 5120.0 tau (Tg/T2q1=6.6407, Tg/T2q2=6.6534)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.498722e-01
+Evaluating 18 known sequences...
+Using Frequency Comb Approximation (M=64)...
+  Best Known (Char): 6.450025e-01 (mqCDD(n=3, m=1))
+  Best Known (Ideal): 6.491443e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(14, 12), (4, 10), (4, 11), (0, 10), (4, 11), (4, 5), (10, 11), (5, 9), (13, 9), (13, 1), (14, 4), (5, 11), (6, 10), (4, 0), (6, 11), (9, 3), (13, 13), (6, 4), (10, 7), (14, 10)]
+Using Frequency Comb Approximation (M=64)...
+  Random Opt (n=14,12): Infidelity = 5.540305e-01
+  Random Opt (n=4,10): Infidelity = 6.564926e-01
+  Random Opt (n=4,11): Infidelity = 6.454547e-01
+  Random Opt (n=0,10): Infidelity = 6.836487e-01
+  Random Opt (n=4,11): Infidelity = 6.454547e-01
+  Random Opt (n=4,5): Infidelity = 6.738856e-01
+  Random Opt (n=10,11): Infidelity = 5.618884e-01
+  Random Opt (n=5,9): Infidelity = 6.396103e-01
+  Random Opt (n=13,9): Infidelity = 5.636539e-01
+  Random Opt (n=13,1): Infidelity = 6.465412e-01
+  Random Opt (n=14,4): Infidelity = 6.261728e-01
+  Random Opt (n=5,11): Infidelity = 6.635194e-01
+  Random Opt (n=6,10): Infidelity = 6.359697e-01
+  Random Opt (n=4,0): Infidelity = 7.246127e-01
+  Random Opt (n=6,11): Infidelity = 6.353016e-01
+  Random Opt (n=9,3): Infidelity = 6.461419e-01
+  Random Opt (n=13,13): Infidelity = 5.403301e-01
+  Random Opt (n=6,4): Infidelity = 6.875519e-01
+  Random Opt (n=10,7): Infidelity = 6.500323e-01
+  Random Opt (n=14,10): Infidelity = 5.516982e-01
+  Best Optimized (Ideal): 5.355605e-01
+
+Gate Time: 2560.0 tau (Tg/T2q1=3.3204, Tg/T2q2=3.3267)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.457285e-01
+Evaluating 18 known sequences...
+Using Frequency Comb Approximation (M=64)...
+  Best Known (Char): 3.678532e-01 (mqCDD(n=3, m=1))
+  Best Known (Ideal): 3.536428e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(3, 10), (6, 10), (15, 3), (7, 7), (0, 12), (13, 11), (1, 14), (9, 10), (15, 9), (1, 15), (13, 3), (2, 9), (12, 1), (11, 0), (5, 5), (12, 9), (3, 3), (15, 5), (13, 6), (4, 1)]
+Using Frequency Comb Approximation (M=64)...
+  Random Opt (n=3,10): Infidelity = 4.174477e-01
+  Random Opt (n=6,10): Infidelity = 3.722928e-01
+  Random Opt (n=15,3): Infidelity = 4.129319e-01
+  Random Opt (n=7,7): Infidelity = 3.188810e-01
+  Random Opt (n=0,12): Infidelity = 5.896727e-01
+  Random Opt (n=13,11): Infidelity = 2.900549e-01
+  Random Opt (n=1,14): Infidelity = 4.555700e-01
+  Random Opt (n=9,10): Infidelity = 2.964521e-01
+  Random Opt (n=15,9): Infidelity = 3.099309e-01
+  Random Opt (n=1,15): Infidelity = 4.502239e-01
+  Random Opt (n=13,3): Infidelity = 4.136572e-01
+  Random Opt (n=2,9): Infidelity = 4.710501e-01
+  Random Opt (n=12,1): Infidelity = 4.383660e-01
+  Random Opt (n=11,0): Infidelity = 5.820625e-01
+  Random Opt (n=5,5): Infidelity = 4.067175e-01
+  Random Opt (n=12,9): Infidelity = 2.976625e-01
+  Random Opt (n=3,3): Infidelity = 4.956931e-01
+  Random Opt (n=15,5): Infidelity = 3.518864e-01
+  Random Opt (n=13,6): Infidelity = 3.522222e-01
+  Random Opt (n=4,1): Infidelity = 5.220140e-01
+  Best Optimized (Ideal): 2.961428e-01
+
+Gate Time: 1280.0 tau (Tg/T2q1=1.6602, Tg/T2q2=1.6634)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.158714e-01
+Evaluating 18 known sequences...
+Using Folded Noise Matrix (M=64)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 1.612321e-01 (mqCDD(n=3, m=1))
+  Best Known (Ideal): 1.591334e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(2, 13), (15, 3), (0, 13), (2, 3), (4, 1), (6, 12), (3, 11), (3, 0), (5, 4), (2, 15), (7, 2), (5, 5), (4, 13), (0, 6), (7, 11), (7, 11), (3, 7), (15, 3), (10, 1), (0, 5)]
+Using Folded Noise Matrix (M=64)...
+  Random Opt (n=2,13): Infidelity = 3.122072e-01
+  Random Opt (n=15,3): Infidelity = 1.797523e-01
+  Random Opt (n=0,13): Infidelity = 5.197767e-01
+  Random Opt (n=2,3): Infidelity = 3.479161e-01
+  Random Opt (n=4,1): Infidelity = 3.593020e-01
+  Random Opt (n=6,12): Infidelity = 2.212838e-01
+  Random Opt (n=3,11): Infidelity = 1.680588e-01
+  Random Opt (n=3,0): Infidelity = 5.336529e-01
+  Random Opt (n=5,4): Infidelity = 2.511046e-01
+  Random Opt (n=2,15): Infidelity = 3.092378e-01
+  Random Opt (n=7,2): Infidelity = 3.594435e-01
+  Random Opt (n=5,5): Infidelity = 2.702980e-01
+  Random Opt (n=4,13): Infidelity = 2.115003e-01
+  Random Opt (n=0,6): Infidelity = 5.646036e-01
+  Random Opt (n=7,11): Infidelity = 1.562799e-01
+  Random Opt (n=7,11): Infidelity = 1.562799e-01
+  Random Opt (n=3,7): Infidelity = 1.735452e-01
+  Random Opt (n=15,3): Infidelity = 1.797523e-01
+  Random Opt (n=10,1): Infidelity = 3.122432e-01
+  Random Opt (n=0,5): Infidelity = 5.375073e-01
+  Best Optimized (Ideal): 1.335155e-01
+
+Gate Time: 640.0 tau (Tg/T2q1=0.8301, Tg/T2q2=0.8317)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 6.220445e-01
+Evaluating 9 known sequences...
+Using Folded Noise Matrix (M=64)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 8.047923e-02 (mqCDD(n=2, m=1))
+  Best Known (Ideal): 8.813319e-02
+  Running Random Optimization...
+  Randomly selected pulse counts: [(0, 3), (6, 8), (0, 0), (8, 5), (8, 1), (2, 6), (0, 5), (8, 3), (6, 6), (7, 6), (1, 7), (7, 0), (3, 7), (3, 1), (5, 7), (7, 8), (1, 1), (7, 5), (6, 0), (0, 8)]
+Using Folded Noise Matrix (M=64)...
+  Random Opt (n=0,3): Infidelity = 4.371324e-01
+  Random Opt (n=6,8): Infidelity = 1.330844e-01
+  Random Opt failed for n=0,0: not enough values to unpack (expected 2, got 0)
+  Random Opt (n=8,5): Infidelity = 1.117789e-01
+  Random Opt (n=8,1): Infidelity = 1.314150e-01
+  Random Opt (n=2,6): Infidelity = 1.893388e-01
+  Random Opt (n=0,5): Infidelity = 4.324331e-01
+  Random Opt (n=8,3): Infidelity = 1.170032e-01
+  Random Opt (n=6,6): Infidelity = 1.756909e-01
+  Random Opt (n=7,6): Infidelity = 9.979487e-02
+  Random Opt (n=1,7): Infidelity = 7.875089e-02
+  Random Opt (n=7,0): Infidelity = 4.310331e-01
+  Random Opt (n=3,7): Infidelity = 7.735496e-02
+  Random Opt (n=3,1): Infidelity = 1.071789e-01
+  Random Opt (n=5,7): Infidelity = 7.585094e-02
+  Random Opt (n=7,8): Infidelity = 1.075413e-01
+  Random Opt (n=1,1): Infidelity = 1.580575e-01
+  Random Opt (n=7,5): Infidelity = 7.778228e-02
+  Random Opt (n=6,0): Infidelity = 4.480667e-01
+  Random Opt (n=0,8): Infidelity = 4.523499e-01
+  Best Optimized (Ideal): 5.806830e-02
+
+Gate Time: 320.0 tau (Tg/T2q1=0.4150, Tg/T2q2=0.4158)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 4.610308e-01
+Evaluating 3 known sequences...
+Using Folded Noise Matrix (M=64)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 4.117738e-02 (mqCDD(n=1, m=1))
+  Best Known (Ideal): 3.757531e-02
+  Running Random Optimization...
+  Randomly selected pulse counts: [(1, 0), (2, 1), (2, 1), (1, 2), (1, 0), (2, 2), (0, 3), (3, 1), (0, 2), (1, 0), (2, 3), (1, 3), (2, 0), (2, 2), (2, 1), (3, 3), (3, 0), (3, 2), (3, 2), (3, 2)]
+Using Folded Noise Matrix (M=64)...
+  Random Opt (n=1,0): Infidelity = 2.999518e-01
+  Random Opt (n=2,1): Infidelity = 8.680215e-02
+  Random Opt (n=2,1): Infidelity = 8.680215e-02
+  Random Opt (n=1,2): Infidelity = 8.601993e-02
+  Random Opt (n=1,0): Infidelity = 2.999518e-01
+  Random Opt (n=2,2): Infidelity = 1.515326e-01
+  Random Opt (n=0,3): Infidelity = 2.969899e-01
+  Random Opt (n=3,1): Infidelity = 4.487066e-02
+  Random Opt (n=0,2): Infidelity = 3.337624e-01
+  Random Opt (n=1,0): Infidelity = 2.999518e-01
+  Random Opt (n=2,3): Infidelity = 8.108577e-02
+  Random Opt (n=1,3): Infidelity = 4.117738e-02
+  Random Opt (n=2,0): Infidelity = 3.322033e-01
+  Random Opt (n=2,2): Infidelity = 1.515326e-01
+  Random Opt (n=2,1): Infidelity = 8.680215e-02
+  Random Opt (n=3,3): Infidelity = 6.658673e-02
+  Random Opt (n=3,0): Infidelity = 2.971582e-01
+  Random Opt (n=3,2): Infidelity = 8.394315e-02
+  Random Opt (n=3,2): Infidelity = 8.394315e-02
+  Random Opt (n=3,2): Infidelity = 8.394315e-02
+  Best Optimized (Ideal): 3.757531e-02
+Saved all plotting data to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured/plotting_data/plotting_data_id_v4.npz
+
+================================================================================
+                        FINAL COMPARISON (Best Overall)                         
+================================================================================
+Infidelity                | 3.757531e-02              | 3.757531e-02             
+Sequence                  | mqCDD(n=1, m=1)^64        | NT(1,3)^64               
+================================================================================
+
+To generate plots, run:
+  python plot_optimization.py --data-dir /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured --gate-type id
+
+========================================
+Running Optimization for M = 128
+========================================
+Loading reconstructed spectra from /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured/specs.npz
+  specs spam_protocol: none
+[idle] NOTE: flagged (undetermined) DC points in specs: S112, S12, S212
+Calculated T2 times (Ideal): Q1=7.71e+02 tau, Q2=7.70e+02 tau
+Configuration loaded for M=128.
+
+============================================================
+RUNNING OPTIMIZATION PIPELINE
+M (Repetitions): 128
+Total Pulse Limit: 1000
+Pulse Limit Per Repetition: 7
+============================================================
+
+Gate Time: 10240.0 tau (Tg/T2q1=13.2815, Tg/T2q2=13.3069)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.499998e-01
+Evaluating 9 known sequences...
+Using Frequency Comb Approximation (M=128)...
+  Best Known (Char): 7.469460e-01 (mqCDD(n=1, m=2))
+  Best Known (Ideal): 7.476504e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(2, 2), (1, 5), (6, 4), (3, 1), (1, 3), (0, 5), (2, 7), (7, 5), (1, 4), (1, 0), (5, 2), (6, 1), (5, 3), (5, 6), (0, 0), (1, 5), (4, 4), (1, 6), (5, 5), (7, 5)]
+Using Frequency Comb Approximation (M=128)...
+  Random Opt (n=2,2): Infidelity = 7.495935e-01
+  Random Opt (n=1,5): Infidelity = 7.498435e-01
+  Random Opt (n=6,4): Infidelity = 7.489561e-01
+  Random Opt (n=3,1): Infidelity = 7.472658e-01
+  Random Opt (n=1,3): Infidelity = 7.472936e-01
+  Random Opt (n=0,5): Infidelity = 7.499908e-01
+  Random Opt (n=2,7): Infidelity = 7.476350e-01
+  Random Opt (n=7,5): Infidelity = 7.426473e-01
+  Random Opt (n=1,4): Infidelity = 7.496631e-01
+  Random Opt (n=1,0): Infidelity = 7.497084e-01
+  Random Opt (n=5,2): Infidelity = 7.493044e-01
+  Random Opt (n=6,1): Infidelity = 7.483475e-01
+  Random Opt (n=5,3): Infidelity = 7.469663e-01
+  Random Opt (n=5,6): Infidelity = 7.493116e-01
+  Random Opt failed for n=0,0: not enough values to unpack (expected 2, got 0)
+  Random Opt (n=1,5): Infidelity = 7.498435e-01
+  Random Opt (n=4,4): Infidelity = 7.492448e-01
+  Random Opt (n=1,6): Infidelity = 7.497533e-01
+  Random Opt (n=5,5): Infidelity = 7.497618e-01
+  Random Opt (n=7,5): Infidelity = 7.426473e-01
+  Best Optimized (Ideal): 7.421383e-01
+
+Gate Time: 5120.0 tau (Tg/T2q1=6.6407, Tg/T2q2=6.6534)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.498748e-01
+Evaluating 9 known sequences...
+Using Frequency Comb Approximation (M=128)...
+  Best Known (Char): 6.328225e-01 (mqCDD(n=2, m=1))
+  Best Known (Ideal): 6.351859e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(3, 1), (7, 1), (7, 1), (4, 1), (6, 4), (0, 1), (4, 6), (5, 5), (2, 4), (6, 1), (4, 7), (3, 5), (3, 0), (0, 3), (2, 7), (5, 6), (7, 5), (7, 5), (4, 7), (4, 0)]
+Using Frequency Comb Approximation (M=128)...
+  Random Opt (n=3,1): Infidelity = 6.697506e-01
+  Random Opt (n=7,1): Infidelity = 5.977304e-01
+  Random Opt (n=7,1): Infidelity = 5.977304e-01
+  Random Opt (n=4,1): Infidelity = 6.702201e-01
+  Random Opt (n=6,4): Infidelity = 6.196990e-01
+  Random Opt (n=0,1): Infidelity = 7.219799e-01
+  Random Opt (n=4,6): Infidelity = 6.154438e-01
+  Random Opt (n=5,5): Infidelity = 5.756270e-01
+  Random Opt (n=2,4): Infidelity = 6.708480e-01
+  Random Opt (n=6,1): Infidelity = 6.355692e-01
+  Random Opt (n=4,7): Infidelity = 5.916891e-01
+  Random Opt (n=3,5): Infidelity = 6.202791e-01
+  Random Opt (n=3,0): Infidelity = 7.020016e-01
+  Random Opt (n=0,3): Infidelity = 7.238098e-01
+  Random Opt (n=2,7): Infidelity = 6.319678e-01
+  Random Opt (n=5,6): Infidelity = 5.682347e-01
+  Random Opt (n=7,5): Infidelity = 5.341314e-01
+  Random Opt (n=7,5): Infidelity = 5.341314e-01
+  Random Opt (n=4,7): Infidelity = 5.916891e-01
+  Random Opt (n=4,0): Infidelity = 7.020016e-01
+  Best Optimized (Ideal): 5.538864e-01
+
+Gate Time: 2560.0 tau (Tg/T2q1=3.3204, Tg/T2q2=3.3267)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.458276e-01
+Evaluating 9 known sequences...
+Using Frequency Comb Approximation (M=128)...
+  Best Known (Char): 3.989742e-01 (mqCDD(n=2, m=1))
+  Best Known (Ideal): 4.099244e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(4, 7), (7, 5), (0, 2), (4, 1), (2, 7), (5, 0), (6, 4), (6, 4), (2, 3), (0, 2), (5, 4), (4, 2), (5, 6), (6, 7), (0, 0), (1, 0), (4, 6), (4, 4), (2, 0), (2, 5)]
+Using Frequency Comb Approximation (M=128)...
+  Random Opt (n=4,7): Infidelity = 2.900340e-01
+  Random Opt (n=7,5): Infidelity = 2.987576e-01
+  Random Opt (n=0,2): Infidelity = 6.704363e-01
+  Random Opt (n=4,1): Infidelity = 4.439796e-01
+  Random Opt (n=2,7): Infidelity = 3.969373e-01
+  Random Opt (n=5,0): Infidelity = 5.820625e-01
+  Random Opt (n=6,4): Infidelity = 3.232162e-01
+  Random Opt (n=6,4): Infidelity = 3.232162e-01
+  Random Opt (n=2,3): Infidelity = 4.214913e-01
+  Random Opt (n=0,2): Infidelity = 6.704363e-01
+  Random Opt (n=5,4): Infidelity = 3.046708e-01
+  Random Opt (n=4,2): Infidelity = 4.410372e-01
+  Random Opt (n=5,6): Infidelity = 2.881773e-01
+  Random Opt (n=6,7): Infidelity = 2.783941e-01
+  Random Opt failed for n=0,0: not enough values to unpack (expected 2, got 0)
+  Random Opt (n=1,0): Infidelity = 6.407776e-01
+  Random Opt (n=4,6): Infidelity = 3.030964e-01
+  Random Opt (n=4,4): Infidelity = 3.054216e-01
+  Random Opt (n=2,0): Infidelity = 6.407776e-01
+  Random Opt (n=2,5): Infidelity = 4.099350e-01
+  Best Optimized (Ideal): 2.895545e-01
+
+Gate Time: 1280.0 tau (Tg/T2q1=1.6602, Tg/T2q2=1.6634)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 7.168579e-01
+Evaluating 9 known sequences...
+Using Folded Noise Matrix (M=128)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 1.506396e-01 (mqCDD(n=2, m=1))
+  Best Known (Ideal): 1.650965e-01
+  Running Random Optimization...
+  Randomly selected pulse counts: [(2, 7), (1, 1), (2, 0), (3, 4), (5, 2), (6, 5), (1, 6), (0, 3), (1, 3), (2, 7), (2, 0), (4, 0), (4, 2), (0, 6), (5, 6), (7, 0), (5, 4), (1, 2), (0, 2), (0, 5)]
+Using Folded Noise Matrix (M=128)...
+  Random Opt (n=2,7): Infidelity = 2.849820e-01
+  Random Opt (n=1,1): Infidelity = 2.825357e-01
+  Random Opt (n=2,0): Infidelity = 6.128637e-01
+  Random Opt (n=3,4): Infidelity = 2.216693e-01
+  Random Opt (n=5,2): Infidelity = 3.144549e-01
+  Random Opt (n=6,5): Infidelity = 1.846021e-01
+  Random Opt (n=1,6): Infidelity = 1.933630e-01
+  Random Opt (n=0,3): Infidelity = 5.325906e-01
+  Random Opt (n=1,3): Infidelity = 1.744241e-01
+  Random Opt (n=2,7): Infidelity = 2.849820e-01
+  Random Opt (n=2,0): Infidelity = 6.128637e-01
+  Random Opt (n=4,0): Infidelity = 5.656088e-01
+  Random Opt (n=4,2): Infidelity = 3.655097e-01
+  Random Opt (n=0,6): Infidelity = 5.488253e-01
+  Random Opt (n=5,6): Infidelity = 1.868390e-01
+  Random Opt (n=7,0): Infidelity = 5.237080e-01
+  Random Opt (n=5,4): Infidelity = 2.215365e-01
+  Random Opt (n=1,2): Infidelity = 3.149443e-01
+  Random Opt (n=0,2): Infidelity = 6.197661e-01
+  Random Opt (n=0,5): Infidelity = 5.252383e-01
+  Best Optimized (Ideal): 1.767452e-01
+
+Gate Time: 640.0 tau (Tg/T2q1=0.8301, Tg/T2q2=0.8317)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 6.266201e-01
+Evaluating 3 known sequences...
+Using Folded Noise Matrix (M=128)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Best Known (Char): 7.971467e-02 (mqCDD(n=1, m=1))
+  Best Known (Ideal): 7.287448e-02
+  Running Random Optimization...
+  Randomly selected pulse counts: [(0, 1), (1, 0), (0, 3), (3, 1), (1, 2), (3, 2), (1, 2), (3, 2), (2, 2), (2, 1), (2, 3), (0, 3), (0, 2), (1, 2), (3, 1), (1, 1), (1, 0), (2, 1), (3, 1), (2, 3)]
+Using Folded Noise Matrix (M=128)...
+  Random Opt (n=0,1): Infidelity = 4.446991e-01
+  Random Opt (n=1,0): Infidelity = 4.430555e-01
+  Random Opt (n=0,3): Infidelity = 4.362951e-01
+  Random Opt (n=3,1): Infidelity = 8.655002e-02
+  Random Opt (n=1,2): Infidelity = 1.641278e-01
+  Random Opt (n=3,2): Infidelity = 1.611295e-01
+  Random Opt (n=1,2): Infidelity = 1.641278e-01
+  Random Opt (n=3,2): Infidelity = 1.611295e-01
+  Random Opt (n=2,2): Infidelity = 2.815067e-01
+  Random Opt (n=2,1): Infidelity = 1.649825e-01
+  Random Opt (n=2,3): Infidelity = 1.554095e-01
+  Random Opt (n=0,3): Infidelity = 4.362951e-01
+  Random Opt (n=0,2): Infidelity = 4.936004e-01
+  Random Opt (n=1,2): Infidelity = 1.641278e-01
+  Random Opt (n=3,1): Infidelity = 8.655002e-02
+  Random Opt (n=1,1): Infidelity = 1.476296e-01
+  Random Opt (n=1,0): Infidelity = 4.430555e-01
+  Random Opt (n=2,1): Infidelity = 1.649825e-01
+  Random Opt (n=3,1): Infidelity = 8.655002e-02
+  Random Opt (n=2,3): Infidelity = 1.554095e-01
+  Best Optimized (Ideal): 7.406427e-02
+
+Gate Time: 320.0 tau (Tg/T2q1=0.4150, Tg/T2q2=0.4158)
+  Time-domain setup: pad_factor=1, dt=0.1250 tau, tau/4=0.2500 tau
+  No Pulse (Ideal): 4.728987e-01
+  No valid known sequences found.
+  Running Random Optimization...
+  Randomly selected pulse counts: [(0, 1), (1, 0), (0, 0), (0, 1), (0, 0), (1, 0), (1, 0), (0, 1), (1, 1), (1, 0), (0, 1), (1, 0), (0, 0), (0, 1), (0, 1), (0, 1), (1, 0), (1, 1), (1, 0), (1, 0)]
+Using Folded Noise Matrix (M=128)...
+  Time-domain setup: pad_factor=1, dt=0.2500 tau, tau/4=0.2500 tau
+  Random Opt (n=0,1): Infidelity = 3.153892e-01
+  Random Opt (n=1,0): Infidelity = 3.155040e-01
+  Random Opt failed for n=0,0: not enough values to unpack (expected 2, got 0)
+  Random Opt (n=0,1): Infidelity = 3.153892e-01
+  Random Opt failed for n=0,0: not enough values to unpack (expected 2, got 0)
+  Random Opt (n=1,0): Infidelity = 3.155040e-01
+  Random Opt (n=1,0): Infidelity = 3.155040e-01
+  Random Opt (n=0,1): Infidelity = 3.153892e-01
+  Random Opt (n=1,1): Infidelity = 7.387555e-02
+  Random Opt (n=1,0): Infidelity = 3.155040e-01
+  Random Opt (n=0,1): Infidelity = 3.153892e-01
+  Random Opt (n=1,0): Infidelity = 3.155040e-01
+  Random Opt failed for n=0,0: not enough values to unpack (expected 2, got 0)
+  Random Opt (n=0,1): Infidelity = 3.153892e-01
+  Random Opt (n=0,1): Infidelity = 3.153892e-01
+  Random Opt (n=0,1): Infidelity = 3.153892e-01
+  Random Opt (n=1,0): Infidelity = 3.155040e-01
+  Random Opt (n=1,1): Infidelity = 7.387555e-02
+  Random Opt (n=1,0): Infidelity = 3.155040e-01
+  Random Opt (n=1,0): Infidelity = 3.155040e-01
+  Best Optimized (Ideal): 4.258446e-02
+Saved all plotting data to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured/plotting_data/plotting_data_id_v4.npz
+
+================================================================================
+                        FINAL COMPARISON (Best Overall)                         
+================================================================================
+Infidelity                | 7.287448e-02              | 4.258446e-02             
+Sequence                  | mqCDD(n=1, m=1)^128       | NT(1,1)^128              
+================================================================================
+
+To generate plots, run:
+  python plot_optimization.py --data-dir /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured --gate-type id
+
+============================================================
+SUMMARY OF RESULTS (Longest Gate Time)
+M          | Known Inf            | Opt Inf              | No Pulse Inf        
+------------------------------------------------------------------------------
+1          | 4.568752e-02         | 3.358354e-02         | 4.489399e-01        
+2          | 4.557198e-02         | 2.797560e-02         | 4.491487e-01        
+4          | 4.537771e-02         | 2.847459e-02         | 4.495566e-01        
+8          | 4.371235e-02         | 2.853163e-02         | 4.503324e-01        
+16         | 4.411463e-02         | 4.320949e-02         | 4.518662e-01        
+32         | 4.565924e-02         | 3.706121e-02         | 4.549575e-01        
+64         | 3.757531e-02         | 3.757531e-02         | 4.610308e-01        
+128        | 1.000000e+00         | 4.258446e-02         | 4.728987e-01        
+============================================================
+Saved all optimization data to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured/optimization_data_all_M.npz
+
+To generate plots, run:
+  python plot_optimization.py --data-dir /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured --gate-type id --all-m

@@ -39,7 +39,7 @@ import scipy.optimize
 
 from qns2q.noise.spectra import (S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12,
                                  MODEL_VERSION, line_priors)
-from qns2q.control.tails import tail_extend_interp_complex
+from qns2q.control.tails import tail_extend_interp_complex, smoothfit_curve
 from qns2q.control.padding import pad_targets, pad_count, pad_delays
 from qns2q.paths import run_folder, project_root
 
@@ -91,12 +91,25 @@ class CZOptConfig:
     use_simulated: bool = False
     # 'interp' = linear interpolation through the comb teeth (+ tails);
     # 'selfconsistent' = the unfold model's line/tail/head-aware spectra
-    # (OPT-SPECTRAL-MODEL).
+    # (OPT-SPECTRAL-MODEL); 'smoothfit' = the LINE-BLIND single power law
+    # through all teeth (ablation rung (b), SHOWCASE-0612 -- prices what the
+    # line-aware reconstruction adds; tails.smoothfit_curve).
     spectral_model: str = "interp"
     # Per-qubit pulse-count cap for the NT search and the known-sequence
-    # library. 0 = no cap beyond the minimum-separation (tau) feasibility
-    # limit, i.e. up to T_seq/tau - 1 pulses per qubit (UNCAP-0611).
+    # library. 0 = no cap beyond the minimum-separation feasibility limit,
+    # i.e. up to T_seq/min_sep - 1 pulses per qubit (UNCAP-0611).
     max_pulses: int = 150
+    # Minimum pulse separation in units of tau (SHOWCASE-0612 scenario
+    # parameter): finite control bandwidth -- e.g. 8.0 models 40 ns pi-pulses
+    # at the 5 ns showcase anchor. Applied SYMMETRICALLY to the known library,
+    # the NT search and the random inits; 1.0 = legacy (separation = tau).
+    min_sep_factor: float = 1.0
+    # Ablation rung (c): build the CHARACTERIZED gate model from the
+    # single-qubit spectra alone (S11/S22 kept; S1212 + every cross dropped,
+    # as a 1Q-only QNS campaign would leave them) while the ideal benchmark
+    # keeps the full truth -- prices what the TWO-QUBIT reconstruction adds.
+    # Contrast include_cross_spectra=False, which drops crosses from BOTH.
+    char_self_only: bool = False
     plot_data_name: str = "plotting_data_cz_v2.npz"
 
     # These will be loaded from the run files
@@ -187,6 +200,14 @@ class CZOptConfig:
         self.gate_time_factors = valid_factors
 
         self.tau = self.Tqns / self.tau_divisor
+        if self.min_sep_factor < 1.0:
+            raise ValueError("min_sep_factor < 1: the minimum separation "
+                             "cannot undercut the time unit tau")
+        self.min_sep = self.min_sep_factor * self.tau
+        if self.min_sep_factor != 1.0:
+            print(f"[cz] control-bandwidth scenario: min pulse separation = "
+                  f"{self.min_sep_factor:g} tau (n <= T_seq/min_sep - 1 per "
+                  f"qubit; applied to library, NT search and inits)")
         self.mc = int(self.params['truncate'])
 
         # Frequency Grid. The predicted-side grid must reach the pulse-spacing
@@ -236,11 +257,18 @@ class CZOptConfig:
                   "the analytic-model DC (legacy behavior). Regenerate Stage 2 "
                   "for a measured DC point.")
 
+        if self.spectral_model not in ('interp', 'selfconsistent', 'smoothfit'):
+            raise ValueError(f"unknown spectral_model {self.spectral_model!r}")
         use_sc = (self.spectral_model == 'selfconsistent')
+        use_smooth = (self.spectral_model == 'smoothfit')
         if use_sc and self.use_simulated:
             raise ValueError("spectral_model='selfconsistent' models a "
                              "reconstructed comb; simulated_spectra.npz "
                              "already IS the analytic model")
+        if use_smooth:
+            print("[cz] spectral_model='smoothfit': LINE-BLIND characterized "
+                  "model (single power law through all teeth per self-"
+                  "spectrum; crosses interp) -- ablation rung (b)")
         if use_sc:
             # OPT-SPECTRAL-MODEL: each channel from the same line/tail/head-
             # aware model the unfold bias correction uses (characterize.
@@ -263,12 +291,17 @@ class CZOptConfig:
         def combine(key, dc_func):
             if use_sc:
                 return jnp.asarray(np.asarray(sc_fns[key](w_np), dtype=complex))
+            if use_smooth and key in ("S11", "S22", "S1212"):
+                dc_val = (float(np.real(np.asarray(self.specs[key])[0]))
+                          if grid_has_dc else float(np.real(dc_func(w0)[0])))
+                return smoothfit_curve(self.w, self.wkqns, self.specs[key],
+                                       dc_val=dc_val).astype(jnp.complex128)
             interp = tail_extend_interp_complex(self.w, self.wkqns,
                                                 self.specs[key])
             if grid_has_dc:
                 return interp
             return interp.at[0].set(dc_func(w0)[0])
-        
+
         # Diagonal elements. NaN here means corrupted data, not a protocol
         # limitation -- fail loudly.
         for key in ("S11", "S22", "S1212"):
@@ -277,6 +310,15 @@ class CZOptConfig:
                                  f"corrupted specs.npz?")
         SMat = SMat.at[1, 1].set(combine("S11", S_11))
         SMat = SMat.at[2, 2].set(combine("S22", S_22))
+        if self.char_self_only:
+            # Ablation rung (c): a single-qubit-only QNS campaign leaves the
+            # ZZ self-spectrum and every cross unreconstructed -- the blind
+            # objective assumes zero there; SMat_ideal keeps the full truth,
+            # so the benchmark prices what the 2Q reconstruction adds.
+            print("[cz] char_self_only: S1212 + crosses DROPPED from the "
+                  "characterized model (1Q-only QNS counterfactual); the "
+                  "ideal benchmark retains them.")
+            return SMat
         SMat = SMat.at[3, 3].set(combine("S1212", S_1212))
 
         # Off-diagonal elements. A channel the protocol could not reconstruct
@@ -857,8 +899,9 @@ def optimize_sequence(config, M, T_seq, n1, n2, seed_seq=None, pad_to=None):
         A tuple containing (best_seq, best_J, best_inf), where `best_seq`
         is a tuple of (pt1, pt2) absolute pulse times.
     """
-    # Check feasibility of pulse count
-    if (n1 + 1) * config.tau > T_seq or (n2 + 1) * config.tau > T_seq:
+    # Check feasibility of pulse count (min_sep = tau unless the
+    # control-bandwidth scenario raises it)
+    if (n1 + 1) * config.min_sep > T_seq or (n2 + 1) * config.min_sep > T_seq:
         return None, 1.0
 
     n1p = n1 if (pad_to is None or pad_to[0] is None) else max(int(pad_to[0]), n1)
@@ -900,15 +943,16 @@ def optimize_sequence(config, M, T_seq, n1, n2, seed_seq=None, pad_to=None):
         d2 = pulse_times_to_delays(seed_seq[1])
         initial_params = jnp.concatenate([d1, d2])
     else:
-        d1 = get_random_delays(n1, T_seq, config.tau)
-        d2 = get_random_delays(n2, T_seq, config.tau)
+        d1 = get_random_delays(n1, T_seq, config.min_sep)
+        d2 = get_random_delays(n2, T_seq, config.min_sep)
         initial_params = jnp.concatenate([d1, d2])
 
-    bounds = [(config.tau, T_seq) for _ in range(len(initial_params))]
+    bounds = [(config.min_sep, T_seq) for _ in range(len(initial_params))]
     A = np.zeros((2, n1 + n2))
     A[0, :n1] = 1
     A[1, n1:] = 1
-    linear_cons = scipy.optimize.LinearConstraint(A, -np.inf, T_seq - config.tau)
+    linear_cons = scipy.optimize.LinearConstraint(A, -np.inf,
+                                                  T_seq - config.min_sep)
     
     try:
         res = scipy.optimize.minimize(fun_wrapper, np.array(initial_params), method='SLSQP',
@@ -1122,7 +1166,7 @@ def run_optimization(config):
         
         # 1. Known Sequences
         max_pulses_per_rep = config.max_pulses
-        pLib_delays, pLib_desc = construct_pulse_library(T_seq, config.tau, max_pulses_per_rep)
+        pLib_delays, pLib_desc = construct_pulse_library(T_seq, config.min_sep, max_pulses_per_rep)
         
         best_known_seq = None
         best_known_inf = 1.0
@@ -1154,7 +1198,7 @@ def run_optimization(config):
         best_opt_seq = None
         
         # Calculate nps dynamically
-        max_n_physical = int(T_seq / config.tau) - 1
+        max_n_physical = int(T_seq / config.min_sep) - 1
         
         # Determine candidates based on physical limit and config limit
         # We back off by 1 from physical max to ensure optimization slack (unless max_n is small)
@@ -1276,6 +1320,9 @@ def run_optimization(config):
         # UNCAP-0611 provenance: the pulse-count cap this run searched under
         # (10**9 = separation-limited).
         'max_pulses': int(config.max_pulses),
+        # SHOWCASE-0612 provenance: control-bandwidth scenario + ablation rung
+        'min_sep_factor': float(config.min_sep_factor),
+        'char_self_only': bool(config.char_self_only),
     }
 
     if best_known_seq_overall is not None:
@@ -1334,17 +1381,29 @@ if __name__ == '__main__':
                              "a protocol cannot reconstruct, e.g. robust "
                              "S112/S212, are auto-dropped from the "
                              "characterized model alone)")
-    parser.add_argument('--spectral-model', choices=('interp', 'selfconsistent'),
+    parser.add_argument('--spectral-model',
+                        choices=('interp', 'selfconsistent', 'smoothfit'),
                         default='interp',
                         help="characterized-SMat construction: linear interp "
-                             "through the teeth (+tails), or the unfold "
+                             "through the teeth (+tails); the unfold "
                              "model's line/tail/head-aware spectra "
-                             "(OPT-SPECTRAL-MODEL)")
+                             "(OPT-SPECTRAL-MODEL); or the LINE-BLIND single "
+                             "power law (ablation rung (b), SHOWCASE-0612)")
     parser.add_argument('--max-pulses', type=int, default=150,
                         help="per-qubit pulse-count cap (default 150, the "
                              "published-run value); 0 = separation-limited, "
-                             "i.e. only the minimum-separation tau bounds the "
+                             "i.e. only the minimum separation bounds the "
                              "count (UNCAP-0611)")
+    parser.add_argument('--min-sep', type=float, default=1.0,
+                        help="minimum pulse separation in units of tau "
+                             "(SHOWCASE-0612 control-bandwidth scenario; "
+                             "applied symmetrically to the library, the NT "
+                             "search and the inits; default 1.0 = legacy)")
+    parser.add_argument('--self-only', action='store_true',
+                        help="ablation rung (c): characterized model from "
+                             "S11/S22 alone (S1212 + crosses dropped, as a "
+                             "1Q-only QNS campaign leaves them); the ideal "
+                             "benchmark keeps the full truth")
     parser.add_argument('--factors', type=str, default=None,
                         help="comma-separated gate-time factors to run "
                              "(default: the full 3,2,1,0,-1,-2,-3 sweep); "
@@ -1360,6 +1419,8 @@ if __name__ == '__main__':
                   include_cross_spectra=not cli.no_cross,
                   spectral_model=cli.spectral_model,
                   max_pulses=cli.max_pulses,
+                  min_sep_factor=cli.min_sep,
+                  char_self_only=cli.self_only,
                   output_path_known=f"infs_known_cz_v2{sfx}.npz",
                   output_path_opt=f"infs_opt_cz_v2{sfx}.npz",
                   plot_data_name=f"plotting_data_cz_v2{sfx}.npz")

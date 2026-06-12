@@ -125,13 +125,15 @@ _LINES_ON = (_REGIME != "bland")
 # sets the noise-tailored target ~2e-4. The ZZ channel additionally carries an
 # independent coupler TLF resonance + knee (j(t) in zeta_12) that ONLY the
 # two-qubit spectra can reveal -- the ablation-ladder rung-(c) channel.
-_SC_G_QS, _SC_W_QS = 2.0, 1.0e-3   # quasistatic hyperfine exponent / IR cutoff
+_SC_G_QS, _SC_W_QS = 2.0, 2.5e-3   # slow-bath exponent / IR cutoff (2.5e-3 =
+                                   # 400 tau correlation: keeps the FID-slope
+                                   # DC protocol inside its linear window)
 _SC_G_FL = 0.9                     # electrical-floor exponent (W_IR shared)
 _SC_W_TLF = 0.025                  # TLF knee position [Connors 2022 shape]
 _SC_A_FL_1 = 2.882005e-08          # floor amplitudes: the stylized "quiet
 _SC_A_FL_2 = 3.729653e-08          # electrical environment" contrast knob
-_SC_A_QS_1 = 7.726827e-10          # quasistatic amplitudes: T2* = 3500 tau
-_SC_A_QS_2 = 7.681360e-10
+_SC_A_QS_1 = 3.941420e-09          # quasistatic amplitudes: T2* = 3500 tau
+_SC_A_QS_2 = 3.918228e-09
 _SC_H_TLF_1 = 1.2e-05              # knee plateaus: CDD1/2 >= 3e-3 at 320 tau
 _SC_H_TLF_2 = 1.5e-05
 _SC_LINE_CENTERS = jnp.array([0.051, 0.102, 0.153, 0.204, 0.365])

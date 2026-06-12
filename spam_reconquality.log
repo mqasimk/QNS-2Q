@@ -1,0 +1,178 @@
+=== RECON-QUALITY RUN (lines x8/x3.2, 64k shots, t_grain 1200, w_grain 500) — Wed Jun 10 04:40:51 PM EDT 2026 ===
+Running QNS experiments [seed=20260608]...
+SPAM protocol: none
+[dataset] recording phase coefficients -> /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_reference/phases.npz
+Running experiment: C_12_0_MT_1
+--- C_12_0_MT_1 completed in 35.64s ---
+Running experiment: C_12_0_MT_2
+--- C_12_0_MT_2 completed in 33.22s ---
+Running experiment: C_12_0_MT_3
+--- C_12_0_MT_3 completed in 29.01s ---
+Running experiment: C_12_12_MT_1
+--- C_12_12_MT_1 completed in 29.13s ---
+Running experiment: C_12_12_MT_2
+--- C_12_12_MT_2 completed in 29.01s ---
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 16.82s ---
+Running experiment: C_2_0_MT_1
+--- C_2_0_MT_1 completed in 15.25s ---
+Running experiment: C_12_0_MT_4
+--- C_12_0_MT_4 completed in 29.13s ---
+Running experiment: C_1_2_MT_1
+--- C_1_2_MT_1 completed in 15.08s ---
+Running experiment: C_1_2_MT_2
+--- C_1_2_MT_2 completed in 16.42s ---
+Running experiment: C_2_1_MT_1
+--- C_2_1_MT_1 completed in 15.00s ---
+Running experiment: C_2_1_MT_2
+--- C_2_1_MT_2 completed in 15.66s ---
+Running DC sweep: C_1_0_FIDCDD3 over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_1_0_FIDCDD3 sweep done in 8.17s ---
+Running DC sweep: C_2_0_CDD3FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_2_0_CDD3FID sweep done in 7.44s ---
+Running DC sweep: C_1_0_FIDFID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_1_0_FIDFID sweep done in 7.73s ---
+Running DC sweep: C_2_0_FIDFID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_2_0_FIDFID sweep done in 7.55s ---
+Running DC sweep: C_12_0_FID_FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_12_0_FID_FID sweep done in 14.42s ---
+Running DC sweep: C_12_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_12_12_FID sweep done in 14.37s ---
+Running DC sweep: C_1_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_1_12_FID sweep done in 7.41s ---
+Running DC sweep: C_2_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_2_12_FID sweep done in 7.43s ---
+Results saved to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_reference
+Phase dataset saved to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_reference/phases.npz (920 calls)
+Running QNS experiments [seed=20260608]...
+SPAM protocol: raw
+[dataset] replaying phase coefficients <- /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_reference/phases.npz (920 calls)
+Running experiment: C_12_0_MT_1
+--- C_12_0_MT_1 completed in 1.13s ---
+Running experiment: C_12_0_MT_2
+--- C_12_0_MT_2 completed in 1.04s ---
+Running experiment: C_12_0_MT_3
+--- C_12_0_MT_3 completed in 1.10s ---
+Running experiment: C_12_12_MT_1
+--- C_12_12_MT_1 completed in 1.14s ---
+Running experiment: C_12_12_MT_2
+--- C_12_12_MT_2 completed in 1.01s ---
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 1.21s ---
+Running experiment: C_2_0_MT_1
+--- C_2_0_MT_1 completed in 1.23s ---
+Running experiment: C_12_0_MT_4
+--- C_12_0_MT_4 completed in 1.10s ---
+Running experiment: C_1_2_MT_1
+--- C_1_2_MT_1 completed in 0.97s ---
+Running experiment: C_1_2_MT_2
+--- C_1_2_MT_2 completed in 1.50s ---
+Running experiment: C_2_1_MT_1
+--- C_2_1_MT_1 completed in 0.96s ---
+Running experiment: C_2_1_MT_2
+--- C_2_1_MT_2 completed in 1.50s ---
+Running DC sweep: C_1_0_FIDCDD3 over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_1_0_FIDCDD3 sweep done in 0.45s ---
+Running DC sweep: C_2_0_CDD3FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_2_0_CDD3FID sweep done in 0.44s ---
+Running DC sweep: C_1_0_FIDFID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_1_0_FIDFID sweep done in 0.42s ---
+Running DC sweep: C_2_0_FIDFID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_2_0_FIDFID sweep done in 0.41s ---
+Running DC sweep: C_12_0_FID_FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_12_0_FID_FID sweep done in 0.41s ---
+Running DC sweep: C_12_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_12_12_FID sweep done in 0.42s ---
+Running DC sweep: C_1_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_1_12_FID sweep done in 0.41s ---
+Running DC sweep: C_2_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_2_12_FID sweep done in 0.42s ---
+Results saved to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_raw
+Running QNS experiments [seed=20260608]...
+SPAM protocol: mitigated
+[dataset] replaying phase coefficients <- /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_reference/phases.npz (920 calls)
+Running experiment: C_12_0_MT_1
+--- C_12_0_MT_1 completed in 1.14s ---
+Running experiment: C_12_0_MT_2
+--- C_12_0_MT_2 completed in 1.02s ---
+Running experiment: C_12_0_MT_3
+--- C_12_0_MT_3 completed in 1.01s ---
+Running experiment: C_12_12_MT_1
+--- C_12_12_MT_1 completed in 1.12s ---
+Running experiment: C_12_12_MT_2
+--- C_12_12_MT_2 completed in 1.01s ---
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 1.21s ---
+Running experiment: C_2_0_MT_1
+--- C_2_0_MT_1 completed in 1.23s ---
+Running experiment: C_12_0_MT_4
+--- C_12_0_MT_4 completed in 1.11s ---
+Running experiment: C_1_2_MT_1
+--- C_1_2_MT_1 completed in 0.96s ---
+Running experiment: C_1_2_MT_2
+--- C_1_2_MT_2 completed in 1.49s ---
+Running experiment: C_2_1_MT_1
+--- C_2_1_MT_1 completed in 0.96s ---
+Running experiment: C_2_1_MT_2
+--- C_2_1_MT_2 completed in 1.49s ---
+Running DC sweep: C_1_0_FIDCDD3 over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_1_0_FIDCDD3 sweep done in 0.45s ---
+Running DC sweep: C_2_0_CDD3FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_2_0_CDD3FID sweep done in 0.45s ---
+Running DC sweep: C_1_0_FIDFID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_1_0_FIDFID sweep done in 0.43s ---
+Running DC sweep: C_2_0_FIDFID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_2_0_FIDFID sweep done in 0.44s ---
+Running DC sweep: C_12_0_FID_FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_12_0_FID_FID sweep done in 0.44s ---
+Running DC sweep: C_12_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_12_12_FID sweep done in 0.44s ---
+Running DC sweep: C_1_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_1_12_FID sweep done in 0.41s ---
+Running DC sweep: C_2_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_2_12_FID sweep done in 0.42s ---
+Results saved to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_mitigated
+DC values (reliable?): S_11(0)=2.636e-03(True), S_22(0)=2.626e-03(True), S_1212(0)=1.661e-04(False)
+[systematic] folded sigma_sys per spectrum (forward-model comb bias; RMS over harmonics, |DC bias|):
+       S11: harmonic RMS =  4.915e-05  |DC bias| =  1.185e-05
+       S22: harmonic RMS =  7.405e-05  |DC bias| =  1.196e-05
+     S1212: harmonic RMS =  3.927e-06  |DC bias| =  2.474e-06  [DC flagged: not determined]
+       S12: harmonic RMS =  3.893e-05  |DC bias| =  1.982e-05
+      S112: harmonic RMS =  1.661e-05  |DC bias| =  6.825e-06
+      S212: harmonic RMS =  1.635e-05  |DC bias| =  1.265e-06  [DC flagged: not determined]
+Saved combined spectra plot to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_reference/figures/reconstruction/spectral_reconstruction_all_pub.pdf
+Saved cross-spectra plot to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_reference/figures/reconstruction/spectral_reconstruction_cross_pub.pdf
+DC values (reliable?): S_11(0)=1.995e-03(True), S_22(0)=3.157e-03(True), S_1212(0)=1.670e-04(False)
+[systematic] folded sigma_sys per spectrum (forward-model comb bias; RMS over harmonics, |DC bias|):
+       S11: harmonic RMS =  4.915e-05  |DC bias| =  1.185e-05
+       S22: harmonic RMS =  7.405e-05  |DC bias| =  1.196e-05
+     S1212: harmonic RMS =  3.927e-06  |DC bias| =  2.474e-06  [DC flagged: not determined]
+       S12: harmonic RMS =  3.893e-05  |DC bias| =  1.982e-05  [DC flagged: not determined]
+      S112: harmonic RMS =  1.661e-05  |DC bias| =  6.825e-06  [DC flagged: not determined]
+      S212: harmonic RMS =  1.635e-05  |DC bias| =  1.265e-06  [DC flagged: not determined]
+Saved combined spectra plot to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_raw/figures/reconstruction/spectral_reconstruction_all_pub.pdf
+Saved cross-spectra plot to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_raw/figures/reconstruction/spectral_reconstruction_cross_pub.pdf
+DC values (reliable?): S_11(0)=2.637e-03(True), S_22(0)=2.626e-03(True), S_1212(0)=1.735e-04(False)
+[systematic] folded sigma_sys per spectrum (forward-model comb bias; RMS over harmonics, |DC bias|):
+       S11: harmonic RMS =  4.915e-05  |DC bias| =  1.185e-05
+       S22: harmonic RMS =  7.405e-05  |DC bias| =  1.196e-05
+     S1212: harmonic RMS =  3.927e-06  |DC bias| =  2.474e-06  [DC flagged: not determined]
+       S12: harmonic RMS =  3.893e-05  |DC bias| =  1.982e-05
+      S112: harmonic RMS =  1.661e-05  |DC bias| =  6.825e-06
+      S212: harmonic RMS =  1.635e-05  |DC bias| =  1.265e-06  [DC flagged: not determined]
+Saved combined spectra plot to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_mitigated/figures/reconstruction/spectral_reconstruction_all_pub.pdf
+Saved cross-spectra plot to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_mitigated/figures/reconstruction/spectral_reconstruction_cross_pub.pdf
+=== comparison — Wed Jun 10 04:49:35 PM EDT 2026 ===
+spectrum |        no SPAM (reference) |          SPAM, unmitigated |             SPAM-mitigated |
+         |     rel.dev / pull / <2sig |     rel.dev / pull / <2sig |     rel.dev / pull / <2sig |
+-------------------------------------------------------------------------------------------------
+     S11 |   7.59% / 1.03 /  95% |  13.71% / 1.82 /  57% |   7.59% / 1.03 /  95% |
+     S22 |   6.80% / 1.06 / 100% |   8.42% / 0.87 /  52% |   6.80% / 1.06 / 100% |
+   S1212 |  15.03% / 1.21 /  81% |   9.59% / 0.88 /  81% |  15.15% / 1.20 /  81% |
+     S12 |  10.82% / 1.00 /  95% |  10.05% / 1.02 / 100% |  10.82% / 1.00 /  95% |
+    S112 |  21.53% / 1.00 / 100% |  24.45% / 1.59 /  62% |  21.29% / 1.00 / 100% |
+    S212 |  27.89% / 0.93 /  95% |  21.80% / 1.06 /  86% |  27.84% / 0.94 /  95% |
+
+Saved comparison figure to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_mitigated/figures/spam_protocol_comparison.pdf
+Saved pulls figure to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_SPAM_featured_mitigated/figures/spam_protocol_pulls.pdf
+=== RECON-QUALITY RUN COMPLETE — Wed Jun 10 04:49:38 PM EDT 2026 ===

@@ -1,0 +1,49 @@
+Running QNS experiments [seed=20260608]...
+SPAM protocol: none
+[dataset] recording phase coefficients -> /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured/phases.npz
+Running experiment: C_12_0_MT_1
+--- C_12_0_MT_1 completed in 7.40s ---
+Running experiment: C_12_0_MT_2
+--- C_12_0_MT_2 completed in 7.28s ---
+Running experiment: C_12_0_MT_3
+--- C_12_0_MT_3 completed in 3.09s ---
+Running experiment: C_12_12_MT_1
+--- C_12_12_MT_1 completed in 3.18s ---
+Running experiment: C_12_12_MT_2
+--- C_12_12_MT_2 completed in 3.08s ---
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 3.49s ---
+Running experiment: C_2_0_MT_1
+--- C_2_0_MT_1 completed in 1.94s ---
+Running experiment: C_12_0_MT_4
+--- C_12_0_MT_4 completed in 3.17s ---
+Running experiment: C_1_2_MT_1
+--- C_1_2_MT_1 completed in 1.69s ---
+Running experiment: C_1_2_MT_2
+--- C_1_2_MT_2 completed in 2.97s ---
+Running experiment: C_2_1_MT_1
+--- C_2_1_MT_1 completed in 1.70s ---
+Running experiment: C_2_1_MT_2
+--- C_2_1_MT_2 completed in 2.18s ---
+Running DC sweep: C_1_0_FIDCDD3 over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_1_0_FIDCDD3 sweep done in 1.44s ---
+Running DC sweep: C_2_0_CDD3FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_2_0_CDD3FID sweep done in 0.71s ---
+Running DC sweep: C_1_0_FIDFID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_1_0_FIDFID sweep done in 0.70s ---
+Running DC sweep: C_2_0_FIDFID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_2_0_FIDFID sweep done in 0.70s ---
+Running DC sweep: C_12_0_FID_FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_12_0_FID_FID sweep done in 1.27s ---
+Running DC sweep: C_12_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_12_12_FID sweep done in 1.27s ---
+Running DC sweep: C_1_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_1_12_FID sweep done in 0.69s ---
+Running DC sweep: C_2_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_2_12_FID sweep done in 0.69s ---
+Running DC sweep: C_1_0_CDD1CDD1 over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_1_0_CDD1CDD1 sweep done in 1.45s ---
+Running DC sweep: C_1_0_CDD1CPMG over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+--- C_1_0_CDD1CPMG sweep done in 1.53s ---
+Results saved to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured
+Phase dataset saved to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_featured/phases.npz (960 calls)
