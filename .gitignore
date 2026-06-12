@@ -44,3 +44,16 @@ GEMINI.md
 reports/**/*.aux
 reports/**/*.log
 reports/**/*.out
+# SHOWCASE-0612 figure-feeding summaries (same convention as the uncapped set)
+!DraftRun_*/optimization_data_all_M_showcase64k.npz
+!DraftRun_*/margin_band_cz_showcase64k.npz
+!DraftRun_*/margin_band_id_showcase64k.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_showcase64k.npz
+!DraftRun_*/plotting_data/plotting_data_id_v4_showcase64k.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_rung_b.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_rung_c.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_rung_d_reference.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_rung_d_raw.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_rung_d_mitigated.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_blind4k.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_blind64k.npz
