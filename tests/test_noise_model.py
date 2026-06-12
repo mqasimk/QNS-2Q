@@ -1,12 +1,17 @@
 """Invariants of the experimentally-anchored noise model (NOISE_MODEL_SPEC.md).
 
 Covers the spec's acceptance gates that are cheap enough for CI:
-  (i)  T2* calibration target (800 tau, window 720-880) per qubit;
+  (i)  T2* calibration target per qubit (anchored classes: 800 tau, window
+       720-880; showcase: 3500 tau, window 3200-3800);
   (ii) PSD-matrix positivity over the band;
   (iii) the synthesized trajectories reproduce the analytic covariances,
-        including the measured (+, +, -) coherence sign pattern;
-  (iv) Class-F lines live on the local (qubit) channels only, so the ZZ
-       channel stays smooth and the inter-qubit coherence dips at the lines.
+        including the measured (+, +, -) coherence sign pattern (under the
+        showcase regime this also exercises the 6th coupler-defect stream);
+  (iv) anchored Class-F lines live on the local (qubit) channels only, so the
+       ZZ channel stays smooth and the inter-qubit coherence dips at the lines;
+  (v)  showcase: the trap-line family sits on the local channels (coherence
+       dip), while the coupler TLF resonance lives on the ZZ channel ONLY --
+       S_1212 is structurally NOT a scaled copy of the self-spectra.
 
 The suite runs under the active QNS2Q_REGIME (default: featured = Class F).
 Class-M-only behavior is exercised by the bland-regime CI run.
@@ -22,8 +27,11 @@ import pytest
 
 from qns2q.model.trajectories import make_noise_mat_arr, make_channel_trajs
 from qns2q.noise import spectra as sp
+from qns2q.paths import current_regime
 
-_FEATURED = sp._LINES_ON
+_REGIME = current_regime()
+_TRIPLET = (_REGIME == "featured")     # anchored Class-F nuclear triplet
+_SHOWCASE = (_REGIME == "showcase")
 
 T = 160.0
 TRUNCATE = 20
@@ -40,12 +48,15 @@ def _chi(spec, t, n=40001):
 
 
 def test_t2_calibration_target():
-    """chi(T2*) = 1 at T2* = 800 tau (window 720-880) for both qubits."""
+    """chi(T2*) = 1 at the regime's calibration target for both qubits
+    (anchored classes: 800 tau +- 10%; showcase: 3500 tau +- ~10%)."""
+    lo, hi, tmin, tmax = ((3200, 3800, 1500, 5500) if _SHOWCASE
+                          else (720, 880, 400, 1200))
     for spec in (sp.S_11, sp.S_22):
-        t = np.linspace(400, 1200, 801)
+        t = np.linspace(tmin, tmax, 801)
         chi = np.array([_chi(spec, ti) for ti in t])
         t2 = t[np.argmin(np.abs(chi - 1))]
-        assert 720 <= t2 <= 880, f"T2* = {t2} tau outside the calibration window"
+        assert lo <= t2 <= hi, f"T2* = {t2} tau outside the calibration window"
 
 
 def test_psd_matrix_positive_over_band():
@@ -68,8 +79,11 @@ def test_psd_matrix_positive_over_band():
 
 def test_coherence_sign_pattern():
     """In-band coherences carry the measured (+, +, -) real-part sign pattern
-    (Yoneda 2023), with |c_12| at the calibrated ~0.67 level."""
-    w = jnp.linspace(0.3, 0.45, 40)     # mid-band, away from the Class-F lines
+    (Yoneda 2023), with |c_12| at the calibrated ~0.67 level. The window must
+    avoid the regime's local lines (they dilute the shared fraction): the
+    showcase trap family tops out at 0.365+3*sigma, so test above it."""
+    w = (jnp.linspace(0.55, 0.70, 40) if _SHOWCASE
+         else jnp.linspace(0.3, 0.45, 40))   # away from the local lines
     s11, s22, s1212 = sp.S_11(w), sp.S_22(w), sp.S_1212(w)
     c12 = jnp.abs(sp.S_1_2(w))/jnp.sqrt(s11*s22)
     c112 = jnp.real(sp.S_1_12(w))/jnp.sqrt(s11*s1212)
@@ -106,7 +120,34 @@ def test_synthesis_reproduces_analytic_covariances():
     assert float(np.mean(b[:, 1, :]*b[:, 2, :])) < 0, "qubit2-J covariance must be negative"
 
 
-@pytest.mark.skipif(not _FEATURED, reason="Class-F lines only in the featured regime")
+@pytest.mark.skipif(not _SHOWCASE, reason="showcase-regime invariants")
+def test_showcase_trap_structure():
+    """Showcase: trap lines are qubit-local (coherence dips there); the coupler
+    TLF resonance is on the ZZ channel ONLY (2Q-spectra-only structure); and
+    the quiet floor gives the engineered line contrast."""
+    w_line, w_zz, w_ref = 0.204, 0.2356, 0.55
+    # trap-line contrast on the selfs over the quiet-floor reference
+    for spec, tag in ((sp.S_11, "S_11"), (sp.S_22, "S_22")):
+        ratio = float(spec(jnp.array([w_line]))[0]/spec(jnp.array([w_ref]))[0])
+        assert ratio > 20, f"{tag} trap-line contrast {ratio:.1f} too small"
+    # coupler resonance: on S_1212, with contrast over ITS smooth level
+    ratio_zz = float(jnp.real(sp.S_1212(jnp.array([w_zz]))[0]
+                              / sp.S_1212(jnp.array([w_ref]))[0]))
+    assert ratio_zz > 20, f"S_1212 coupler-line contrast {ratio_zz:.1f} too small"
+    # ...and NOT on the self-spectra beyond the neighboring trap line's tail:
+    # S_11 at 0.2356 is dominated by the 0.204 line shoulder, which is < 25%
+    # of that line's peak -- while S_1212's value there IS a line peak.
+    shoulder = float(sp.S_11(jnp.array([w_zz]))[0]/sp.S_11(jnp.array([w_line]))[0])
+    assert shoulder < 0.4, f"S_11 should only carry a line TAIL at {w_zz}"
+    # coherence dip at a local trap line (local lines dilute the shared part)
+    def c12(wv):
+        wv = jnp.array([wv])
+        return float(jnp.abs(sp.S_1_2(wv))[0]/jnp.sqrt(sp.S_11(wv)*sp.S_22(wv))[0])
+    assert c12(w_line) < 0.25*c12(w_ref), \
+        f"coherence should dip at the trap line: {c12(w_line):.2f} vs {c12(w_ref):.2f}"
+
+
+@pytest.mark.skipif(not _TRIPLET, reason="Class-F lines only in the featured regime")
 def test_lines_local_only_and_coherence_dip():
     """Class F: the nuclear-difference triplet sits on the qubit channels only --
     the ZZ channel stays smooth and c_12(w) dips at the line frequencies."""

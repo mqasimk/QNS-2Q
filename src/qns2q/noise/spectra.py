@@ -58,12 +58,15 @@ import jax.numpy as jnp
 
 from qns2q.paths import current_regime, run_folder, project_root
 
-# Legacy SI anchor (tau = 25 ns): conversion constant only.
-_TAU_SI = 2.5e-8
-
-MODEL_VERSION = "anchored-tarucha-20260610"
-
 _REGIME = current_regime()
+
+# SI anchor: conversion constant only. The anchored classes display at the
+# legacy tau = 25 ns; the showcase regime displays at tau = 5 ns (Ge-hole /
+# fast-Rabi anchor, where T2* = 3500 tau = 17.6 us matches Hendrickx 2024).
+_TAU_SI = 5.0e-9 if _REGIME == "showcase" else 2.5e-8
+
+MODEL_VERSION = ("showcase-trap-20260612" if _REGIME == "showcase"
+                 else "anchored-tarucha-20260610")
 
 
 @jax.jit
@@ -110,25 +113,87 @@ _LINE_AMP_Q2 = jnp.array([2.817e-03, 2.744e-03, 1.897e-03])
 
 _LINES_ON = (_REGIME != "bland")
 
+# --- SHOWCASE regime constants (SHOWCASE-0612) -------------------------------------
+# Engineered trap landscape, solved by scripts/calibrate_showcase.py (see its
+# header for the full design rationale). Composition per qubit: quasistatic
+# hyperfine (carries T2* = 3500 tau), a Connors-type local TLF knee (catches
+# CDD1-2, whose passbands at the featured Tg = 320 tau sit below comb tooth 1),
+# a defect-harmonic line family w0..4*w0 (catches CDD3-5 + the CPMG-16 gap)
+# plus a top-window line at 0.365 (catches the densest trains AND any
+# line-blind design fleeing up the falling floor under the min-sep = 8 tau
+# control-bandwidth scenario), all over a quiet 1/f^0.9 electrical floor that
+# sets the noise-tailored target ~2e-4. The ZZ channel additionally carries an
+# independent coupler TLF resonance + knee (j(t) in zeta_12) that ONLY the
+# two-qubit spectra can reveal -- the ablation-ladder rung-(c) channel.
+_SC_G_QS, _SC_W_QS = 2.0, 1.0e-3   # quasistatic hyperfine exponent / IR cutoff
+_SC_G_FL = 0.9                     # electrical-floor exponent (W_IR shared)
+_SC_W_TLF = 0.025                  # TLF knee position [Connors 2022 shape]
+_SC_A_FL_1 = 2.882005e-08          # floor amplitudes: the stylized "quiet
+_SC_A_FL_2 = 3.729653e-08          # electrical environment" contrast knob
+_SC_A_QS_1 = 7.726827e-10          # quasistatic amplitudes: T2* = 3500 tau
+_SC_A_QS_2 = 7.681360e-10
+_SC_H_TLF_1 = 1.2e-05              # knee plateaus: CDD1/2 >= 3e-3 at 320 tau
+_SC_H_TLF_2 = 1.5e-05
+_SC_LINE_CENTERS = jnp.array([0.051, 0.102, 0.153, 0.204, 0.365])
+_SC_LINE_SIGMAS = jnp.array([0.016, 0.020, 0.018, 0.022, 0.026])
+_SC_LINE_AMP_Q1 = jnp.array([1.10e-05, 1.25e-05, 1.25e-05, 1.90e-05, 1.60e-05])
+_SC_LINE_AMP_Q2 = jnp.array([1.50e-05, 1.60e-05, 1.60e-05, 2.40e-05, 2.00e-05])
+_SC_ZZ_W0, _SC_ZZ_SIG = 0.2356, 0.020
+_SC_H_ZZ_LINE = 1.0e-05            # coupler TLF resonance (2Q-only structure)
+_SC_H_ZZ_KNEE = 3.0e-06
+
+HAS_ZZ_EXTRA = (_REGIME == "showcase")
+
 
 def line_priors():
-    """(centers, sigma) of the nuclear-difference line triplet, or None (bland).
+    """(centers, sigma) of the known qubit-local line set, or None (bland).
 
     The experimentally-known part of the line fingerprint only: the centers are
-    differences of nuclear Larmor frequencies (fixed by the species and the
-    magnetic field) and the width is the comb's resolution limit. Heights are
-    deliberately NOT exposed -- a line-aware reconstruction model must fit them
-    from its own reconstructed data (see ``characterize.systematics``).
+    set by the defect/nuclear species (and B field) and the width is the comb's
+    resolution limit. Heights are deliberately NOT exposed -- a line-aware
+    reconstruction model must fit them from its own reconstructed data (see
+    ``characterize.systematics``). For per-line widths and the per-channel
+    structure (showcase: the ZZ channel carries its own line) use
+    ``line_priors_per_channel``; this legacy form quotes the smallest width.
     """
+    import numpy as np
+    if _REGIME == "showcase":
+        return (np.asarray(_SC_LINE_CENTERS, dtype=float),
+                float(np.min(np.asarray(_SC_LINE_SIGMAS))))
     if not _LINES_ON:
         return None
-    import numpy as np
     return np.asarray(_LINE_CENTERS, dtype=float), float(_LINE_SIGMA)
 
 
-def _plaw(w, g):
-    """IR-regularized power law (w^2 + W_IR^2)^(-g/2); finite at w = 0."""
-    return (w**2 + W_IR**2)**(-g/2)
+def line_priors_per_channel():
+    """{spectrum key: (centers, sigmas)} of known line content, or None (bland).
+
+    Per-channel, per-line generalization of ``line_priors`` (same height-blind
+    contract). The anchored featured class carries the nuclear-difference
+    triplet on the qubit-local channels only; the showcase class adds its
+    defect-harmonic family on S11/S22 and the coupler TLF resonance on S1212.
+    """
+    import numpy as np
+    if _REGIME == "showcase":
+        c = np.asarray(_SC_LINE_CENTERS, dtype=float)
+        s = np.asarray(_SC_LINE_SIGMAS, dtype=float)
+        return {'S11': (c, s), 'S22': (c, s),
+                'S1212': (np.array([_SC_ZZ_W0]), np.array([_SC_ZZ_SIG]))}
+    if not _LINES_ON:
+        return None
+    c = np.asarray(_LINE_CENTERS, dtype=float)
+    s = np.full(c.size, float(_LINE_SIGMA))
+    return {'S11': (c, s), 'S22': (c, s)}
+
+
+def _plaw(w, g, wir=W_IR):
+    """IR-regularized power law (w^2 + wir^2)^(-g/2); finite at w = 0."""
+    return (w**2 + wir**2)**(-g/2)
+
+
+def _knee(w, h, wc):
+    """Lorentzian TLF knee: plateau h below wc, falling w^-2 above."""
+    return h/(1 + (w/wc)**2)
 
 
 def _lines(w, amps):
@@ -138,40 +203,81 @@ def _lines(w, amps):
     return out
 
 
+def _sc_lines(w, amps):
+    out = jnp.zeros_like(w)
+    for i in range(5):
+        out = out + amps[i]*Gauss(w, _SC_LINE_CENTERS[i], _SC_LINE_SIGMAS[i])
+    return out
+
+
 # --- Component spectra (consumed by the trajectory synthesis) ---------------------
 
-@jax.jit
-def S_el_A(w):
-    """Electrical (charge-noise) PSD seen at qubit 1. w, S in tau units."""
-    return A_EL_1*_plaw(w, _G_EL_1)
+if _REGIME == "showcase":
+    @jax.jit
+    def S_el_A(w):
+        """Quiet electrical floor at qubit 1 (showcase contrast knob)."""
+        return _SC_A_FL_1*_plaw(w, _SC_G_FL)
 
+    @jax.jit
+    def S_el_B(w):
+        """Quiet electrical floor at qubit 2."""
+        return _SC_A_FL_2*_plaw(w, _SC_G_FL)
 
-@jax.jit
-def S_el_B(w):
-    """Electrical (charge-noise) PSD seen at qubit 2."""
-    return A_EL_2*_plaw(w, _G_EL_2)
-
-
-if _LINES_ON:
     @jax.jit
     def S_nuc_1(w):
-        """Local nuclear PSD at qubit 1 (Class F: smooth + reduced line triplet)."""
-        return A_NUC_1*_plaw(w, _G_NUC) + _lines(w, _LINE_AMP_Q1)
+        """Qubit-1 local low-frequency + featured component (showcase):
+        quasistatic hyperfine (T2* carrier) + TLF knee + trap-line family."""
+        return (_SC_A_QS_1*_plaw(w, _SC_G_QS, _SC_W_QS)
+                + _knee(w, _SC_H_TLF_1, _SC_W_TLF)
+                + _sc_lines(w, _SC_LINE_AMP_Q1))
 
     @jax.jit
     def S_nuc_2(w):
-        """Local nuclear PSD at qubit 2 (Class F: smooth + full line triplet)."""
-        return A_NUC_2*_plaw(w, _G_NUC) + _lines(w, _LINE_AMP_Q2)
+        """Qubit-2 local low-frequency + featured component (showcase)."""
+        return (_SC_A_QS_2*_plaw(w, _SC_G_QS, _SC_W_QS)
+                + _knee(w, _SC_H_TLF_2, _SC_W_TLF)
+                + _sc_lines(w, _SC_LINE_AMP_Q2))
+
+    @jax.jit
+    def S_zz_extra(w):
+        """Independent coupler-defect PSD j(t) on the ZZ channel ONLY
+        (zeta_12 = A_J e_A - B_J e_B + j): TLF resonance + knee. Structure
+        invisible to single-qubit QNS -- the rung-(c) ablation channel."""
+        return (_SC_H_ZZ_LINE*Gauss(w, _SC_ZZ_W0, _SC_ZZ_SIG)
+                + _knee(w, _SC_H_ZZ_KNEE, _SC_W_TLF))
 else:
     @jax.jit
-    def S_nuc_1(w):
-        """Local nuclear PSD at qubit 1 (Class M: smooth)."""
-        return A_NUC_1*_plaw(w, _G_NUC)
+    def S_el_A(w):
+        """Electrical (charge-noise) PSD seen at qubit 1. w, S in tau units."""
+        return A_EL_1*_plaw(w, _G_EL_1)
 
     @jax.jit
-    def S_nuc_2(w):
-        """Local nuclear PSD at qubit 2 (Class M: smooth)."""
-        return A_NUC_2*_plaw(w, _G_NUC)
+    def S_el_B(w):
+        """Electrical (charge-noise) PSD seen at qubit 2."""
+        return A_EL_2*_plaw(w, _G_EL_2)
+
+    S_zz_extra = None
+
+    if _LINES_ON:
+        @jax.jit
+        def S_nuc_1(w):
+            """Local nuclear PSD at qubit 1 (Class F: smooth + reduced line triplet)."""
+            return A_NUC_1*_plaw(w, _G_NUC) + _lines(w, _LINE_AMP_Q1)
+
+        @jax.jit
+        def S_nuc_2(w):
+            """Local nuclear PSD at qubit 2 (Class F: smooth + full line triplet)."""
+            return A_NUC_2*_plaw(w, _G_NUC) + _lines(w, _LINE_AMP_Q2)
+    else:
+        @jax.jit
+        def S_nuc_1(w):
+            """Local nuclear PSD at qubit 1 (Class M: smooth)."""
+            return A_NUC_1*_plaw(w, _G_NUC)
+
+        @jax.jit
+        def S_nuc_2(w):
+            """Local nuclear PSD at qubit 2 (Class M: smooth)."""
+            return A_NUC_2*_plaw(w, _G_NUC)
 
 
 # --- Public six spectra ------------------------------------------------------------
@@ -196,9 +302,16 @@ def _cross_el(w):
 
 @jax.jit
 def S_1212(w):
-    """Self-spectrum of the ZZ (Ising) channel zeta_12 = A_J e_A - B_J e_B."""
-    return (A_J**2*S_el_A(w) + B_J**2*S_el_B(w)
+    """Self-spectrum of the ZZ (Ising) channel.
+
+    zeta_12 = A_J e_A - B_J e_B (+ the independent coupler defect j(t) in the
+    showcase regime, whose PSD S_zz_extra appears here and ONLY here -- j is
+    independent of e_A/e_B, so the cross-spectra are untouched)."""
+    base = (A_J**2*S_el_A(w) + B_J**2*S_el_B(w)
             - 2*A_J*B_J*jnp.real(_cross_el(w)))
+    if HAS_ZZ_EXTRA:
+        base = base + S_zz_extra(w)
+    return base
 
 
 @jax.jit
