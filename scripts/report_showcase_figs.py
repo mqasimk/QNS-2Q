@@ -349,6 +349,121 @@ def _arms_bars(ax, arms, title):
     ax.grid(True, alpha=0.25, axis='y')
 
 
+def _idle_penalty_panel(ax, title):
+    """1Q-only design penalty vs Tg for the idle gate (best over M per Tg)."""
+    def best_table(tag):
+        d = np.load(os.path.join(
+            RUN_GATES, f"optimization_data_all_M_{tag}.npz"), allow_pickle=True)
+        Ms = [int(m) for m in d['M_values']]
+        gts = sorted({round(float(g), 6) for m in Ms
+                      for g in d[f'M{m}_gate_times']})
+        out = {}
+        for gt in gts:
+            vals = []
+            for m in Ms:
+                mg = np.asarray(d[f'M{m}_gate_times'], dtype=float)
+                ix = np.where(np.abs(mg - gt) < 1e-6)[0]
+                if ix.size:
+                    vals.append(float(d[f'M{m}_infs_opt'][int(ix[0])]))
+            out[gt] = min(vals)
+        return out
+    full = best_table(GATE_TAG.lstrip('_'))
+    solo = best_table('rung_c_idle')
+    gts = sorted(full)
+    pen = [solo[g] / full[g] for g in gts]
+    ax.plot(gts, pen, '-', color=C_ROB, marker='o', ms=4,
+            label='idle: 1Q-only design / full design')
+    ax.axhline(1.0, color='k', lw=0.8, ls=':')
+    ax.set_xscale('log')
+    ax.set_xlabel(r"$T_G/\tau$")
+    ax.set_ylabel(r"true-infidelity penalty")
+    ax.set_title(title, fontsize=9.5)
+    ax.legend(frameon=False, fontsize=8)
+    ax.grid(True, alpha=0.25)
+
+
+def _load_design_data():
+    """Assemble the ladder/arms data from the rung run outputs."""
+    def opt_at(fname, tag):
+        d = np.load(os.path.join(ROOT, fname, "plotting_data",
+                                 f"plotting_data_cz_v2_{tag}.npz"),
+                    allow_pickle=True)
+        return float(np.asarray(d['infs_opt'], dtype=float)[0])
+
+    pd64 = np.load(os.path.join(RUN_GATES, "plotting_data",
+                                f"plotting_data_cz_v2{GATE_TAG}.npz"),
+                   allow_pickle=True)
+    tg = np.asarray(pd64['taxis'], dtype=float)
+    i320 = int(np.argmin(np.abs(tg - 320.0)))
+    cdd_320 = float(np.asarray(pd64['infs_known'], dtype=float)[i320])
+
+    ladder_cz = [
+        ("generic DD\n(best CDD)", cdd_320, C_MIT),
+        ("line-blind\nsmooth fit", opt_at("DraftRun_NoSPAM_showcase_64k", "rung_b"), C_BLD),
+        ("single-qubit\nQNS only", opt_at("DraftRun_NoSPAM_showcase_64k", "rung_c"), C_ROB),
+        ("all six,\nSPAM raw", opt_at("DraftRun_SPAM_showcase_raw", "rung_d_raw"), C_RAW),
+        ("all six,\nmitigated", opt_at("DraftRun_SPAM_showcase_mitigated", "rung_d_mitigated"), C_REF),
+    ]
+    # (known_true, nt_true, nt_predicted) -- predictions evaluated on each
+    # arm's own characterized model (2026-06-12 session; the 1.80x uniform
+    # over-prediction is the bounded-window conservatism)
+    arms_cz = {
+        'reference': (3.810e-3, 2.748e-4, 4.938e-4),
+        'raw':       (3.810e-3, 2.736e-4, 4.931e-4),
+        'mitigated': (3.810e-3, 2.748e-4, 4.936e-4),
+    }
+    return ladder_cz, arms_cz
+
+
+def fig_design():
+    ladder_cz, arms_cz = _load_design_data()
+    fig, axs = plt.subplots(2, 2, figsize=(9.6, 6.4))
+    _ladder_panel(axs[0, 0], ladder_cz,
+                  "(a) entangling (CZ), $T_G=320\\tau$: the same device,\n"
+                  "five levels of noise knowledge")
+    _arms_bars(axs[0, 1], arms_cz,
+               "(b) entangling (CZ): gates designed on the\n"
+               "SPAM arms' reconstructions")
+    # idle ladder at the 2560-tau featured point (best over M)
+    d_full = np.load(os.path.join(RUN_GATES,
+                                  f"optimization_data_all_M{GATE_TAG}.npz"),
+                     allow_pickle=True)
+    idle_known_2560 = min(
+        float(d_full[f'M{m}_infs_known'][np.argmin(np.abs(
+            np.asarray(d_full[f'M{m}_gate_times'], dtype=float) - 2560.0))])
+        for m in [int(x) for x in d_full['M_values']]
+        if np.any(np.abs(np.asarray(d_full[f'M{m}_gate_times'],
+                                    dtype=float) - 2560.0) < 1e-6))
+    d_solo = np.load(os.path.join(RUN_GATES,
+                                  "optimization_data_all_M_rung_c_idle.npz"),
+                     allow_pickle=True)
+
+    def best_opt(d, gt):
+        vals = []
+        for m in [int(x) for x in d['M_values']]:
+            mg = np.asarray(d[f'M{m}_gate_times'], dtype=float)
+            ix = np.where(np.abs(mg - gt) < 1e-6)[0]
+            if ix.size:
+                vals.append(float(d[f'M{m}_infs_opt'][int(ix[0])]))
+        return min(vals)
+
+    ladder_id = [
+        ("generic DD\n(best CDD/mqCDD)", idle_known_2560, C_MIT),
+        ("single-qubit\nQNS only", best_opt(d_solo, 2560.0), C_ROB),
+        ("all six\n(full recon.)", best_opt(d_full, 2560.0), C_REF),
+    ]
+    _ladder_panel(axs[1, 0], ladder_id,
+                  "(c) idle, $T_G=2560\\tau$: the knowledge ladder\n"
+                  "(best over repetition number $M$)")
+    _idle_penalty_panel(axs[1, 1],
+                        "(d) idle: what ignoring the two-qubit\n"
+                        "spectra costs, vs gate time")
+    fig.tight_layout()
+    fig.savefig(os.path.join(OUT, "fig_design_experiments.pdf"),
+                bbox_inches='tight')
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     assert current_regime() == "showcase", "run with QNS2Q_REGIME=showcase"
     setup_pub_rcparams('compact')
@@ -362,4 +477,7 @@ if __name__ == "__main__":
     if which in ('all', 'gates'):
         fig_gates()
         print("fig_gates done")
+    if which in ('all', 'design'):
+        fig_design()
+        print("fig_design_experiments done")
     print(f"figures -> {OUT}")
