@@ -37,8 +37,10 @@ ROOT = project_root()
 OUT = os.path.join(ROOT, "reports", "showcase_0612", "figs")
 os.makedirs(OUT, exist_ok=True)
 
-RUN_GATES = os.path.join(ROOT, "DraftRun_NoSPAM_showcase_64k")
-GATE_TAG = "_showcase64k"
+# Capture-grade arm (2026-06-12 evening: measurable-floor landscape, 128k
+# shots / M=16 sweeps). The earlier 64k/v1-landscape outputs keep their tags.
+RUN_GATES = os.path.join(ROOT, "DraftRun_NoSPAM_showcase_cap")
+GATE_TAG = "_cap"
 SPAM_FMT = os.path.join(ROOT, "DraftRun_SPAM_showcase_{arm}")
 
 T2_FID = 3500.0       # showcase T2* (tau units; chi(T2*) = 1 by calibration)
@@ -182,6 +184,61 @@ def fig_spam_comparison():
     plt.close(fig)
 
 
+def fig_recon_capture():
+    """Single-arm capture overlay: the reconstruction (with bars) tracking all
+    six spectra of the engineered landscape -- the 'QNS actually captures the
+    spectrum' figure."""
+    from qns2q.characterize.systematics import analytic_spectra
+
+    d = np.load(os.path.join(RUN_GATES, "specs.npz"), allow_pickle=True)
+    truth = analytic_spectra()
+    wk = np.asarray(d['wk'])
+    w_fine = np.linspace(0, wk.max() * 1.02, 2000)
+
+    SELF = [('S11', r"$S_{1,1}$"), ('S22', r"$S_{2,2}$"),
+            ('S1212', r"$S_{12,12}$")]
+    CROSS = [('S12', r"$S_{1,2}$"), ('S112', r"$S_{1,12}$"),
+             ('S212', r"$S_{2,12}$")]
+
+    fig, axs = plt.subplots(3, 3, figsize=(9.6, 6.9), sharex=True)
+
+    def panel(ax, key, part, title, yscale):
+        tr_f = np.asarray(truth[key](w_fine))
+        tr_f = np.real(tr_f) if part == 're' else np.imag(tr_f)
+        ax.plot(w_fine, tr_f, 'k--', lw=1.0, label='engineered landscape',
+                zorder=1)
+        rec = np.asarray(d[key])
+        rec_p = np.real(rec) if part == 're' else np.imag(rec)
+        sig_re, sig_im = _sig_parts(d[f'{key}_errtot'])
+        sig = sig_re if part == 're' else sig_im
+        ax.errorbar(wk, rec_p, yerr=sig, fmt='o', ms=3.2, color=C_REF,
+                    ecolor=C_REF, elinewidth=0.8, capsize=1.6, lw=0,
+                    label='QNS reconstruction', zorder=3, alpha=0.9)
+        if yscale == 'log':
+            ax.set_yscale('log')
+        else:
+            ax.set_yscale('symlog', linthresh=1e-8, linscale=0.5)
+        ax.set_title(title, fontsize=9)
+        ax.grid(True, alpha=0.25)
+
+    for j, (key, lab) in enumerate(SELF):
+        panel(axs[0, j], key, 're', lab, 'log')
+    for j, (key, lab) in enumerate(CROSS):
+        panel(axs[1, j], key, 're', r'$\mathrm{Re}\,$' + lab, 'symlog')
+        panel(axs[2, j], key, 'im', r'$\mathrm{Im}\,$' + lab, 'symlog')
+    for j in range(3):
+        axs[2, j].set_xlabel(r'$\omega\tau$')
+    for i in range(3):
+        axs[i, 0].set_ylabel(r"$S(\omega)\,/\,\tau$")
+    handles, labels = axs[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='lower center', ncol=2, frameon=False,
+               bbox_to_anchor=(0.5, 0.99), fontsize=8.5)
+    fig.tight_layout()
+    fig.savefig(os.path.join(OUT, "fig_recon_capture.pdf"),
+                bbox_inches='tight')
+    plt.close(fig)
+
+
 def _margin_quantiles(npz):
     tgs, lo, med, hi = [], [], [], []
     for key in sorted(k for k in npz.files if k.startswith('margin_')):
@@ -222,11 +279,13 @@ def fig_gates():
     pd_cz = np.load(os.path.join(RUN_GATES, "plotting_data",
                                  f"plotting_data_cz_v2{GATE_TAG}.npz"),
                     allow_pickle=True)
-    mb_cz = np.load(os.path.join(RUN_GATES, f"margin_band_cz{GATE_TAG}.npz"),
-                    allow_pickle=True)
+    mb_cz_path = os.path.join(RUN_GATES, f"margin_band_cz{GATE_TAG}.npz")
+    mb_cz = (np.load(mb_cz_path, allow_pickle=True)
+             if os.path.exists(mb_cz_path) else None)
     mb_id_path = os.path.join(RUN_GATES, f"margin_band_id{GATE_TAG}.npz")
     mb_id = np.load(mb_id_path, allow_pickle=True) if os.path.exists(mb_id_path) else None
-    idl = _idle_best_over_M()
+    idle_path = os.path.join(RUN_GATES, f"optimization_data_all_M{GATE_TAG}.npz")
+    idl = _idle_best_over_M() if os.path.exists(idle_path) else None
 
     tg = np.asarray(pd_cz['taxis'], dtype=float)
     order = np.argsort(tg)
@@ -235,7 +294,9 @@ def fig_gates():
     cz_o = np.asarray(pd_cz['infs_opt'], dtype=float)[order]
     cz_np = np.asarray(pd_cz['infs_nopulse'], dtype=float)[order]
 
-    fig, axs = plt.subplots(2, 2, figsize=(9.6, 5.8))
+    n_rows = 2 if idl is not None else 1
+    fig, axs = plt.subplots(n_rows, 2, figsize=(9.6, 2.9 * n_rows + 0.2),
+                            squeeze=False)
 
     def curve_panel(ax, x, fid, known, opt, title):
         ax.plot(x, fid, ':', color=C_RAW, marker='v', ms=4, label='FID (no pulse)')
@@ -270,9 +331,10 @@ def fig_gates():
     curve_panel(axs[0, 0], tg, cz_np, cz_k, cz_o,
                 "(a) entangling (CZ) gate: infidelity vs gate time")
     margin_panel(axs[0, 1], mb_cz, "(b) entangling gate: NT margin over best CDD")
-    curve_panel(axs[1, 0], idl['Tg'], idl['fid'], idl['known'], idl['opt'],
-                "(c) idle gate (best over repetition number $M$)")
-    margin_panel(axs[1, 1], mb_id, "(d) idle gate: NT margin over best CDD")
+    if idl is not None:
+        curve_panel(axs[1, 0], idl['Tg'], idl['fid'], idl['known'], idl['opt'],
+                    "(c) idle gate (best over repetition number $M$)")
+        margin_panel(axs[1, 1], mb_id, "(d) idle gate: NT margin over best CDD")
 
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "fig_gates.pdf"), bbox_inches='tight')
@@ -383,81 +445,43 @@ def _idle_penalty_panel(ax, title):
 
 
 def _load_design_data():
-    """Assemble the ladder/arms data from the rung run outputs."""
+    """Assemble the ladder data from the capture-landscape rung outputs.
+
+    The smoothfit/1Q rungs ran on the truth comb (--simulated; on this
+    landscape the blind-on-recon and truth-comb variants agreed to ~2% in the
+    v1 battery); CDD + full come from the blind capture-arm curve. The SPAM
+    arms rerun overnight at capture grade -- panel omitted until then."""
     def opt_at(fname, tag):
         d = np.load(os.path.join(ROOT, fname, "plotting_data",
                                  f"plotting_data_cz_v2_{tag}.npz"),
                     allow_pickle=True)
         return float(np.asarray(d['infs_opt'], dtype=float)[0])
 
-    pd64 = np.load(os.path.join(RUN_GATES, "plotting_data",
-                                f"plotting_data_cz_v2{GATE_TAG}.npz"),
-                   allow_pickle=True)
-    tg = np.asarray(pd64['taxis'], dtype=float)
+    pd = np.load(os.path.join(RUN_GATES, "plotting_data",
+                              f"plotting_data_cz_v2{GATE_TAG}.npz"),
+                 allow_pickle=True)
+    tg = np.asarray(pd['taxis'], dtype=float)
     i320 = int(np.argmin(np.abs(tg - 320.0)))
-    cdd_320 = float(np.asarray(pd64['infs_known'], dtype=float)[i320])
+    cdd_320 = float(np.asarray(pd['infs_known'], dtype=float)[i320])
+    full_320 = float(np.asarray(pd['infs_opt'], dtype=float)[i320])
 
     ladder_cz = [
         ("generic DD\n(best CDD)", cdd_320, C_MIT),
-        ("line-blind\nsmooth fit", opt_at("DraftRun_NoSPAM_showcase_64k", "rung_b"), C_BLD),
-        ("single-qubit\nQNS only", opt_at("DraftRun_NoSPAM_showcase_64k", "rung_c"), C_ROB),
-        ("all six,\nSPAM raw", opt_at("DraftRun_SPAM_showcase_raw", "rung_d_raw"), C_RAW),
-        ("all six,\nmitigated", opt_at("DraftRun_SPAM_showcase_mitigated", "rung_d_mitigated"), C_REF),
+        ("line-blind\nsmooth fit",
+         opt_at("DraftRun_NoSPAM_showcase", "rung_b_cap"), C_BLD),
+        ("single-qubit\nQNS only",
+         opt_at("DraftRun_NoSPAM_showcase", "rung_c_cap"), C_ROB),
+        ("all six\n(full recon.)", full_320, C_REF),
     ]
-    # (known_true, nt_true, nt_predicted) -- predictions evaluated on each
-    # arm's own characterized model (2026-06-12 session; the 1.80x uniform
-    # over-prediction is the bounded-window conservatism)
-    arms_cz = {
-        'reference': (3.810e-3, 2.748e-4, 4.938e-4),
-        'raw':       (3.810e-3, 2.736e-4, 4.931e-4),
-        'mitigated': (3.810e-3, 2.748e-4, 4.936e-4),
-    }
-    return ladder_cz, arms_cz
+    return ladder_cz, None
 
 
 def fig_design():
     ladder_cz, arms_cz = _load_design_data()
-    fig, axs = plt.subplots(2, 2, figsize=(9.6, 6.4))
-    _ladder_panel(axs[0, 0], ladder_cz,
-                  "(a) entangling (CZ), $T_G=320\\tau$: the same device,\n"
-                  "five levels of noise knowledge")
-    _arms_bars(axs[0, 1], arms_cz,
-               "(b) entangling (CZ): gates designed on the\n"
-               "SPAM arms' reconstructions")
-    # idle ladder at the 2560-tau featured point (best over M)
-    d_full = np.load(os.path.join(RUN_GATES,
-                                  f"optimization_data_all_M{GATE_TAG}.npz"),
-                     allow_pickle=True)
-    idle_known_2560 = min(
-        float(d_full[f'M{m}_infs_known'][np.argmin(np.abs(
-            np.asarray(d_full[f'M{m}_gate_times'], dtype=float) - 2560.0))])
-        for m in [int(x) for x in d_full['M_values']]
-        if np.any(np.abs(np.asarray(d_full[f'M{m}_gate_times'],
-                                    dtype=float) - 2560.0) < 1e-6))
-    d_solo = np.load(os.path.join(RUN_GATES,
-                                  "optimization_data_all_M_rung_c_idle.npz"),
-                     allow_pickle=True)
-
-    def best_opt(d, gt):
-        vals = []
-        for m in [int(x) for x in d['M_values']]:
-            mg = np.asarray(d[f'M{m}_gate_times'], dtype=float)
-            ix = np.where(np.abs(mg - gt) < 1e-6)[0]
-            if ix.size:
-                vals.append(float(d[f'M{m}_infs_opt'][int(ix[0])]))
-        return min(vals)
-
-    ladder_id = [
-        ("generic DD\n(best CDD/mqCDD)", idle_known_2560, C_MIT),
-        ("single-qubit\nQNS only", best_opt(d_solo, 2560.0), C_ROB),
-        ("all six\n(full recon.)", best_opt(d_full, 2560.0), C_REF),
-    ]
-    _ladder_panel(axs[1, 0], ladder_id,
-                  "(c) idle, $T_G=2560\\tau$: the knowledge ladder\n"
-                  "(best over repetition number $M$)")
-    _idle_penalty_panel(axs[1, 1],
-                        "(d) idle: what ignoring the two-qubit\n"
-                        "spectra costs, vs gate time")
+    fig, ax = plt.subplots(1, 1, figsize=(5.4, 3.4))
+    _ladder_panel(ax, ladder_cz,
+                  "entangling (CZ), $T_G=320\\tau$: the same device,\n"
+                  "four levels of noise knowledge")
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "fig_design_experiments.pdf"),
                 bbox_inches='tight')
@@ -471,9 +495,15 @@ if __name__ == "__main__":
     if which in ('all', 'spectra'):
         fig_model_spectra()
         print("fig_model_spectra done")
+    if which in ('all', 'capture'):
+        fig_recon_capture()
+        print("fig_recon_capture done")
     if which in ('all', 'spam'):
-        fig_spam_comparison()
-        print("fig_spam_comparison done")
+        try:
+            fig_spam_comparison()
+            print("fig_spam_comparison done")
+        except FileNotFoundError as e:
+            print(f"fig_spam_comparison SKIPPED ({e})")
     if which in ('all', 'gates'):
         fig_gates()
         print("fig_gates done")
