@@ -184,8 +184,14 @@ def _margin_quantiles(npz):
     return (np.asarray(tgs)[o],) + tuple(np.asarray(v)[o] for v in (lo, med, hi))
 
 
+# UNCAP-0611 (2026-06-12): the gate curves and margin bands now read the
+# separation-limited (uncapped pulse budget) reruns; the published-cap files
+# remain untagged alongside.
+GATE_TAG = "_uncapped"
+
+
 def _idle_best_over_M():
-    d = np.load(os.path.join(RUN, "optimization_data_all_M.npz"),
+    d = np.load(os.path.join(RUN, f"optimization_data_all_M{GATE_TAG}.npz"),
                 allow_pickle=True)
     Ms = [int(m) for m in d['M_values']]
     gts = sorted({round(float(g), 10) for m in Ms
@@ -211,10 +217,13 @@ def _idle_best_over_M():
 
 
 def fig_gates():
-    pd_cz = np.load(os.path.join(RUN, "plotting_data", "plotting_data_cz_v2.npz"),
+    pd_cz = np.load(os.path.join(RUN, "plotting_data",
+                                 f"plotting_data_cz_v2{GATE_TAG}.npz"),
                     allow_pickle=True)
-    mb_cz = np.load(os.path.join(RUN, "margin_band_cz.npz"), allow_pickle=True)
-    mb_id = np.load(os.path.join(RUN, "margin_band_id.npz"), allow_pickle=True)
+    mb_cz = np.load(os.path.join(RUN, f"margin_band_cz{GATE_TAG}.npz"),
+                    allow_pickle=True)
+    mb_id = np.load(os.path.join(RUN, f"margin_band_id{GATE_TAG}.npz"),
+                    allow_pickle=True)
     idl = _idle_best_over_M()
 
     tg = np.asarray(pd_cz['taxis'], dtype=float)

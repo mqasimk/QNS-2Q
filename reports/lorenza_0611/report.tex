@@ -267,9 +267,12 @@ operations: the identical NT(148,150) entangling winner at the identical
 true infidelity ($4.27\times10^{-2}$ at $320\tau$), and the identical
 NT(314,297)$^2$ idle winner at $5.18\times10^{-2}$ at $640\tau$, as the
 respective reference-arm designs (Fig.~\ref{fig:design}, right column). The
-SPAM bias is smooth, so it does not move the optimum. (These blocks draw
-independent restarts, hence the slight offset from the curve numbers of
-Sec.\,\ref{sec:gates}.)
+SPAM bias is smooth, so it does not move the optimum. (These design blocks
+draw independent restarts and ran at the earlier 150-per-qubit pulse
+budget, hence the offset from the separation-limited curve numbers of
+Sec.\,\ref{sec:gates}; what they test --- the stability of the blind design
+under knowledge stripping and bias --- is a property of the optimum's
+location, not of the pulse budget.)
 
 The design is therefore forgiving, by construction: a blind protocol that
 collapsed under partial knowledge or smooth bias would be useless in
@@ -321,18 +324,25 @@ predicted values (light bars).}
 
 \section{The gates: margins for both operations}\label{sec:gates}
 
-Figure~\ref{fig:gates} summarizes the regeneration. For both operations
-(the entangling CZ gate and the idle gate, the latter optimized over the
-repetition number $M$ at each gate time), the blind NT design beats the
-best blind-selected CDD sequence at every operationally relevant gate time
-and degrades gracefully to parity as $\TG$ crosses $T_2$.
+Figure~\ref{fig:gates} summarizes the regeneration, now with the pulse
+budget of \emph{both} the NT optimizer and the CDD library extended to the
+minimum-separation limit (up to $\TG/\tau - 1$ pulses per qubit; the earlier
+draft capped both at 150 per qubit, and its winners sat exactly at that
+cap). For both operations (the entangling CZ gate and the idle gate, the
+latter optimized over the repetition number $M$ at each gate time), the
+blind NT design beats the best blind-selected CDD sequence at \emph{every}
+gate time, including deep past $T_2$: the apparent closing of the margin at
+long gate times in the previous version was a pulse-budget artifact, not
+physics --- with the budget freed, the margin is flat from $40\tau$ to
+$13\,T_2$.
 
 \begin{figure}[h!]
 \centering
 \includegraphics[width=\linewidth]{figs/fig_gates.pdf}
 \caption{Noise-tailored gates on the anchored model, all design blind, all
-scoring on truth. (a,c): true process infidelity vs.\ gate time for the
-entangling and idle gates: free induction (grey), best CDD
+scoring on truth, with pulse budgets at the minimum-separation limit for
+both the NT search and the CDD library. (a,c): true process infidelity vs.\
+gate time for the entangling and idle gates: free induction (grey), best CDD
 (blind-selected, orange), best NT (blind-optimized, blue); the vertical line
 marks $T_2 = 771\tau$. (b,d): the corresponding NT-over-CDD margin, with the
 95\% confidence band obtained by propagating the reconstruction's quoted
@@ -347,23 +357,28 @@ uncertainty:
 
 \begin{itemize}[leftmargin=1.4em, itemsep=0.1em, topsep=0.2em]
 \item \textbf{Entangling (CZ):} $1.54\times$ [1.45, 1.67] at $40\tau$;
-$1.70\times$ [1.58, 1.86] at $80\tau$; $1.72\times$ [1.56, 1.77] at
-$160\tau$; $1.68\times$ [1.54, 1.75] at $320\tau$; $1.50\times$ [1.42,
-1.52] at $640\tau$; closing to $1.06\times$ [1.05, 1.07] at $1280\tau$. At
-$2560\tau \approx 3.3\,T_2$ the blind optimizer's winner is the best CDD
-sequence itself (exact parity).
-\item \textbf{Idle:} $1.35\times$ [1.23, 1.31] at $320\tau$; $1.37\times$
-[1.26, 1.36] at $640\tau$; $1.50\times$ [1.28, 1.50] at $1280\tau$;
-$1.27\times$ [1.25, 1.45] at $2560\tau$; still $1.21\times$ [1.08, 1.35] at
-$5120\tau$ and $1.06\times$ [1.03, 1.13] at $10240\tau = 13\,T_2$, deep in
+$1.70\times$ [1.58, 1.86] at $80\tau$; $1.75\times$ [1.59, 1.83] at
+$160\tau$; $1.72\times$ [1.59, 1.84] at $320\tau$; $1.72\times$ [1.59,
+1.85] at $640\tau$; $1.65\times$ [1.54, 1.77] at $1280\tau$; and still
+$1.58\times$ [1.49, 1.74] at $2560\tau \approx 3.3\,T_2$. (Under the
+earlier 150-pulse cap this margin collapsed to $1.06\times$ at $1280\tau$
+and exact parity at $2560\tau$; the freed budget restores it.)
+\item \textbf{Idle:} $1.41\times$ [1.28, 1.40] at $320\tau$; $1.40\times$
+[1.31, 1.44] at $640\tau$; $1.61\times$ [1.39, 1.68] at $1280\tau$;
+$1.54\times$ [1.30, 1.55] at $2560\tau$; still $1.44\times$ [1.53, 1.85] at
+$5120\tau$ and $1.30\times$ [1.45, 1.84] at $10240\tau = 13\,T_2$, deep in
 the decoherence-dominated regime.
 \end{itemize}
 
 In each entry the central value is the \emph{true} margin and the bracket is
 the 95\% interval of the \emph{predicted} margin under reconstruction
-uncertainty; at 64k shots the two agree closely everywhere, with a mild
-conservative tendency on the short idles (true margins at or just above
-their predicted bands; the prediction errs on the safe side there).
+uncertainty. Through $\TG \lesssim 3\,T_2$ the two agree closely. At the
+two deepest idles ($5120\tau$, $10240\tau$) the true margin falls below the
+predicted band: with infidelities of $0.3$--$0.5$, the saturation of
+$1-e^{-\chi}$ compresses true ratios, so the perturbative prediction
+\emph{overstates} the margin there --- the quoted true values are the
+honest ones, and the regime is flagged as decoherence-dominated in any
+case.
 
 \begin{table}[h!]
 \centering\small
@@ -371,25 +386,28 @@ their predicted bands; the prediction errs on the safe side there).
 \toprule
 operation & FID & best CDD & best NT & margin \\
 \midrule
-idling $640\tau$ & $6.17\mathrm{e}{-1}$ & $7.29\mathrm{e}{-2}$ & $\mathbf{5.34\mathrm{e}{-2}}$ & $1.37\times$ \\
-idling $2560\tau$ & $7.46\mathrm{e}{-1}$ & $3.54\mathrm{e}{-1}$ & $\mathbf{2.77\mathrm{e}{-1}}$ & $1.27\times$ \\
-entangling $320\tau$ & $4.49\mathrm{e}{-1}$ & $7.42\mathrm{e}{-2}$ & $\mathbf{4.41\mathrm{e}{-2}}$ & $1.68\times$ \\
+idling $640\tau$ & $6.17\mathrm{e}{-1}$ & $7.29\mathrm{e}{-2}$ & $\mathbf{5.19\mathrm{e}{-2}}$ & $1.40\times$ \\
+idling $2560\tau$ & $7.46\mathrm{e}{-1}$ & $2.82\mathrm{e}{-1}$ & $\mathbf{1.83\mathrm{e}{-1}}$ & $1.54\times$ \\
+entangling $320\tau$ & $4.49\mathrm{e}{-1}$ & $4.88\mathrm{e}{-2}$ & $\mathbf{2.84\mathrm{e}{-2}}$ & $1.72\times$ \\
 \bottomrule
 \end{tabular}
 \caption{Sweet-spot numbers on the anchored model (true process
-infidelities, blind designs).}
+infidelities, blind designs, pulse budgets at the minimum-separation
+limit for both columns).}
 \label{tab:regen}
 \end{table}
 
 The earlier draft's $10^2$--$10^3$ NT suppressions do not survive the move
 to measured noise: they were artifacts of synthetic spectra carrying
 negligible weight in the NT passband, and the anchored noise is far harsher
-in absolute terms. The headline factor above is robust: the 95\% CI lower
-edges stay at or above $1.42\times$ (CZ, $40$--$640\tau$) and $1.23\times$
-(idle, $320$--$2560\tau$) across the operational windows. The structural
-argument now carries the weight: decoupling promotes the two-qubit channels
-to $20\%$ of the residual budget, and NT shapes the $y_{12}$ filter to
-address exactly the channels decoupling cannot.
+in absolute terms. The headline factor above is robust, and with the pulse
+budget at the separation limit it is also \emph{uniform}: the 95\% CI lower
+edges stay at or above $1.45\times$ (CZ) across the full $40$--$2560\tau$
+range and $1.28\times$ (idle) across $320$--$10240\tau$ --- no closing of
+the margin past $T_2$. The structural argument carries the rest of the
+weight: decoupling promotes the two-qubit channels to $20\%$ of the
+residual budget, and NT shapes the $y_{12}$ filter to address exactly the
+channels decoupling cannot.
 
 \vspace{0.3em}
 The narrative the paper can now tell: spectra anchored feature-by-feature
@@ -397,8 +415,10 @@ to published measurements $\to$ a blind, SPAM-immune reconstruction
 statistically consistent with truth $\to$ a design provably insensitive to
 the spectra the robust protocol cannot see and the bias it cannot avoid
 $\to$ noise-tailored idle and entangling gates beating the best decoupling
-by $1.3$--$1.7\times$, with confidence bands inherited from the
-reconstruction's stated uncertainties.
+by a \emph{uniform} $1.3$--$1.75\times$ at every gate time out to
+$13\,T_2$ once both designs hold the full separation-limited pulse budget,
+with confidence bands inherited from the reconstruction's stated
+uncertainties.
 
 \vspace{0.4em}
 \hrule

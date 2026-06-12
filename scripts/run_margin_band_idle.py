@@ -73,7 +73,12 @@ def main():
     ap.add_argument('--seed', type=int, default=20260611)
     ap.add_argument('--spectral-model', choices=('interp', 'selfconsistent'),
                     default='interp')
+    ap.add_argument('--tag', type=str, default="",
+                    help="suffix: read winners from optimization_data_all_M_"
+                         "<tag>.npz and write margin_band_id_<tag>.npz "
+                         "(UNCAP-0611)")
     a = ap.parse_args()
+    sfx = f"_{a.tag}" if a.tag else ""
 
     from qns2q.control import idle  # heavy import (JAX) after arg parsing
 
@@ -82,7 +87,8 @@ def main():
                       spectral_model=a.spectral_model,
                       gate_time_factors=[])
 
-    opt_path = os.path.join(project_root(), fname, 'optimization_data_all_M.npz')
+    opt_path = os.path.join(project_root(), fname,
+                            f'optimization_data_all_M{sfx}.npz')
     entries = load_best_over_M(opt_path)
     if not entries:
         raise ValueError(f"no winner sequences found in {opt_path}")
@@ -139,7 +145,7 @@ def main():
               f"   ({entries[jk[0]][2]} vs {entries[jo[0]][2]})")
         margin_out[f'margin_{Tg:g}'] = ratio
 
-    out_path = os.path.join(cfg.path, "margin_band_id.npz")
+    out_path = os.path.join(cfg.path, f"margin_band_id{sfx}.npz")
     np.savez(out_path,
              draws=draws, central=central,
              entry_Tg=np.array([e[0] for e in entries]),
