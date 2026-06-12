@@ -57,3 +57,10 @@ reports/**/*.out
 !DraftRun_*/plotting_data/plotting_data_cz_v2_rung_d_mitigated.npz
 !DraftRun_*/plotting_data/plotting_data_cz_v2_blind4k.npz
 !DraftRun_*/plotting_data/plotting_data_cz_v2_blind64k.npz
+!DraftRun_*/optimization_data_all_M_cap.npz
+!DraftRun_*/margin_band_cz_cap.npz
+!DraftRun_*/margin_band_id_cap.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_cap.npz
+!DraftRun_*/plotting_data/plotting_data_id_v4_cap.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_rung_b_cap.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_rung_c_cap.npz

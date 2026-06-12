@@ -1,0 +1,67 @@
+Running QNS experiments [seed=20260608]...
+SPAM protocol: none
+[dataset] recording phase coefficients -> /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_showcase_cap/phases.npz
+Running experiment: C_12_0_MT_1
+--- C_12_0_MT_1 completed in 56.36s ---
+Running experiment: C_12_0_MT_2
+--- C_12_0_MT_2 completed in 53.64s ---
+Running experiment: C_12_0_MT_3
+--- C_12_0_MT_3 completed in 48.49s ---
+Running experiment: C_12_12_MT_1
+--- C_12_12_MT_1 completed in 48.20s ---
+Running experiment: C_12_12_MT_2
+--- C_12_12_MT_2 completed in 48.20s ---
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 26.48s ---
+Running experiment: C_2_0_MT_1
+--- C_2_0_MT_1 completed in 25.40s ---
+Running experiment: C_12_0_MT_4
+--- C_12_0_MT_4 completed in 48.09s ---
+Running experiment: C_1_2_MT_1
+--- C_1_2_MT_1 completed in 24.07s ---
+Running experiment: C_1_2_MT_2
+--- C_1_2_MT_2 completed in 25.73s ---
+Running experiment: C_2_1_MT_1
+--- C_2_1_MT_1 completed in 24.62s ---
+Running experiment: C_2_1_MT_2
+--- C_2_1_MT_2 completed in 25.08s ---
+Running DC sweep: C_1_0_FIDCDD3 over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+--- C_1_0_FIDCDD3 sweep done in 20.53s ---
+Running DC sweep: C_2_0_CDD3FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+--- C_2_0_CDD3FID sweep done in 19.29s ---
+Running DC sweep: C_1_0_FIDFID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+--- C_1_0_FIDFID sweep done in 19.14s ---
+Running DC sweep: C_2_0_FIDFID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+--- C_2_0_FIDFID sweep done in 19.15s ---
+Running DC sweep: C_12_0_FID_FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+--- C_12_0_FID_FID sweep done in 37.82s ---
+Running DC sweep: C_12_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+--- C_12_12_FID sweep done in 37.87s ---
+Running DC sweep: C_1_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+--- C_1_12_FID sweep done in 19.14s ---
+Running DC sweep: C_2_12_FID over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+--- C_2_12_FID sweep done in 19.15s ---
+Running DC sweep: C_1_0_CDD1CDD1 over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+--- C_1_0_CDD1CDD1 sweep done in 20.64s ---
+Running DC sweep: C_1_0_CDD1CPMG over m=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+--- C_1_0_CDD1CPMG sweep done in 20.72s ---
+Results saved to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_showcase_cap
+Phase dataset saved to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_showcase_cap/phases.npz (1104 calls)
+DC values (reliable?): S_11(0)=5.685e-04(False), S_22(0)=5.688e-04(False), S_1212(0)=6.065e-07(True)
+[unfold] self-consistent comb-bias correction (applied bias RMS -> residual RMS, harmonics):
+       S11:  8.469e-07 ->  4.247e-07
+       S22:  8.914e-07 ->  4.472e-07
+     S1212:  3.254e-08 ->  1.650e-08
+       S12:  1.718e-08 ->  9.666e-09
+      S112:  5.669e-09 ->  3.385e-09
+      S212:  5.942e-09 ->  3.677e-09
+[systematic] folded sigma_sys per spectrum (forward-model comb bias; RMS over harmonics, |DC bias|):
+       S11: harmonic RMS =  4.247e-07  |DC bias| =  0.000e+00  [DC flagged: not determined]
+       S22: harmonic RMS =  4.472e-07  |DC bias| =  0.000e+00  [DC flagged: not determined]
+     S1212: harmonic RMS =  1.650e-08  |DC bias| =  1.306e-08
+       S12: harmonic RMS =  9.666e-09  |DC bias| =  0.000e+00  [DC flagged: not determined]
+      S112: harmonic RMS =  3.385e-09  |DC bias| =  0.000e+00  [DC flagged: not determined]
+      S212: harmonic RMS =  3.677e-09  |DC bias| =  0.000e+00  [DC flagged: not determined]
+Saved combined spectra plot to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_showcase_cap/figures/reconstruction/spectral_reconstruction_all_pub.pdf
+Saved cross-spectra plot to /home/mqasimk/IdeaProjects/QNS-2Q/DraftRun_NoSPAM_showcase_cap/figures/reconstruction/spectral_reconstruction_cross_pub.pdf
+CAPTURE-ARM-DONE
