@@ -115,6 +115,7 @@ class Config:
                  max_dim=0,
                  min_sep_factor=1.0,
                  char_self_only=False,
+                 informed_counts=False,
                  plot_data_name="plotting_data_id_v4.npz"
                  ):
 
@@ -202,6 +203,8 @@ class Config:
         # Ablation rung (c) (SHOWCASE-0612): characterized model from the
         # single-qubit spectra alone; the ideal benchmark keeps full truth.
         self.char_self_only = char_self_only
+        # Spectrum-informed pulse-count candidates (SHOWCASE-0612; see cz.py).
+        self.informed_counts = informed_counts
 
         self.M = M
         if max_pulses == 0:
@@ -1297,6 +1300,28 @@ def run_optimization_pipeline(config):
             effective_max = config.max_dim // 2
 
         n_pulses_list = []
+        if config.informed_counts and effective_max >= 2:
+            # Spectrum-informed windows (SHOWCASE-0612, mirrors cz.py): rank
+            # uniform-train counts by the CHARACTERIZED self-spectra at the
+            # fundamental and guarantee the best windows are tried, as sync
+            # and near-sync pairs; the random draws below still explore.
+            ns = np.arange(2, effective_max + 1)
+            w_fund = jnp.asarray(np.pi * ns / config.T_seq)
+            proxy = np.asarray(
+                jnp.interp(w_fund, config.w, jnp.real(config.SMat[1, 1]))
+                + jnp.interp(w_fund, config.w, jnp.real(config.SMat[2, 2])))
+            picked = []
+            for idx in np.argsort(proxy):
+                n_pick = int(ns[idx])
+                if all(abs(n_pick - p) > 2 for p in picked):
+                    picked.append(n_pick)
+                if len(picked) >= 3:
+                    break
+            print(f"  Spectrum-informed windows (characterized): {sorted(picked)}")
+            for p in picked:
+                n_pulses_list.append((p, p))
+                if p > 1:
+                    n_pulses_list.append((p, p - 1))
         for _ in range(config.num_random_trials):
             n1 = np.random.randint(0, effective_max + 1)
             n2 = np.random.randint(0, effective_max + 1)
@@ -1450,6 +1475,10 @@ if __name__ == "__main__":
                         help="ablation rung (c): characterized model from "
                              "S11/S22 alone (S1212 + crosses dropped); the "
                              "ideal benchmark keeps the full truth")
+    parser.add_argument('--informed-counts', action='store_true',
+                        help="guarantee spectrum-informed pulse-count windows "
+                             "(top quiet windows of the CHARACTERIZED "
+                             "spectra) in the NT trial list (SHOWCASE-0612)")
     parser.add_argument('--max-pulses', type=int, default=1000,
                         help="total pulse-count cap across all repetitions "
                              "(default 1000, the published-run value); 0 = "
@@ -1505,6 +1534,7 @@ if __name__ == "__main__":
                 max_dim=cli.max_dim,
                 min_sep_factor=cli.min_sep,
                 char_self_only=cli.self_only,
+                informed_counts=cli.informed_counts,
                 num_random_trials=20,
                 tau_divisor=160,
                 use_simulated=cli.simulated,
@@ -1558,6 +1588,7 @@ if __name__ == "__main__":
             data_to_save['max_dim'] = int(last_config.max_dim)
             data_to_save['min_sep_factor'] = float(last_config.min_sep_factor)
             data_to_save['char_self_only'] = bool(last_config.char_self_only)
+            data_to_save['informed_counts'] = bool(last_config.informed_counts)
             # Frequency grid kept for reference; SMat omitted (plot scripts
             # recompute spectra from the analytic noise model -- avoids ~5 MB
             # of dead weight).

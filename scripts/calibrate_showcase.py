@@ -70,13 +70,16 @@ W_TLF = 0.025                  # Connors-type knee position (catches CDD1-2)
 # floor amplitude: the stylized "quiet electrical environment" knob.
 # S_FL(0.30) ~ 1.2e-7 puts the NT parking-spot floor at the 2e-4 target.
 S_FLOOR_AT = 0.30
-S_FLOOR_VAL_1 = 0.85e-7
-S_FLOOR_VAL_2 = 1.10e-7
+S_FLOOR_VAL_1 = 0.40e-7
+S_FLOOR_VAL_2 = 0.52e-7
 
-# local TLF knee plateau (per qubit): CDD1 passband (w ~ 0.0098 at 320 tau)
-# sits on the plateau; chi_CDD1 ~ 0.9 * H_TLF * 320 -> 3e-3 needs ~1e-5.
-H_TLF_1 = 1.2e-5
-H_TLF_2 = 1.5e-5
+# Local TLF knee on the SELFS: dropped (probe iteration 4). With W_QS =
+# 2.5e-3 the T2*-carrying quasistatic tail already punishes CDD1 at ~2e-2 and
+# CDD2 at ~6e-3 by itself (S_QS(0.0196) ~ 1e-5), while the knee's w^-2 tail
+# was the DOMINANT toll on the NT parking window (2.2e-7 of 4.7e-7 at 0.28).
+# The Connors-knee citation survives on the ZZ channel's small knee.
+H_TLF_1 = 0.0
+H_TLF_2 = 0.0
 
 # trap lines: a HARMONIC FAMILY n*w0 (n = 1..4) of a single coherent defect at
 # w0 = 0.051, plus one independent line covering the top reachable window.
@@ -93,13 +96,19 @@ H_TLF_2 = 1.5e-5
 # ~1 tooth; sigma ~ half a tooth keeps each visible on 1-2 teeth (NNLS handles
 # off-tooth centers).
 # columns: center, sigma, height_q1, height_q2
+# The NT parking window lives between the 4*w0 line's upper 3-sigma edge and
+# the top line's lower 3-sigma edge: [0.258, 0.312] with the widths below.
+# Probe iteration 2026-06-12: the first cut (sigma 0.022/0.026, top at 0.365)
+# left only [0.27, 0.287] -- the NT winner sat on the top line's 2.5-sigma
+# shoulder and paid ~2x the floor. Narrower flanks + a recentred top line open
+# the window; heights go UP to keep CDD5 and the blind flee-up punished.
 W0_DEFECT = 0.051
 LINES = np.array([
-    [1 * W0_DEFECT, 0.016, 1.10e-5, 1.50e-5],   # CDD3 (n=5)
-    [2 * W0_DEFECT, 0.020, 1.25e-5, 1.60e-5],   # CDD4 (n=10)
-    [3 * W0_DEFECT, 0.018, 1.25e-5, 1.60e-5],   # CPMG-16-class gap filler
-    [4 * W0_DEFECT, 0.022, 1.90e-5, 2.40e-5],   # CDD5 (n=21) + CPMG-21+-3
-    [0.3650,        0.026, 1.60e-5, 2.00e-5],   # top window: CPMG-33..39 + blind
+    [1 * W0_DEFECT, 0.016, 1.45e-5, 1.95e-5],   # CDD3 (n=5)
+    [2 * W0_DEFECT, 0.020, 1.75e-5, 2.25e-5],   # CDD4 (n=10)
+    [3 * W0_DEFECT, 0.018, 1.60e-5, 2.05e-5],   # CPMG-16-class gap filler
+    [4 * W0_DEFECT, 0.014, 8.20e-5, 1.03e-4],   # CDD5 (n=21) + CPMG-21+-3
+    [0.3720,        0.015, 6.50e-5, 8.10e-5],   # top window: CPMG-34..39 + blind
 ])
 
 # coupler (ZZ) channel: smooth electrical difference (inherited, tiny) + an
@@ -111,7 +120,11 @@ DT_SHIFT = 1.5
 ZZ_LINE_W0 = 6 * TOOTH         # 0.2356, inside NT's preferred gap
 ZZ_LINE_SIG = 0.020
 H_ZZ_LINE = 1.0e-5
-H_ZZ_KNEE = 3.0e-6
+# Probe iteration: 3e-6 cost the full-NT design ~1.1e-4 through the CZ's
+# FORCED low-frequency ZZ exposure (dc_12 >= pi/(4 Jmax) -- no design dodges
+# it); 1e-6 keeps the 2Q-only structure visible while the rung-(c)
+# punishment rides the dodgeable LINE, not the undodgeable knee.
+H_ZZ_KNEE = 0.5e-6
 
 # control scenario
 MIN_SEP = 8.0

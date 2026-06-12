@@ -130,19 +130,27 @@ _SC_G_QS, _SC_W_QS = 2.0, 2.5e-3   # slow-bath exponent / IR cutoff (2.5e-3 =
                                    # DC protocol inside its linear window)
 _SC_G_FL = 0.9                     # electrical-floor exponent (W_IR shared)
 _SC_W_TLF = 0.025                  # TLF knee position [Connors 2022 shape]
-_SC_A_FL_1 = 2.882005e-08          # floor amplitudes: the stylized "quiet
-_SC_A_FL_2 = 3.729653e-08          # electrical environment" contrast knob
-_SC_A_QS_1 = 3.941420e-09          # quasistatic amplitudes: T2* = 3500 tau
-_SC_A_QS_2 = 3.918228e-09
-_SC_H_TLF_1 = 1.2e-05              # knee plateaus: CDD1/2 >= 3e-3 at 320 tau
-_SC_H_TLF_2 = 1.5e-05
-_SC_LINE_CENTERS = jnp.array([0.051, 0.102, 0.153, 0.204, 0.365])
-_SC_LINE_SIGMAS = jnp.array([0.016, 0.020, 0.018, 0.022, 0.026])
-_SC_LINE_AMP_Q1 = jnp.array([1.10e-05, 1.25e-05, 1.25e-05, 1.90e-05, 1.60e-05])
-_SC_LINE_AMP_Q2 = jnp.array([1.50e-05, 1.60e-05, 1.60e-05, 2.40e-05, 2.00e-05])
+_SC_A_FL_1 = 1.356238e-08          # floor amplitudes: the stylized "quiet
+_SC_A_FL_2 = 1.763109e-08          # electrical environment" contrast knob
+_SC_A_QS_1 = 4.028474e-09          # quasistatic amplitudes: T2* = 3500 tau.
+_SC_A_QS_2 = 4.027177e-09          # NOTE: with W_QS = 2.5e-3 the QS in-band
+                                   # tail alone punishes CDD1/2 (~2e-2/6e-3)
+                                   # -- no self-spectra TLF knee needed; its
+                                   # w^-2 tail was the dominant NT-window toll
+# NT parking window between the 4*w0 line's +3 sigma and the top line's
+# -3 sigma: [0.258, 0.312] (probe-iterated 2026-06-12; wider flanks left the
+# NT winner on a 2.5-sigma shoulder paying ~2x floor).
+_SC_LINE_CENTERS = jnp.array([0.051, 0.102, 0.153, 0.204, 0.372])
+# Flanking mines (4 w0, top) are CONSTANT-AREA narrowed (probe iteration 7):
+# CDD's wide filter lobes feel the line AREA, NT's parking feels the TAILS --
+# narrower-but-taller keeps CDD trapped while the window shoulders collapse.
+_SC_LINE_SIGMAS = jnp.array([0.016, 0.020, 0.018, 0.014, 0.015])
+_SC_LINE_AMP_Q1 = jnp.array([1.45e-05, 1.75e-05, 1.60e-05, 8.20e-05, 6.50e-05])
+_SC_LINE_AMP_Q2 = jnp.array([1.95e-05, 2.25e-05, 2.05e-05, 1.03e-04, 8.10e-05])
 _SC_ZZ_W0, _SC_ZZ_SIG = 0.2356, 0.020
 _SC_H_ZZ_LINE = 1.0e-05            # coupler TLF resonance (2Q-only structure)
-_SC_H_ZZ_KNEE = 3.0e-06
+_SC_H_ZZ_KNEE = 0.5e-06            # 3e-6 cost full-NT ~1.1e-4 via the FORCED
+                                   # low-w ZZ exposure (dc_12 >= pi/(4 Jmax))
 
 HAS_ZZ_EXTRA = (_REGIME == "showcase")
 
@@ -228,16 +236,15 @@ if _REGIME == "showcase":
     @jax.jit
     def S_nuc_1(w):
         """Qubit-1 local low-frequency + featured component (showcase):
-        quasistatic hyperfine (T2* carrier) + TLF knee + trap-line family."""
+        quasistatic slow bath (T2* carrier, whose in-band w^-2 tail also
+        punishes CDD1-2) + trap-line family."""
         return (_SC_A_QS_1*_plaw(w, _SC_G_QS, _SC_W_QS)
-                + _knee(w, _SC_H_TLF_1, _SC_W_TLF)
                 + _sc_lines(w, _SC_LINE_AMP_Q1))
 
     @jax.jit
     def S_nuc_2(w):
         """Qubit-2 local low-frequency + featured component (showcase)."""
         return (_SC_A_QS_2*_plaw(w, _SC_G_QS, _SC_W_QS)
-                + _knee(w, _SC_H_TLF_2, _SC_W_TLF)
                 + _sc_lines(w, _SC_LINE_AMP_Q2))
 
     @jax.jit
