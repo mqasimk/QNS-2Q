@@ -81,10 +81,25 @@ def make_noise_mat_arr(act, **kwargs):
     # five-stream regimes are untouched -- same array shape, same key budget,
     # bit-identical draws. Pass zz_extra=None to force the five-stream model.
     zz_extra = kwargs.get('zz_extra', _model_spectra.S_zz_extra)
+    # Showcase shared carrier (SHOWCASE-0612): the slow carrier moves out of
+    # the local nuc components into its own shared+local pair -- components
+    # 3/4 become the (strictly local) line families and components 6/7 carry
+    # the carrier filters of qubits 1/2, driven by one common stream plus one
+    # local stream each in make_channel_trajs. Only active when the model
+    # declares HAS_QS_SHARED and the caller did not override `components`.
+    qs_pair = kwargs.get('qs_pair', '__model__')
+    if qs_pair == '__model__':
+        qs_pair = ((_model_spectra.S_qs_1, _model_spectra.S_qs_2)
+                   if getattr(_model_spectra, 'HAS_QS_SHARED', False)
+                   and kwargs.get('components') is None else None)
     if act == 'load':
         return np.load('noise_mats.npy', allow_pickle=True)
     elif act == 'make':
         s_el_a, s_el_b, s_nuc_1, s_nuc_2 = components
+        if qs_pair is not None:
+            # carrier split: local rows carry the lines only
+            s_nuc_1 = _model_spectra.S_lines_1
+            s_nuc_2 = _model_spectra.S_lines_2
         mk = lambda spec, shift: make_noise_mat(
             spec, t_vec, w_grain=w_grain, wmax=wmax, trunc_n=truncate,
             gamma=shift, midpoint=midpoint)
@@ -92,6 +107,12 @@ def make_noise_mat_arr(act, **kwargs):
                 mk(s_nuc_1, 0.), mk(s_nuc_2, 0.)]
         if zz_extra is not None:
             rows.append(mk(zz_extra, 0.))
+        if qs_pair is not None:
+            if zz_extra is None:
+                raise ValueError("qs_pair without zz_extra would collide with "
+                                 "the 6-stream shape; not a supported regime")
+            rows.append(mk(qs_pair[0], 0.))
+            rows.append(mk(qs_pair[1], 0.))
         return jnp.array(rows)
     elif act == 'save':
         mats = make_noise_mat_arr('make', **kwargs)
@@ -234,6 +255,10 @@ _C_SH = jnp.sqrt(_model_spectra.C2_SHARE)
 _C_LOC = jnp.sqrt(1. - _model_spectra.C2_SHARE)
 _A_J = _model_spectra.A_J
 _B_J = _model_spectra.B_J
+# Shared-carrier split (showcase): one common stream + one local stream per
+# qubit through the carrier filters (components 6/7).
+_QS_SH = jnp.sqrt(_model_spectra._SC_C2_QS)
+_QS_LOC = jnp.sqrt(1. - _model_spectra._SC_C2_QS)
 
 
 @jax.jit
@@ -269,12 +294,17 @@ def make_channel_trajs(noise_mats, key):
         Array [3][n_t]: trajectories for [qubit1, qubit2, Ising].
     """
     # The sixth (showcase) stream is the independent coupler defect j(t) on the
-    # ZZ channel. Stream count is a static array shape, so this branch is
-    # resolved at trace time; the five-stream path keeps the exact legacy key
-    # budget (split(base, 10)) -- existing regimes' draws are bit-identical.
-    has_zz = (jnp.size(noise_mats, 0) == 6)
+    # ZZ channel; streams 7/8 (when present) are the shared-carrier split:
+    # ONE common stream through both carrier filters plus one local stream
+    # each (SHOWCASE-0612 cross-spectra story). Stream count is a static array
+    # shape, so these branches are resolved at trace time; the five-stream
+    # path keeps the exact legacy key budget (split(base, 10)) -- existing
+    # regimes' draws are bit-identical.
+    n_streams = jnp.size(noise_mats, 0)
+    has_zz = (n_streams >= 6)
+    has_qs = (n_streams == 8)
     base = jax.random.fold_in(jax.random.PRNGKey(key[0]), key[1])
-    ks = jax.random.split(base, 12 if has_zz else 10)
+    ks = jax.random.split(base, 18 if has_qs else (12 if has_zz else 10))
     n_w = jnp.size(noise_mats, 3)
     draw = lambda k: jax.random.normal(k, (n_w, 1))
     comp = lambda i, ka, kb: jnp.matmul(noise_mats[i, 0], draw(ka)) \
@@ -287,10 +317,19 @@ def make_channel_trajs(noise_mats, key):
     n_2 = comp(4, ks[8], ks[9])
     e_a = _C_SH*g0_a + _C_LOC*h_a
     e_b = _C_SH*g0_b + _C_LOC*h_b
+    zeta_1 = e_a + n_1
+    zeta_2 = e_b + n_2
     zeta_12 = _A_J*e_a - _B_J*e_b
     if has_zz:
         zeta_12 = zeta_12 + comp(5, ks[10], ks[11])
-    return jnp.array([jnp.ravel(e_a + n_1), jnp.ravel(e_b + n_2),
+    if has_qs:
+        # qs_c: SAME draws (ks[12:14]) through both carrier filters ->
+        # common-mode; the zeta_12 difference coupling never sees the carrier.
+        zeta_1 = zeta_1 + _QS_SH*comp(6, ks[12], ks[13]) \
+            + _QS_LOC*comp(6, ks[14], ks[15])
+        zeta_2 = zeta_2 + _QS_SH*comp(7, ks[12], ks[13]) \
+            + _QS_LOC*comp(7, ks[16], ks[17])
+    return jnp.array([jnp.ravel(zeta_1), jnp.ravel(zeta_2),
                       jnp.ravel(zeta_12)])
 
 
@@ -694,10 +733,13 @@ def _shot_coeffs_from_filters(F, key):
     realization as the trajectory-level path, up to float reassociation."""
     # Same static-shape branch as make_channel_trajs: component axis 1 of F is
     # the stream axis, so a 6-stream (showcase) run carries the coupler-defect
-    # filter at index 5; the 5-stream path keeps the legacy key budget.
-    has_zz = (jnp.size(F, 1) == 6)
+    # filter at index 5 and an 8-stream run adds the shared-carrier filters at
+    # 6/7; the 5-stream path keeps the legacy key budget.
+    n_comp = jnp.size(F, 1)
+    has_zz = (n_comp >= 6)
+    has_qs = (n_comp == 8)
     base = jax.random.fold_in(jax.random.PRNGKey(key[0]), key[1])
-    ks = jax.random.split(base, 12 if has_zz else 10)
+    ks = jax.random.split(base, 18 if has_qs else (12 if has_zz else 10))
     n_w = jnp.size(F, 3)
     draw = lambda k: jax.random.normal(k, (n_w, 1))[:, 0]
 
@@ -705,9 +747,10 @@ def _shot_coeffs_from_filters(F, key):
         return jnp.dot(F[a, c, 0], draw(ka)) + jnp.dot(F[a, c, 1], draw(kb))
 
     # streams: ks[0:2] shared, ks[2:4] local-A, ks[4:6] local-B, ks[6:8] n1,
-    # ks[8:10] n2 (+ ks[10:12] coupler defect when present); components:
-    # 0 = el_A, 1 = el_B shifted, 2 = el_B, 3 = n1, 4 = n2 (+ 5 = zz_extra)
-    # (the make_noise_mat_arr ordering).
+    # ks[8:10] n2 (+ ks[10:12] coupler defect; + ks[12:14] common carrier,
+    # ks[14:16] local carrier 1, ks[16:18] local carrier 2 when present);
+    # components: 0 = el_A, 1 = el_B shifted, 2 = el_B, 3 = n1, 4 = n2
+    # (+ 5 = zz_extra; + 6/7 = carrier filters) -- make_noise_mat_arr order.
     def channel_parts(a):
         e_a = _C_SH*comp(a, 0, ks[0], ks[1]) + _C_LOC*comp(a, 0, ks[2], ks[3])
         e_b = _C_SH*comp(a, 1, ks[0], ks[1]) + _C_LOC*comp(a, 2, ks[4], ks[5])
@@ -721,6 +764,11 @@ def _shot_coeffs_from_filters(F, key):
     c12 = _A_J*e_a12 - _B_J*e_b12
     if has_zz:
         c12 = c12 + comp(2, 5, ks[10], ks[11])
+    if has_qs:
+        c1 = c1 + _QS_SH*comp(0, 6, ks[12], ks[13]) \
+            + _QS_LOC*comp(0, 6, ks[14], ks[15])
+        c2 = c2 + _QS_SH*comp(1, 7, ks[12], ks[13]) \
+            + _QS_LOC*comp(1, 7, ks[16], ks[17])
     return jnp.stack([c1, c2, c12])
 
 
