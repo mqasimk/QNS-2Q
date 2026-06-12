@@ -107,11 +107,13 @@ class Config:
                  output_path_known="infs_known_id.npz",
                  output_path_opt="infs_opt_id.npz",
                  plot_filename="infs_GateTime_id.pdf",
-                 reps_known=None, 
+                 reps_known=None,
                  reps_opt=None,
                  use_simulated=False,
                  gate_time_factors=None,
-                 spectral_model="interp"
+                 spectral_model="interp",
+                 max_dim=0,
+                 plot_data_name="plotting_data_id_v4.npz"
                  ):
 
         """
@@ -185,7 +187,18 @@ class Config:
         self.tau = self.Tqns / tau_divisor
         
         self.M = M
+        if max_pulses == 0:
+            max_pulses = 10**9
+            print("[idle] max_pulses=0: pulse count limited only by the "
+                  "minimum separation tau (n <= T_seq/tau - 1 per qubit "
+                  "per repetition)")
         self.max_pulses = max_pulses
+        # SLSQP tractability guard (UNCAP-0611): when > 0, clip the random
+        # NT search so a single trial never exceeds max_dim optimization
+        # variables (n1 + n2). Clipped blocks are announced in the log --
+        # never a silent cap.
+        self.max_dim = max_dim
+        self.plot_data_name = plot_data_name
         self.num_random_trials = num_random_trials
         self.use_known_as_seed = use_known_as_seed
         
@@ -1236,7 +1249,14 @@ def run_optimization_pipeline(config):
         max_n_physical = int(config.T_seq / config.tau) - 1
         upper_bound_physical = max(1, max_n_physical - 1)
         effective_max = min(config.max_pulses_per_rep, upper_bound_physical)
-        
+        if config.max_dim > 0 and 2 * effective_max > config.max_dim:
+            print(f"  NOTE: SLSQP dim guard clips the NT search at this "
+                  f"(Tg, M): per-qubit max {effective_max} -> "
+                  f"{config.max_dim // 2} (max_dim={config.max_dim}); the "
+                  f"separation limit is reachable at M >= "
+                  f"{int(np.ceil(config.Tg / (config.tau * (config.max_dim // 2 + 2))))}")
+            effective_max = config.max_dim // 2
+
         n_pulses_list = []
         for _ in range(config.num_random_trials):
             n1 = np.random.randint(0, effective_max + 1)
@@ -1304,6 +1324,10 @@ def run_optimization_pipeline(config):
         # under (the viz overlays warn when it differs from the current model).
         'model_version': config.model_version,
         'spectral_model': config.spectral_model,
+        # UNCAP-0611 provenance: the caps this run searched under
+        # (max_pulses=10**9 = separation-limited; max_dim=0 = no guard).
+        'max_pulses': int(config.max_pulses),
+        'max_dim': int(config.max_dim),
     }
 
     if best_known_seq_overall is not None:
@@ -1316,8 +1340,8 @@ def run_optimization_pipeline(config):
         save_dict['best_opt_seq_pt2'] = np.array(best_opt_seq_overall[1])
         save_dict['T_seq_best_opt'] = T_seq_best_opt
 
-    np.savez(os.path.join(plotting_dir, "plotting_data_id_v4.npz"), **save_dict)
-    print(f"Saved all plotting data to {os.path.join(plotting_dir, 'plotting_data_id_v4.npz')}")
+    np.savez(os.path.join(plotting_dir, config.plot_data_name), **save_dict)
+    print(f"Saved all plotting data to {os.path.join(plotting_dir, config.plot_data_name)}")
 
     np.savez(os.path.join(config.path, config.output_path_opt), infs_opt=np.array(yaxis_opt),
              taxis=np.array(xaxis_opt))
@@ -1377,9 +1401,24 @@ if __name__ == "__main__":
                              "through the teeth (+tails), or the unfold "
                              "model's line/tail/head-aware spectra "
                              "(OPT-SPECTRAL-MODEL)")
+    parser.add_argument('--max-pulses', type=int, default=1000,
+                        help="total pulse-count cap across all repetitions "
+                             "(default 1000, the published-run value); 0 = "
+                             "separation-limited, i.e. only the minimum "
+                             "separation tau bounds the per-repetition count "
+                             "(UNCAP-0611)")
+    parser.add_argument('--max-dim', type=int, default=0,
+                        help="SLSQP tractability guard: clip any single NT "
+                             "trial to this many optimization variables "
+                             "(n1+n2); 0 = no guard. Clips are announced in "
+                             "the log.")
+    parser.add_argument('--tag', type=str, default="",
+                        help="suffix for all output files, so a rerun does "
+                             "not overwrite the published outputs")
     cli = parser.parse_args()
     cli_fname = cli.folder or (run_folder(spam=True, protocol=cli.protocol)
                                if cli.protocol else None)
+    sfx = f"_{cli.tag}" if cli.tag else ""
 
     try:
         # Pin the RNG so the random pulse-count selection and delay seeding are
@@ -1413,14 +1452,16 @@ if __name__ == "__main__":
                 spectral_model=cli.spectral_model,
                 use_known_as_seed=False,
                 M=m,
-                max_pulses=1000,
+                max_pulses=cli.max_pulses,
+                max_dim=cli.max_dim,
                 num_random_trials=20,
                 tau_divisor=160,
                 use_simulated=cli.simulated,
                 gate_time_factors=[-5, -4, -3, -2, -1, 0], # Range of gate times
-                output_path_known=f"infs_known_id_M{m}.npz",
-                output_path_opt=f"infs_opt_id_M{m}.npz",
-                plot_filename=f"infs_GateTime_id_M{m}.pdf"
+                output_path_known=f"infs_known_id_M{m}{sfx}.npz",
+                output_path_opt=f"infs_opt_id_M{m}{sfx}.npz",
+                plot_filename=f"infs_GateTime_id_M{m}{sfx}.pdf",
+                plot_data_name=f"plotting_data_id_v4{sfx}.npz"
             )
             last_config = config
             print(f"Configuration loaded for M={m}.")
@@ -1458,10 +1499,12 @@ if __name__ == "__main__":
         
         if last_config:
             # Save all data generated in the optimization
-            save_all_path = os.path.join(last_config.path, "optimization_data_all_M.npz")
+            save_all_path = os.path.join(last_config.path, f"optimization_data_all_M{sfx}.npz")
             data_to_save = {}
             data_to_save['M_values'] = np.array(M_values)
             data_to_save['seed'] = RANDOM_SEED
+            data_to_save['max_pulses'] = int(last_config.max_pulses)
+            data_to_save['max_dim'] = int(last_config.max_dim)
             # Frequency grid kept for reference; SMat omitted (plot scripts
             # recompute spectra from the analytic noise model -- avoids ~5 MB
             # of dead weight).

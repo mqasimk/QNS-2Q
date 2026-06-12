@@ -162,13 +162,17 @@ def main():
     ap.add_argument('--replot', action='store_true',
                     help="skip the ensemble; re-render the figure from the "
                          "existing margin_band_cz.npz in the specs folder")
+    ap.add_argument('--tag', type=str, default="",
+                    help="suffix: read winners from plotting_data_cz_v2_<tag>"
+                         ".npz and write margin_band_cz_<tag>.npz (UNCAP-0611)")
     a = ap.parse_args()
+    sfx = f"_{a.tag}" if a.tag else ""
 
     if a.replot:
         specs_fname = a.folder or (run_folder(spam=True, protocol=a.protocol)
                                    if a.protocol else run_folder())
         render_figure(os.path.join(project_root(), specs_fname,
-                                   "margin_band_cz.npz"))
+                                   f"margin_band_cz{sfx}.npz"))
         return
 
     from qns2q.control import cz  # heavy import (JAX) after arg parsing
@@ -181,7 +185,7 @@ def main():
 
     winners_fname = a.winners_from or specs_fname
     pd_path = os.path.join(project_root(), winners_fname,
-                           'plotting_data', 'plotting_data_cz_v2.npz')
+                           'plotting_data', f'plotting_data_cz_v2{sfx}.npz')
     pdat = np.load(pd_path, allow_pickle=True)
     if str(pdat['gate_type']) != 'cz':
         raise ValueError(f"{pd_path} is not a CZ plotting-data file")
@@ -240,7 +244,7 @@ def main():
               f"   ({entries[jk[0]][2]} vs {entries[jo[0]][2]})")
         margin_out[f'margin_{Tg:g}'] = ratio
 
-    out_path = os.path.join(cfg.path, "margin_band_cz.npz")
+    out_path = os.path.join(cfg.path, f"margin_band_cz{sfx}.npz")
     np.savez(out_path,
              draws=draws, central=central,
              entry_Tg=np.array([e[0] for e in entries]),

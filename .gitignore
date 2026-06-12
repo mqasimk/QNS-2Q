@@ -9,15 +9,21 @@ DraftRun_*/*
 !DraftRun_*/results.npz
 !DraftRun_*/params.npz
 !DraftRun_*/optimization_data_all_M.npz
+!DraftRun_*/optimization_data_all_M_uncapped.npz
 !DraftRun_*/simulated_spectra.npz
 !DraftRun_*/margin_band_cz.npz
 !DraftRun_*/margin_band_id.npz
+!DraftRun_*/margin_band_cz_uncapped.npz
+!DraftRun_*/margin_band_id_uncapped.npz
 !DraftRun_*/report_ask_experiments.npz
 !DraftRun_*/report_ask_experiments_idle.npz
 !DraftRun_*/plotting_data/
 DraftRun_*/plotting_data/*
 !DraftRun_*/plotting_data/plotting_data_id_v4.npz
 !DraftRun_*/plotting_data/plotting_data_cz_v2.npz
+!DraftRun_*/plotting_data/plotting_data_id_v4_uncapped.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_uncapped.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_uncapped2560.npz
 
 # Python
 __pycache__/

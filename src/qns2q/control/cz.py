@@ -93,8 +93,12 @@ class CZOptConfig:
     # 'selfconsistent' = the unfold model's line/tail/head-aware spectra
     # (OPT-SPECTRAL-MODEL).
     spectral_model: str = "interp"
+    # Per-qubit pulse-count cap for the NT search and the known-sequence
+    # library. 0 = no cap beyond the minimum-separation (tau) feasibility
+    # limit, i.e. up to T_seq/tau - 1 pulses per qubit (UNCAP-0611).
     max_pulses: int = 150
-    
+    plot_data_name: str = "plotting_data_cz_v2.npz"
+
     # These will be loaded from the run files
     Tqns: float = field(init=False)
     mc: int = field(init=False)
@@ -112,6 +116,10 @@ class CZOptConfig:
     tau: float = field(init=False)
 
     def __post_init__(self):
+        if self.max_pulses == 0:
+            self.max_pulses = 10**9
+            print("[cz] max_pulses=0: pulse count limited only by the "
+                  "minimum separation tau (n <= T_seq/tau - 1 per qubit)")
         self.path = os.path.join(project_root(), self.fname)
         
         if not os.path.exists(self.path):
@@ -1265,6 +1273,9 @@ def run_optimization(config):
         # under (the viz overlays warn when it differs from the current model).
         'model_version': config.model_version,
         'spectral_model': config.spectral_model,
+        # UNCAP-0611 provenance: the pulse-count cap this run searched under
+        # (10**9 = separation-limited).
+        'max_pulses': int(config.max_pulses),
     }
 
     if best_known_seq_overall is not None:
@@ -1289,8 +1300,8 @@ def run_optimization(config):
     save_dict['sequences_known'] = _seq_obj_array(sequences_known)
     save_dict['sequences_opt'] = _seq_obj_array(sequences_opt)
 
-    np.savez(os.path.join(plotting_dir, "plotting_data_cz_v2.npz"), **save_dict)
-    print(f"Saved all plotting data to {os.path.join(plotting_dir, 'plotting_data_cz_v2.npz')}")
+    np.savez(os.path.join(plotting_dir, config.plot_data_name), **save_dict)
+    print(f"Saved all plotting data to {os.path.join(plotting_dir, config.plot_data_name)}")
 
     np.savez(os.path.join(config.path, config.output_path_opt), infs_opt=np.array(yaxis_opt),
              taxis=np.array(xaxis_opt))
@@ -1329,10 +1340,30 @@ if __name__ == '__main__':
                              "through the teeth (+tails), or the unfold "
                              "model's line/tail/head-aware spectra "
                              "(OPT-SPECTRAL-MODEL)")
+    parser.add_argument('--max-pulses', type=int, default=150,
+                        help="per-qubit pulse-count cap (default 150, the "
+                             "published-run value); 0 = separation-limited, "
+                             "i.e. only the minimum-separation tau bounds the "
+                             "count (UNCAP-0611)")
+    parser.add_argument('--factors', type=str, default=None,
+                        help="comma-separated gate-time factors to run "
+                             "(default: the full 3,2,1,0,-1,-2,-3 sweep); "
+                             "Tg = T/2^(f-1)")
+    parser.add_argument('--tag', type=str, default="",
+                        help="suffix for all output files, so a rerun does "
+                             "not overwrite the published outputs")
     cli = parser.parse_args()
     fname = cli.folder or (run_folder(spam=True, protocol=cli.protocol)
                            if cli.protocol else run_folder())
-    config = CZOptConfig(fname=fname, use_simulated=cli.simulated,
-                         include_cross_spectra=not cli.no_cross,
-                         spectral_model=cli.spectral_model)
+    sfx = f"_{cli.tag}" if cli.tag else ""
+    kwargs = dict(fname=fname, use_simulated=cli.simulated,
+                  include_cross_spectra=not cli.no_cross,
+                  spectral_model=cli.spectral_model,
+                  max_pulses=cli.max_pulses,
+                  output_path_known=f"infs_known_cz_v2{sfx}.npz",
+                  output_path_opt=f"infs_opt_cz_v2{sfx}.npz",
+                  plot_data_name=f"plotting_data_cz_v2{sfx}.npz")
+    if cli.factors is not None:
+        kwargs['gate_time_factors'] = [int(f) for f in cli.factors.split(',')]
+    config = CZOptConfig(**kwargs)
     run_optimization(config)

@@ -9,6 +9,17 @@ regime/`run_paths.py` restructure described below as "planned" has **landed**, a
 featured-idling + CZ runs described below as "lost" have been **regenerated**. Read the
 superseding section immediately below; the older sections are kept for historical context.
 
+## ✅ UNCAP update (2026-06-12) — separation-limited pulse budgets
+
+The 6/11 Lorenza report's gate figure (`reports/lorenza_0611/figs/fig_gates.pdf`)
+and §gates numbers now come from **uncapped** (separation-limited, `--max-pulses 0`)
+reruns on the 64k reference arm: `DraftRun_SPAM_featured_reference/plotting_data/
+plotting_data_cz_v2_uncapped.npz`, `optimization_data_all_M_uncapped.npz`,
+`margin_band_{cz,id}_uncapped.npz` (`run_cz.py`/`run_idle.py`/`run_margin_band*.py`
+with `--tag uncapped`; idle additionally `--max-dim 2600`, clips logged). Published-cap
+files remain untagged alongside. Every npz records its `max_pulses` (10^9 =
+separation-limited). NoSPAM-arm uncapped twins live in `DraftRun_NoSPAM_featured/`.
+
 ## ✅ Current state (2026-06-08) — restructure landed + data regenerated
 
 - **Regime selection** is now the `QNS2Q_REGIME` env var (`bland`|`featured`), resolved
