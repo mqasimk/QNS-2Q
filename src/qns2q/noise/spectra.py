@@ -130,10 +130,10 @@ _SC_G_QS, _SC_W_QS = 2.0, 2.5e-3   # slow-bath exponent / IR cutoff (2.5e-3 =
                                    # DC protocol inside its linear window)
 _SC_G_FL = 0.9                     # electrical-floor exponent (W_IR shared)
 _SC_W_TLF = 0.025                  # TLF knee position [Connors 2022 shape]
-_SC_A_FL_1 = 1.356238e-08          # floor amplitudes: the stylized "quiet
-_SC_A_FL_2 = 1.763109e-08          # electrical environment" contrast knob
-_SC_A_QS_1 = 4.028474e-09          # quasistatic amplitudes: T2* = 3500 tau.
-_SC_A_QS_2 = 4.027177e-09          # NOTE: with W_QS = 2.5e-3 the QS in-band
+_SC_A_FL_1 = 3.390594e-08          # floor amplitudes: the stylized "quiet
+_SC_A_FL_2 = 4.407772e-08          # electrical environment" contrast knob
+_SC_A_QS_1 = 4.023249e-09          # quasistatic amplitudes: T2* = 3500 tau.
+_SC_A_QS_2 = 4.020375e-09          # NOTE: with W_QS = 2.5e-3 the QS in-band
                                    # tail alone punishes CDD1/2 (~2e-2/6e-3)
                                    # -- no self-spectra TLF knee needed; its
                                    # w^-2 tail was the dominant NT-window toll
@@ -145,10 +145,10 @@ _SC_LINE_CENTERS = jnp.array([0.051, 0.102, 0.153, 0.204, 0.372])
 # CDD's wide filter lobes feel the line AREA, NT's parking feels the TAILS --
 # narrower-but-taller keeps CDD trapped while the window shoulders collapse.
 _SC_LINE_SIGMAS = jnp.array([0.016, 0.020, 0.018, 0.014, 0.015])
-_SC_LINE_AMP_Q1 = jnp.array([1.45e-05, 1.75e-05, 1.60e-05, 8.20e-05, 6.50e-05])
-_SC_LINE_AMP_Q2 = jnp.array([1.95e-05, 2.25e-05, 2.05e-05, 1.03e-04, 8.10e-05])
+_SC_LINE_AMP_Q1 = jnp.array([2.05e-05, 2.45e-05, 2.25e-05, 1.15e-04, 9.10e-05])
+_SC_LINE_AMP_Q2 = jnp.array([2.75e-05, 3.15e-05, 2.85e-05, 1.44e-04, 1.13e-04])
 _SC_ZZ_W0, _SC_ZZ_SIG = 0.2356, 0.020
-_SC_H_ZZ_LINE = 1.0e-05            # coupler TLF resonance (2Q-only structure)
+_SC_H_ZZ_LINE = 1.4e-05            # coupler TLF resonance (2Q-only structure)
 _SC_H_ZZ_KNEE = 0.5e-06            # 3e-6 cost full-NT ~1.1e-4 via the FORCED
                                    # low-w ZZ exposure (dc_12 >= pi/(4 Jmax))
 
