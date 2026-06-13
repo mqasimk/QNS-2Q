@@ -149,8 +149,10 @@ _SC_LINE_AMP_Q1 = jnp.array([2.05e-05, 2.45e-05, 2.25e-05, 1.15e-04, 9.10e-05])
 _SC_LINE_AMP_Q2 = jnp.array([2.75e-05, 3.15e-05, 2.85e-05, 1.44e-04, 1.13e-04])
 _SC_ZZ_W0, _SC_ZZ_SIG = 0.2356, 0.020
 _SC_H_ZZ_LINE = 1.4e-05            # coupler TLF resonance (2Q-only structure)
-_SC_H_ZZ_KNEE = 0.5e-06            # 3e-6 cost full-NT ~1.1e-4 via the FORCED
-                                   # low-w ZZ exposure (dc_12 >= pi/(4 Jmax))
+_SC_H_ZZ_KNEE = 1.4e-05            # [SHOWCASE-strong-ZZ: was 0.5e-06; cranked so
+                                   # the FORCED low-w ZZ exposure is ~58% of the
+                                   # CZ residual -- 2Q-QNS-necessary to certify.
+                                   # dc_12 >= pi/(4 Jmax), no CZ design dodges it]
 # Shared slow carrier (SHOWCASE-0612, cross-spectra story): the slow bath that
 # carries the coherence budget is COMMON-MODE between the qubits at fraction
 # _SC_C2_QS (global field/thermal/charge drift; the measured class -- Yoneda
@@ -163,7 +165,9 @@ _SC_H_ZZ_KNEE = 0.5e-06            # 3e-6 cost full-NT ~1.1e-4 via the FORCED
 # cancel over the PTM) -- it is load-bearing only for element-resolved
 # quantities (which Bell coherence survives an idle), which is exactly the
 # cross-spectra demonstration the showcase report carries.
-_SC_C2_QS = 0.85                   # shared (common-mode) fraction of the
+_SC_C2_QS = 0.95                   # shared (common-mode) fraction of the
+                                   # [SHOWCASE-strong stage-1: was 0.85;
+                                   # 0.95 keeps a PSD margin vs 0.97-at-boundary]
                                    # carrier power = its inter-qubit coherence
 
 HAS_ZZ_EXTRA = (_REGIME == "showcase")
