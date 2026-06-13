@@ -57,7 +57,7 @@ entire $T_2^{*} = 3500\,\tau$ per qubit --- the measured Ge-hole value
 ($17.6\,\mu$s at the $\tau = 5$\,ns anchor), equivalently purified
 $^{28}$Si at $\tau \approx 7$\,ns. Its in-band tail is what defeats the low
 CDD orders. Structurally, the carrier is \emph{common-mode} between the
-qubits at fraction $c_{\mathrm{QS}} = 0.85$, with the remainder qubit-local:
+qubits at fraction $c_{\mathrm{QS}} = 0.95$, with the remainder qubit-local:
 slow drifts of this class (global field, thermal, common charge motion) hit
 both qubits together, and inter-qubit coherences up to $0.7$ are what Yoneda
 measured at low frequency. Two consequences are wired into the construction:
@@ -111,7 +111,7 @@ quantity & value & anchor \\
 time unit (min.\ pulse separation $/8$) & $\tau = 5$ ns & Ge-hole / fast-Rabi anchor \\
 $T_2^{*}$ (both qubits) & $3500\,\tau = 17.6\,\mu$s & measured Ge-hole $T_2^*$ \\
 Gaussian FID $T_2 = 2/S_{a,a}(0)$ & $3.10\times10^3\,\tau$ & model output \\
-slow-carrier correlation time / share & $400\,\tau$ / $c_{\mathrm{QS}} = 0.85$ common-mode & Yoneda low-$f$ coherence class \\
+slow-carrier correlation time / share & $400\,\tau$ / $c_{\mathrm{QS}} = 0.95$ common-mode & Yoneda low-$f$ coherence class \\
 defect line + harmonics & $\omega_0\tau = 0.051$, $\{2,3,4\}\omega_0$, $0.372$ & $^{73}$Ge-line / trap family \\
 coupler ($ZZ$) line + knee & $\omega\tau = 0.236$; knee at $0.025$ & shared-TLF class, stylized \\
 electrical floor & $1/f^{0.9}$, $-25$ dB vs anchored & charge-noise exponent class \\
@@ -234,35 +234,43 @@ does \emph{not} consume are for. We answer with the same two experiments as
 the anchored study, run for both gates (Fig.~\ref{fig:design}), plus the
 demonstration the cross-spectra exist for (Fig.~\ref{fig:storage}).
 
-\textbf{Spectral knowledge.} We re-ran the blind NT optimization while
-progressively stripping channels from the optimizer: the two single-qubit
-spectra alone $\to$ the three self-spectra $\to$ the SPAM-robust protocol's
-four $\to$ all six (the entangling gate at $\TG = 320\tau$; the idle at
-$640\tau$ and $2560\tau$, best over the repetition number $M$). The
-structure of the result differs by gate, and the difference is the physics.
-For the \emph{entangling} gate the ladder is flat: single-qubit knowledge
-alone lands within $7\%$ of the full design ($3.94$ vs
-$3.69\times10^{-4}$), and the three-self, robust-four, and six-spectrum
-designs are the \emph{identical gate} --- the same NT(30,29) winner at the
-same true infidelity. The CZ's near-synchronous trains put almost no filter
-weight on the coupler line, and the phase constraint pins the $y_{12}$
-filter's DC weight regardless of what the optimizer believes about
-$S_{12,12}$ --- the design is complete at the single-qubit spectra, as on
-the anchored model. For the \emph{idle}, the operation with genuine
-two-qubit freedom, the single-qubit-only rung pays: a factor $1.26\times$
-at $640\tau$, $1.42\times$ at $1280\tau$, and $1.70\times$ at the deepest
-idle ($10240\tau \approx 3\,T_2^*$), landing on the full winner only where
-the search happens to stagger anyway. Restoring the $ZZ$ self-spectrum
-(diag-3) recovers the six-spectrum design \emph{exactly}, at every gate
-time --- a designer who cannot see the coupler line parks $ZZ$ filter
-weight on it, and $S_{12,12}$ is precisely what a single-qubit campaign
-cannot measure. Beyond diag-3 the ladder is flat by theorem (the
-cross-spectra are first-order invisible to average fidelity; see below).
+\textbf{Two-qubit QNS is necessary to design the entangler.} Re-running the
+blind NT optimization with the optimizer's channels progressively restored
+--- the two single-qubit spectra alone $\to$ the three self-spectra $\to$
+the SPAM-robust four $\to$ all six --- the entangling gate steps once, by
+$3.1\times$, and only at the $ZZ$ rung: $2.28\times10^{-3}$ from the
+single-qubit spectra alone versus $7.31\times10^{-4}$ once $S_{12,12}$ is
+supplied, on the true noise at $\TG = 320\tau$ (Fig.~\ref{fig:design}a).
+Blind to the $ZZ$-correlated dephasing the gate accumulates, the
+single-qubit design drives its own self-only objective to $\sim
+5\times10^{-4}$ while sitting at $2.28\times10^{-3}$ in truth; given
+$S_{12,12}$ the optimizer shapes the $y_{12}$ filter against it. That a
+two-qubit channel can decide a high-fidelity design is fixed by how the
+average fidelity reads the noise: to leading order in a dephasing model,
+\begin{equation}
+  1-F_\mathrm{pro} \;=\; \sum_{a} w_a\,\chi_{aa} \;+\; O(\chi^2),
+  \qquad
+  \chi_{ab} \;=\; \int\!\frac{d\omega}{2\pi}\,\mathcal{F}_{ab}(\omega)\,S_{ab}(\omega),
+  \label{eq:budget}
+\end{equation}
+where $a,b\in\{1,2,12\}$ index the $Z_1, Z_2, Z_1Z_2$ dephasing generators
+and $w_a>0$. The three \emph{self}-spectra ($S_{1,1}, S_{2,2}, S_{12,12}$)
+enter at \emph{first} order; every \emph{cross}-spectrum cancels in the
+Pauli trace that defines $F_\mathrm{pro}$ --- $\sum_P s_P^a s_P^b = 0$ for
+$a\neq b$, the $\pm$ filter combinations pairing off --- and survives only
+at \emph{second} order, $O(\chi^2)$. A high-fidelity design is therefore set
+by whichever self-spectrum the gate cannot escape, here $S_{12,12}$; the
+cross-spectra (robust-4, all six) add nothing, so the CZ ladder is the
+single step the first-order argument demands. The idle shows the same step,
+smaller ($1.19\times$ at $640\tau$, $1.54\times$ at $10240\tau$, best over
+the repetition number $M$). $S_{12,12}$ --- the $ZZ$-correlated dephasing
+--- is reconstructible only by the two-qubit protocol, and this design gap
+is its operational necessity, not a characterization nicety.
 
 \textbf{SPAM-biased spectra.} Handing the optimizer the raw arm's biased
 reconstruction yields the \emph{identical winner at the identical true
-infidelity} for both gates --- the same NT(29,29) entangling design at
-$3.94\times10^{-4}$ and the same idle winner at $4.36\times10^{-4}$ as the
+infidelity} for both gates --- the same NT(27,30) entangling design at
+$7.31\times10^{-4}$ and the same idle winner at $1.57\times10^{-3}$ as the
 reference and mitigated arms (Fig.~\ref{fig:design}, right column). On this
 landscape even the predictions agree across arms (within $0.5\%$, each
 sitting $\sim 1.5\times$ above its gate's true value --- the uniform
@@ -280,15 +288,14 @@ cost of being wrong about a trap's depth.
 What full, unbiased characterization buys is everything around the design:
 
 \begin{itemize}[leftmargin=1.4em, itemsep=0.1em, topsep=0.2em]
-\item \textbf{The error budget.} Undecoupled, the two-qubit channels
-($S_{12,12}$ plus cross-spectra) are a rounding error of free evolution
-(they contribute $-3\%$ at $\TG = 320\tau$: the anti-phase exchange
-coupling slightly \emph{protects} the bare system). Under the best
-decoupling they carry \textbf{6.7\%} of the entangling gate's residual and
-\textbf{27.8\%} of the deep idle's ($2560\tau$): decoupling suppresses the
-single-qubit channels so effectively that the two-qubit channels are
-promoted to over a quarter of what remains. Channel-resolved error
-budgeting of any decoupled gate \emph{requires} two-qubit QNS.
+\item \textbf{The error budget.} Under the best decoupling the two-qubit
+channels ($S_{12,12}$ plus cross-spectra) carry \textbf{45\%} of the
+entangling gate's residual at $\TG = 320\tau$ and \textbf{22.5\%} of the
+deep idle's ($2560\tau$): nearly half of the tailored CZ's error is
+$ZZ$-correlated dephasing a single-qubit campaign cannot see. With the
+design itself $3.1\times$ worse without $S_{12,12}$ (above), two-qubit QNS
+is necessary both to \emph{build} a decoupled entangler and to
+\emph{certify} its error budget.
 \item \textbf{The prediction.} The predictions on this landscape are
 uniformly conservative ($\sim 1.5\times$ above truth: the reconstruction
 reads the quiet band slightly high and treats the flagged DC points
@@ -307,10 +314,9 @@ $ZZ$ floor; mitigation recovers the reference to $0.02\sigma$.
 \includegraphics[width=0.92\linewidth]{figs/fig_design_experiments.pdf}
 \caption{Both experiments for both gates: entangling (top row) and idle
 (bottom row, best over $M$; light/dark bars: $\TG = 640\tau$ and
-$2560\tau$). Left column: true infidelity of the blind NT winner as the
-optimizer's spectral knowledge grows from the CDD library's none, through
-single-qubit-only, the three selfs, and the robust protocol's four, to all
-six spectra. The CZ ladder is flat --- its trains barely touch the
+$10240\tau$). Left column: true infidelity of the blind NT winner as the
+optimizer's spectral knowledge grows from single-qubit-only, through the
+three selfs and the robust protocol's four, to all six spectra. The CZ ladder is flat --- its trains barely touch the
 two-qubit structure; the idle ladder is not --- the coupler line is
 invisible to a single-qubit campaign, and the designs that cannot see it
 pay. Right column: gates designed on the SPAM arms' reconstructions; true
@@ -335,17 +341,17 @@ $S_{1,1}+S_{2,2}+2\,\mathrm{Re}\,S_{1,2}$ combination under in-phase
 decoupling ($y_2 = +y_1$: simultaneous pulses, the hardware default) and
 through $S_{1,1}+S_{2,2}-2\,\mathrm{Re}\,S_{1,2}$ under anti-phase
 decoupling ($y_2 = -y_1$: the same train with one qubit's idle bracketed by
-frame flips). With the carrier common-mode at $c_{\mathrm{QS}} = 0.85$, the bare physics
-is an $11\times$ split: in \emph{free} evolution, where nothing suppresses
-the carrier, $\Psi^+$ outlives $\Phi^+$ by the full $(1+c)/(1-c)$ factor
-($5.0\times10^{-3}$ vs $5.6\times10^{-2}$ at $320\tau$) --- a
+frame flips). With the carrier common-mode at $c_{\mathrm{QS}} = 0.95$, the bare physics
+is a $33\times$ split: in \emph{free} evolution, where nothing suppresses
+the carrier, $\Psi^+$ outlives $\Phi^+$ by close to the full
+$(1+c)/(1-c) = 39\times$ factor ($1.81\times10^{-3}$ vs $5.93\times10^{-2}$ at $320\tau$) --- a
 decoherence-free-subspace structure that no single-qubit measurement can
 reveal. Under informed decoupling the carrier is largely suppressed and the
 choice still pays: the two implementations of the \emph{same pulse train}
 --- identical single-qubit marginals, average fidelities equal to
 \emph{seven digits} (computed ratio 1.000 at every gate time),
 indistinguishable to any single-qubit QNS campaign --- store the pair
-$1.2\times$ to $3.1\times$ apart, the split growing with storage time as
+$1.2\times$ to $3.3\times$ apart, the split growing with storage time as
 the carrier's share of the decoupled residual grows. Which implementation
 protects the pair is decided by the \emph{sign} of the measured
 low-frequency $\mathrm{Re}\,S_{1,2}$ (here $>0$, so anti-phase wins; on a
@@ -363,12 +369,12 @@ QNS can measure it.
 \centering
 \includegraphics[width=0.62\linewidth]{figs/fig_storage.pdf}
 \caption{Holding a Bell pair through the idle. Free induction realizes the
-bare $(1+c)/(1-c) \approx 11\times$ split between $\Phi^+$ (grey, filled)
+bare $(1+c)/(1-c) \approx 39\times$ ($33\times$ realized) split between $\Phi^+$ (grey, filled)
 and $\Psi^+$ (grey, open): correlated-noise physics invisible to
 single-qubit data. Under decoupling, the same symmetric train implemented
 in-phase (simultaneous pulses, orange) and anti-phase (frame-flipped, blue)
 --- implementations with identical average fidelity --- still split by up
-to $3.1\times$, growing with storage time; open markers are the values
+to $3.3\times$, growing with storage time; open markers are the values
 predicted from the blind reconstruction, which picks the right parity
 everywhere. The blind average-fidelity NT idle (green) sits between the
 parities, as it must.}
@@ -381,18 +387,20 @@ Figure~\ref{fig:gates} summarizes the gate results on the 128k
 reconstruction, all under the $8\tau$ pulse-spacing scenario and the blind
 protocol: select on the characterized spectra, report the true infidelity.
 Both June 12 requirements hold at once. \emph{Realistic infidelities:} the
-tailored entangling gate holds at $3.5$--$9.5\times10^{-4}$ across the full
-$\TG = 40$--$2560\tau$ sweep --- at $2560\tau$, where free evolution is at
-$45\%$ error and the best library sequence at $4.2\times10^{-2}$, the
-tailored gate sits at $9.5\times10^{-4}$; tailored idling holds at the
-low-$10^{-3}$ level out to $10240\tau \approx 3\,T_2^*$. \emph{A dramatic,
-robust margin:} the entangling margin grows monotonically,
-$1.6 \to 3.1 \to 7.5 \to 14.3 \to 24.2 \to 35.5 \to 44.2\times$ across
-$\TG = 40$--$2560\tau$, and the idle margin $4.1 \to 27.7\times$ over
-$320$--$10240\tau$, for the structural reason of Sec.~\ref{sec:model}: each
-doubling of the gate time slides the CDD library's passbands down onto the
-next harmonic of the defect line, while the tailored design keeps using the
-measured quiet band.
+tailored entangling gate holds in the $10^{-4}$--$10^{-3}$ band across
+$\TG = 40$--$2560\tau$ --- $7.3\times10^{-4}$ at $320\tau$, rising to
+$6.2\times10^{-3}$ at $2560\tau$ as the forced $ZZ$ exposure accumulates ---
+while tailored idling holds at the low-$10^{-3}$ level out to
+$10240\tau \approx 3\,T_2^*$. \emph{A robust margin over the best library
+sequence:} the entangling margin climbs from $1.5\times$ at $40\tau$ to a
+$\sim10\times$ plateau across $320$--$2560\tau$ ($9.8$, $11.4$, $9.7$,
+$9.4\times$); the plateau --- rather than the unbounded growth of a
+$ZZ$-free landscape --- is itself the signature of the forced $ZZ$ residual
+no CZ design can dodge. The idle margin grows from $\sim2\times$ at short
+times to $\sim24\times$ at $10240\tau$, for the structural reason of
+Sec.~\ref{sec:model}: each doubling of the gate time slides the CDD
+library's passbands onto the next defect-line harmonic, while the tailored
+design keeps using the measured quiet band.
 
 \begin{figure}[h!]
 \centering
@@ -415,15 +423,18 @@ The margins, with their 95\% confidence intervals under reconstruction
 uncertainty:
 
 \begin{itemize}[leftmargin=1.4em, itemsep=0.1em, topsep=0.2em]
-\item \textbf{Entangling (CZ):} $1.6\times$ [2.01, 2.04] at $40\tau$;
-$3.1\times$ [2.02, 2.07] at $80\tau$; $7.5\times$ [5.44, 5.53] at
-$160\tau$; $14.3\times$ [8.69, 8.90] at $320\tau$; $24.2\times$ [16.9,
-18.1] at $640\tau$; $35.5\times$ [25.8, 29.2] at $1280\tau$; and
-$44.2\times$ [35.1, 41.9] at $2560\tau \approx 0.8\,T_2^*$.
-\item \textbf{Idle:} $4.1\times$ [2.70, 2.86] at $320\tau$; $7.8\times$
-[6.54, 7.14] at $640\tau$; $11.0\times$ [8.25, 9.46] at $1280\tau$;
-$13.5\times$ [11.1, 13.0] at $2560\tau$; $15.3\times$ [12.0, 14.7] at
-$5120\tau$; and $27.7\times$ [25.3, 40.6] at $10240\tau \approx 3\,T_2^*$.
+\item \textbf{Entangling (CZ):} $1.5\times$ [1.79, 1.81] at $40\tau$;
+$2.2\times$ [1.67, 1.71] at $80\tau$; $5.9\times$ [4.14, 4.20] at
+$160\tau$; $9.8\times$ [6.78, 6.92] at $320\tau$; $11.4\times$ [9.45,
+9.61] at $640\tau$; $9.7\times$ [9.46, 9.57] at $1280\tau$; and
+$9.4\times$ [9.56, 9.67] at $2560\tau \approx 0.8\,T_2^*$ --- a plateau,
+not the unbounded climb of a $ZZ$-free landscape: the forced $ZZ$ residual
+caps the tailored gate at depth as well.
+\item \textbf{Idle:} $2.1\times$ [2.37, 2.53] at $320\tau$; $2.2\times$
+[2.12, 2.28] at $640\tau$; $2.9\times$ [2.73, 3.01] at $1280\tau$;
+$2.4\times$ [1.97, 2.31] at $2560\tau$; $14.2\times$ [15.5, 20.0] at
+$5120\tau$; and $24.0\times$ [24.8, 37.9] at $10240\tau \approx 3\,T_2^*$,
+once the deep idle's repetition count lets it dodge the $ZZ$ knee.
 \end{itemize}
 
 In each entry the central value is the \emph{true} margin and the bracket
@@ -434,7 +445,7 @@ reading of the quiet band makes every predicted NT infidelity an upper
 estimate --- the pipeline does not flatter its own gates. At the two
 shortest gate times, where best CDD and best NT sit within $2$--$3\times$
 of each other at the few-$10^{-4}$ floor, the predicted ratio is least
-accurate (true $1.6\times/3.1\times$ vs.\ predicted $\sim 2\times$); the
+accurate (true $1.5\times/2.2\times$ vs.\ predicted $\sim 1.8\times$); the
 quoted true values are the honest ones there.
 
 \begin{table}[h!]
@@ -443,9 +454,9 @@ quoted true values are the honest ones there.
 \toprule
 operation & FID & best CDD & best NT & margin \\
 \midrule
-idling $640\tau$ & $1.62\mathrm{e}{-1}$ & $3.39\mathrm{e}{-3}$ & $\mathbf{4.36\mathrm{e}{-4}}$ & $7.8\times$ \\
-idling $2560\tau$ & $4.46\mathrm{e}{-1}$ & $1.27\mathrm{e}{-2}$ & $\mathbf{9.37\mathrm{e}{-4}}$ & $13.5\times$ \\
-entangling $320\tau$ & $5.99\mathrm{e}{-2}$ & $5.28\mathrm{e}{-3}$ & $\mathbf{3.69\mathrm{e}{-4}}$ & $14.3\times$ \\
+idling $640\tau$ & $1.67\mathrm{e}{-1}$ & $3.48\mathrm{e}{-3}$ & $\mathbf{1.57\mathrm{e}{-3}}$ & $2.2\times$ \\
+idling $10240\tau$ & $5.28\mathrm{e}{-1}$ & $6.28\mathrm{e}{-2}$ & $\mathbf{2.62\mathrm{e}{-3}}$ & $24.0\times$ \\
+entangling $320\tau$ & $6.12\mathrm{e}{-2}$ & $7.16\mathrm{e}{-3}$ & $\mathbf{7.31\mathrm{e}{-4}}$ & $9.8\times$ \\
 \bottomrule
 \end{tabular}
 \caption{Sweet-spot numbers on the featured model (true process
@@ -461,7 +472,7 @@ that the moment a device carries resolvable structure --- defect harmonics,
 coupler resonances, common-mode drift, the things purification demonstrably
 does not remove --- the same characterization pipeline, run once at a budget
 a real experiment can afford, separates $10^{-2}$-class from
-few-$10^{-4}$-class two-qubit gates; that the parts of the reconstruction
+$10^{-4}$--$10^{-3}$-class two-qubit gates; that the parts of the reconstruction
 the average fidelity does not consume are exactly the parts that decide
 channel-resolved budgets and entanglement storage; and that no shortcut (a
 single-qubit campaign, unmitigated SPAM) delivers the same gates with the

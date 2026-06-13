@@ -344,9 +344,10 @@ def fig_gates():
                 label='median margin')
         ax.axhline(1.0, color='k', lw=0.8, ls=':')
         ax.set_xscale('log')
+        ax.set_yscale('log')
         ax.set_xlabel(r"$T_G/\tau$")
         ax.set_ylabel(r"margin: best CDD\,/\,best NT")
-        ax.grid(True, alpha=0.25)
+        ax.grid(True, alpha=0.25, which='both')
         ax.set_title(title, fontsize=9.5)
         ax.legend(frameon=False, fontsize=8)
 
@@ -416,15 +417,13 @@ def _arms_bars(ax, arms, title, ylabel=r"$1-F_\mathrm{pro}$ at $T_G=320\tau$"):
               'mitigated': 'SPAM-mitigated\nrecon.',
               'raw': 'raw\n(SPAM-biased recon.)'}
     x = np.arange(len(order))
-    kv = [arms[a][0] for a in order]
     ntv = [arms[a][1] for a in order]
     ncv = [arms[a][2] for a in order]
-    ax.bar(x - 0.22, kv, width=0.2, color=C_MIT, alpha=0.85,
-           label='best CDD (true)')
-    ax.bar(x, ntv, width=0.2, color=C_REF, alpha=0.85, label='best NT (true)')
-    ax.bar(x + 0.22, ncv, width=0.2, color=C_REF, alpha=0.45,
+    ax.bar(x - 0.12, ntv, width=0.22, color=C_REF, alpha=0.85,
+           label='best NT (true)')
+    ax.bar(x + 0.12, ncv, width=0.22, color=C_REF, alpha=0.45,
            label='best NT (predicted)')
-    for xi, v in zip(x, ntv):
+    for xi, v in zip(x - 0.12, ntv):
         ax.text(xi, v * 1.04, f"{v:.2e}", ha='center', fontsize=6.5)
     ax.set_xticks(x, [pretty[a] for a in order], fontsize=8)
     ax.set_ylabel(ylabel)
@@ -434,7 +433,6 @@ def _arms_bars(ax, arms, title, ylabel=r"$1-F_\mathrm{pro}$ at $T_G=320\tau$"):
 
 
 LADDER_LABELS = [
-    ('cdd', "best CDD\n(no spectral\nknowledge)", C_RAW),
     ('rung_c', "1Q only (2):\n$S_{1,1},S_{2,2}$", C_ROB),
     ('diag3', "selfs (3):\n$+\\,S_{12,12}$", C_BLD),
     ('robust4', "robust (4):\n$+\\,S_{1,2}$", C_MIT),
@@ -505,7 +503,7 @@ def fig_storage():
     ax.plot(tg, d['fid_phi'], ':', color=C_RAW, marker='v', ms=4,
             label='free induction, $\\Phi^+$')
     ax.plot(tg, d['fid_psi'], '-.', color=C_RAW, marker='^', ms=4, mfc='none',
-            label='free induction, $\\Psi^+$ ($\\times 11$ DFS split)')
+            label='free induction, $\\Psi^+$ (DFS-protected)')
     ax.plot(tg, d['sync_phi'], '-', color=C_MIT, marker='o', ms=4,
             label='symmetric train, in-phase\n(simultaneous pulses)')
     ax.plot(tg, d['anti_phi'], '-', color=C_REF, marker='s', ms=4,
@@ -513,20 +511,17 @@ def fig_storage():
     ax.plot(tg, d['nt_phi'], '--', color=C_ROB, marker='D', ms=3.5,
             label='blind NT idle (avg.-fidelity winner)')
     ax.plot(tg, d['sync_phi_pred'], 'o', ms=7, mfc='none', color=C_MIT,
-            alpha=0.7, label='predicted from the blind\nreconstruction')
+            alpha=0.7, label='predicted (blind recon.), in-phase')
     ax.plot(tg, d['anti_phi_pred'], 's', ms=7, mfc='none', color=C_REF,
-            alpha=0.7)
-    for i in range(tg.size):
-        r = float(d['sync_phi'][i] / d['anti_phi'][i])
-        ax.annotate(f"$\\times{r:.0f}$", xy=(tg[i], np.sqrt(
-            float(d['sync_phi'][i]) * float(d['anti_phi'][i]))),
-            fontsize=7, color='k', ha='center', alpha=0.75)
+            alpha=0.7, label='predicted (blind recon.), anti-phase')
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_xlabel(r"storage time $T_G/\tau$")
-    ax.set_ylabel(r"Bell-pair infidelity $1-F_{\Phi^+}$")
+    ax.set_ylabel(r"Bell-pair infidelity $1-F$")
     ax.grid(True, alpha=0.25)
-    ax.legend(frameon=False, fontsize=7, loc='upper left')
+    ax.legend(frameon=False, fontsize=7, loc='upper left',
+              bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0,
+              handlelength=1.8, labelspacing=0.6)
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "fig_storage.pdf"), bbox_inches='tight')
     plt.close(fig)
