@@ -169,6 +169,23 @@ _SC_C2_QS = 0.95                   # shared (common-mode) fraction of the
                                    # [SHOWCASE-strong stage-1: was 0.85;
                                    # 0.95 keeps a PSD margin vs 0.97-at-boundary]
                                    # carrier power = its inter-qubit coherence
+# Shared-TLF defect line (SHOWCASE-0613, cross-spectra story): the top-window
+# defect line (index _SC_SHLINE_IDX of the _SC_LINE_* arrays) is NOT a local
+# trap but a SHARED two-level fluctuator -- one defect coupling to both dots
+# (a barrier charge trap / shared phonon mode; the measured correlated-defect
+# class). It is common-mode, exactly like the slow carrier: it moves out of the
+# strictly-local line family (synthesis streams 3/4) into the shared component
+# S_qs (streams 6/7, fraction _SC_C2_QS), so the per-qubit SELF power is
+# UNCHANGED (the line stays in S_11/S_22 at full height -- average-fidelity
+# margins are bit-for-bit invariant, same theorem as the carrier) while a
+# correlated peak appears in Re S_1_2 at the line frequency. Because that
+# frequency sits in the decoupling train's PASSBAND (unlike the DC carrier the
+# train suppresses), the element-resolved Bell-storage split inherits the line's
+# contrast: a robust ~9x in-phase/anti-phase plateau instead of the carrier-only
+# 1.2-3.3x. Invisible to single-qubit QNS and to average fidelity; measurable
+# only by the two-qubit cross-spectrum -- the idle's analogue of the CZ's
+# S_12_12 design necessity.
+_SC_SHLINE_IDX = 4
 
 HAS_ZZ_EXTRA = (_REGIME == "showcase")
 HAS_QS_SHARED = (_REGIME == "showcase")
@@ -200,14 +217,18 @@ def line_priors_per_channel():
     Per-channel, per-line generalization of ``line_priors`` (same height-blind
     contract). The anchored featured class carries the nuclear-difference
     triplet on the qubit-local channels only; the showcase class adds its
-    defect-harmonic family on S11/S22 and the coupler TLF resonance on S1212.
+    defect-harmonic family on S11/S22, the coupler TLF resonance on S1212, and
+    the shared-TLF line on S12 (so the systematic model fits it as a line rather
+    than mis-reading the cross-channel resonance as smooth background).
     """
     import numpy as np
     if _REGIME == "showcase":
         c = np.asarray(_SC_LINE_CENTERS, dtype=float)
         s = np.asarray(_SC_LINE_SIGMAS, dtype=float)
+        i = _SC_SHLINE_IDX
         return {'S11': (c, s), 'S22': (c, s),
-                'S1212': (np.array([_SC_ZZ_W0]), np.array([_SC_ZZ_SIG]))}
+                'S1212': (np.array([_SC_ZZ_W0]), np.array([_SC_ZZ_SIG])),
+                'S12': (np.array([c[i]]), np.array([s[i]]))}
     if not _LINES_ON:
         return None
     c = np.asarray(_LINE_CENTERS, dtype=float)
@@ -233,10 +254,22 @@ def _lines(w, amps):
 
 
 def _sc_lines(w, amps):
+    """Strictly-local defect-line family. The shared-TLF line (_SC_SHLINE_IDX)
+    is carried by the shared component S_qs instead, so it is excluded here --
+    its self-spectrum power is restored through S_qs (variance c + (1-c) = 1),
+    leaving S_11/S_22 unchanged."""
     out = jnp.zeros_like(w)
     for i in range(5):
+        if i == _SC_SHLINE_IDX:
+            continue
         out = out + amps[i]*Gauss(w, _SC_LINE_CENTERS[i], _SC_LINE_SIGMAS[i])
     return out
+
+
+def _sc_shline(w, amps):
+    """The single shared-TLF defect line (common-mode), carried by S_qs."""
+    i = _SC_SHLINE_IDX
+    return amps[i]*Gauss(w, _SC_LINE_CENTERS[i], _SC_LINE_SIGMAS[i])
 
 
 # --- Component spectra (consumed by the trajectory synthesis) ---------------------
@@ -254,16 +287,19 @@ if _REGIME == "showcase":
 
     @jax.jit
     def S_qs_1(w):
-        """Qubit-1 slow-carrier PSD (T2* carrier, whose in-band w^-2 tail also
-        punishes CDD1-2). Shared between the qubits at fraction _SC_C2_QS;
-        the synthesis carries it as its own shared+local component pair."""
-        return _SC_A_QS_1*_plaw(w, _SC_G_QS, _SC_W_QS)
+        """Qubit-1 shared common-mode PSD: the slow T2* carrier (whose in-band
+        w^-2 tail also punishes CDD1-2) PLUS the shared-TLF defect line. Both are
+        shared between the qubits at fraction _SC_C2_QS; the synthesis carries
+        this whole component as its own shared+local stream pair, so its power
+        appears (real) in Re S_1_2. The line left the local family, so the qubit
+        SELF total is unchanged."""
+        return _SC_A_QS_1*_plaw(w, _SC_G_QS, _SC_W_QS) + _sc_shline(w, _SC_LINE_AMP_Q1)
 
     @jax.jit
     def S_qs_2(w):
-        """Qubit-2 slow-carrier PSD (same shape; amplitude re-solved for
-        T2* = 3500 tau)."""
-        return _SC_A_QS_2*_plaw(w, _SC_G_QS, _SC_W_QS)
+        """Qubit-2 shared common-mode PSD (carrier amplitude solved for
+        T2* = 3500 tau, plus the same shared-TLF line at its qubit-2 height)."""
+        return _SC_A_QS_2*_plaw(w, _SC_G_QS, _SC_W_QS) + _sc_shline(w, _SC_LINE_AMP_Q2)
 
     @jax.jit
     def S_lines_1(w):
@@ -367,10 +403,13 @@ def S_1212(w):
 @jax.jit
 def S_1_2(w):
     """Cross-spectrum of qubits 1 and 2: the shared electrical part, plus (in
-    the showcase regime) the common-mode slow carrier. The carrier term is
-    REAL and positive -- a common drift hits both qubits with no lag -- so the
-    sign of Re S_1_2 at low frequency is a measurable model prediction (it
-    decides which Bell coherence an idle protects)."""
+    the showcase regime) the common-mode shared component S_qs -- the slow
+    carrier AND the shared-TLF defect line. Both terms are REAL and positive
+    (a common-mode source hits both qubits with no lag), so Re S_1_2 carries a
+    low-frequency carrier rise AND a resonant peak at the shared-line frequency.
+    Its sign decides which Bell coherence an idle protects; the line, unlike the
+    DC carrier, sits in the decoupling passband, so its contrast survives the
+    pulse train -- the storage panel's robust split."""
     base = _cross_el(w)
     if HAS_QS_SHARED:
         base = base + _SC_C2_QS*jnp.sqrt(S_qs_1(w)*S_qs_2(w))
