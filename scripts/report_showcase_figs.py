@@ -34,17 +34,25 @@ C_ROB = '#009E73'   # green (robust / Im parts)
 C_BLD = '#CC79A7'   # magenta (line-blind smooth fit)
 
 ROOT = project_root()
-OUT = os.path.join(ROOT, "reports", "showcase_0612", "figs")
+# Output dir overridable so a new showcase revision writes to its own folder
+# (e.g. SHOWCASE_FIGS_DIR=reports/showcase_0613/figs) without clobbering 0612.
+OUT = os.path.join(ROOT, os.environ.get("SHOWCASE_FIGS_DIR",
+                                        "reports/showcase_0612/figs"))
 os.makedirs(OUT, exist_ok=True)
 
 # Capture-grade arm (2026-06-12 evening: measurable-floor landscape, 128k
 # shots / M=16 sweeps). The earlier 64k/v1-landscape outputs keep their tags.
-RUN_GATES = os.path.join(ROOT, "DraftRun_NoSPAM_showcase_cap")
+# Gate-data folder overridable (e.g. SHOWCASE_RUN_GATES=DraftRun_NoSPAM_showcase_cap_backup0612
+# to render figures from a backed-up run without disturbing the live folder).
+RUN_GATES = os.path.join(ROOT, os.environ.get("SHOWCASE_RUN_GATES",
+                                              "DraftRun_NoSPAM_showcase_cap"))
 GATE_TAG = "_cap"
 SPAM_FMT = os.path.join(ROOT, "DraftRun_SPAM_showcase_{arm}")
 
 T2_FID = 3500.0       # showcase T2* (tau units; chi(T2*) = 1 by calibration)
 NT_WINDOW = (0.258, 0.312)   # between the 4w0 line's +3sig and the top -3sig
+JMAX_TAU = 0.05       # max Ising coupling J_max*tau (cz.CZOptConfig.Jmax);
+                      # sets the CZ floor T_G >= pi/(4 J_max) ~ 16 tau
 
 
 def fig_model_spectra():
@@ -95,8 +103,13 @@ def fig_model_spectra():
     axs[0, 2].annotate('visible only to\ntwo-qubit QNS',
                        xy=(0.42, 0.78), xycoords='axes fraction', fontsize=8,
                        color=C_ROB)
-    axs[1, 0].annotate('common-mode slow carrier\n(decides which Bell coherence\nan idle protects)',
-                       xy=(0.30, 0.74), xycoords='axes fraction', fontsize=7.5,
+    # the shared-TLF line is common-mode: it sits on S11/S22 (already marked) AND
+    # in Re S_1_2 -- the cross-channel peak the decoupling train passes.
+    sh_c = pri['S12'][0][0]
+    axs[1, 0].axvline(sh_c, color=C_MIT, lw=1.1, alpha=0.9,
+                      label='shared-TLF line (common-mode: on $S_{1,1},S_{2,2}$\nand $\\mathrm{Re}\\,S_{1,2}$)')
+    axs[1, 0].annotate('common-mode slow carrier\n+ shared-TLF line\n(decide which Bell\ncoherence an idle protects)',
+                       xy=(0.34, 0.62), xycoords='axes fraction', fontsize=7.0,
                        color=C_REF)
     for ax in axs[1]:
         ax.set_xlabel(r"$\omega\tau$")
@@ -353,6 +366,11 @@ def fig_gates():
 
     curve_panel(axs[0, 0], tg, cz_np, cz_k, cz_o,
                 "(a) entangling (CZ) gate: infidelity vs gate time")
+    axs[0, 0].text(0.965, 0.04, rf'$J_{{\max}}\tau = {JMAX_TAU:g}$',
+                   transform=axs[0, 0].transAxes, fontsize=8.5,
+                   ha='right', va='bottom',
+                   bbox=dict(boxstyle='round,pad=0.25', fc='white', ec='0.7',
+                             lw=0.5))
     margin_panel(axs[0, 1], mb_cz, "(b) entangling gate: NT margin over best CDD")
     if idl is not None:
         curve_panel(axs[1, 0], idl['Tg'], idl['fid'], idl['known'], idl['opt'],
