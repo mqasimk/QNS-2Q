@@ -1083,4 +1083,13 @@ def main(data_folder=None):
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    ap = argparse.ArgumentParser(
+        description="Reconstruct two-qubit noise spectra (incl. the cross-spectra "
+                    "publication figure) from a run folder.")
+    ap.add_argument("--folder", default=None,
+                    help="run folder to reconstruct, relative to the repo root "
+                         "(e.g. DraftRun_NoSPAM_showcase_cap). Default: the active "
+                         "QNS2Q_REGIME's canonical NoSPAM folder.")
+    args = ap.parse_args()
+    main(data_folder=args.folder)
