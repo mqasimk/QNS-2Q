@@ -44,9 +44,6 @@ pip install -r requirements.txt
 QNS-2Q/
 ├── README.md
 ├── requirements.txt
-├── paper/
-│   ├── main_v7.tex                   # LaTeX source for the accompanying paper
-│   └── aps_v2.bib                    # Bibliography
 ├── src/
 │   ├── run_paths.py                  # Regime selection (QNS2Q_REGIME) + canonical run-folder paths
 │   ├── spectra_input.py              # Noise PSD definitions (bland | featured), selected by QNS2Q_REGIME
@@ -201,7 +198,7 @@ python qns_plots.py         # QNS spectra SPAM mitigation comparison
 
 ## Output Directory Structure
 
-Each pipeline run generates an output directory named for the active regime (e.g., `DraftRun_NoSPAM_featured/` or `DraftRun_NoSPAM_bland/`) with the following structure:
+Each pipeline run generates an output directory named for the active regime (the paper uses `showcase`, in `DraftRun_NoSPAM_showcase_cap/`) with the following structure:
 
 ```text
 DraftRun_NoSPAM_<regime>/

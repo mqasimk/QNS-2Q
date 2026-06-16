@@ -64,3 +64,19 @@ reports/**/*.out
 !DraftRun_*/plotting_data/plotting_data_id_v4_cap.npz
 !DraftRun_*/plotting_data/plotting_data_cz_v2_rung_b_cap.npz
 !DraftRun_*/plotting_data/plotting_data_cz_v2_rung_c_cap.npz
+
+# --- CLEANUP-0616: load-bearing figure inputs + design-ladder harvest inputs ---
+# Direct inputs to report_showcase_figs.py / showcase_storage_panel.py (were untracked):
+!DraftRun_*/design_numbers.npz
+!DraftRun_*/storage_panel.npz
+!DraftRun_*/margin_band_cz_cap_short.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_cap_short.npz
+# Inputs to harvest_design_numbers.py -> design_numbers.npz (knowledge-ladder rungs):
+!DraftRun_*/optimization_data_all_M_rung_c_idle_cap.npz
+!DraftRun_*/optimization_data_all_M_diag3_idle_cap.npz
+!DraftRun_*/optimization_data_all_M_robust4_idle_cap.npz
+!DraftRun_*/optimization_data_all_M_rung_d_idle_reference.npz
+!DraftRun_*/optimization_data_all_M_rung_d_idle_raw.npz
+!DraftRun_*/optimization_data_all_M_rung_d_idle_mitigated.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_diag3_cap.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_robust4_cap.npz
