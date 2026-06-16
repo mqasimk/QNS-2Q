@@ -9,15 +9,28 @@ DraftRun_*/*
 !DraftRun_*/results.npz
 !DraftRun_*/params.npz
 !DraftRun_*/optimization_data_all_M.npz
+!DraftRun_*/optimization_data_all_M_uncapped.npz
 !DraftRun_*/simulated_spectra.npz
+!DraftRun_*/margin_band_cz.npz
+!DraftRun_*/margin_band_id.npz
+!DraftRun_*/margin_band_cz_uncapped.npz
+!DraftRun_*/margin_band_id_uncapped.npz
+!DraftRun_*/report_ask_experiments.npz
+!DraftRun_*/report_ask_experiments_idle.npz
 !DraftRun_*/plotting_data/
 DraftRun_*/plotting_data/*
 !DraftRun_*/plotting_data/plotting_data_id_v4.npz
 !DraftRun_*/plotting_data/plotting_data_cz_v2.npz
+!DraftRun_*/plotting_data/plotting_data_id_v4_uncapped.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_uncapped.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_uncapped2560.npz
 
 # Python
 __pycache__/
 *.pyc
+
+# Persistent XLA compilation cache (OPT-SPEEDUPS)
+.jax_cache/
 
 # IDE
 .idea/
@@ -26,3 +39,44 @@ __pycache__/
 venv/
 .aider*
 GEMINI.md
+
+# LaTeX build artifacts (reports/)
+reports/**/*.aux
+reports/**/*.log
+reports/**/*.out
+# SHOWCASE-0612 figure-feeding summaries (same convention as the uncapped set)
+!DraftRun_*/optimization_data_all_M_showcase64k.npz
+!DraftRun_*/margin_band_cz_showcase64k.npz
+!DraftRun_*/margin_band_id_showcase64k.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_showcase64k.npz
+!DraftRun_*/plotting_data/plotting_data_id_v4_showcase64k.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_rung_b.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_rung_c.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_rung_d_reference.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_rung_d_raw.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_rung_d_mitigated.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_blind4k.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_blind64k.npz
+!DraftRun_*/optimization_data_all_M_cap.npz
+!DraftRun_*/margin_band_cz_cap.npz
+!DraftRun_*/margin_band_id_cap.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_cap.npz
+!DraftRun_*/plotting_data/plotting_data_id_v4_cap.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_rung_b_cap.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_rung_c_cap.npz
+
+# --- CLEANUP-0616: load-bearing figure inputs + design-ladder harvest inputs ---
+# Direct inputs to report_showcase_figs.py / showcase_storage_panel.py (were untracked):
+!DraftRun_*/design_numbers.npz
+!DraftRun_*/storage_panel.npz
+!DraftRun_*/margin_band_cz_cap_short.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_cap_short.npz
+# Inputs to harvest_design_numbers.py -> design_numbers.npz (knowledge-ladder rungs):
+!DraftRun_*/optimization_data_all_M_rung_c_idle_cap.npz
+!DraftRun_*/optimization_data_all_M_diag3_idle_cap.npz
+!DraftRun_*/optimization_data_all_M_robust4_idle_cap.npz
+!DraftRun_*/optimization_data_all_M_rung_d_idle_reference.npz
+!DraftRun_*/optimization_data_all_M_rung_d_idle_raw.npz
+!DraftRun_*/optimization_data_all_M_rung_d_idle_mitigated.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_diag3_cap.npz
+!DraftRun_*/plotting_data/plotting_data_cz_v2_robust4_cap.npz

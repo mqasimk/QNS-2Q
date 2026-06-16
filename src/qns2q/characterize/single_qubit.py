@@ -53,7 +53,7 @@ class QNSExperimentConfig:
         fname: The name of the folder to save the results in.
         parent_dir: The parent directory to save the results in.
     """
-    tau: jnp.float32 = 2.5e-8
+    tau: jnp.float32 = 1.0   # tau units (legacy SI anchor: 25 ns)
     M: jnp.int32 = 18
     t_grain: jnp.int32 = 1500
     truncate: jnp.int32 = 5
@@ -138,13 +138,10 @@ class ExperimentRunner:
         return jnp.array(
             make_noise_mat_arr(
                 'make',
-                spec_vec=self.config.spec_vec,
                 t_vec=self.config.t_vec,
                 w_grain=self.config.w_grain,
                 wmax=self.config.wmax,
-                truncate=self.config.truncate,
-                gamma=self.config.gamma,
-                gamma_12=self.config.gamma_12))
+                truncate=self.config.truncate))
 
     def run_experiment(self, exp_name: str, pulse_sequence: list,
                        exp_type: str, **kwargs):

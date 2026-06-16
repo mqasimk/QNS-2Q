@@ -66,11 +66,11 @@ from qns2q.noise.spectra import S_11, S_22, S_1212
 from qns2q.paths import run_folder, project_root
 
 # --- knobs (kept light: this is a demonstrator, not a production run) ----------
-T_GRAIN  = 300            # time points per base period T (dt = T/T_GRAIN ~ 13 ns << 1/wmax)
-W_GRAIN  = 1500           # noise frequency grain (dw ~ 3.3 kHz: resolves the DC features)
+T_GRAIN  = 300            # time points per base period T (dt = T/T_GRAIN ~ 0.5 tau << 1/wmax)
+W_GRAIN  = 1500           # noise frequency grain (resolves the DC features)
 N_SHOTS  = 4000           # noise realizations per point
-M_VALUES = [1, 2, 4, 6, 8, 10]    # total free-evolution time t = M*T (4..40 us)
-FIT_FROM = 16e-6          # fit the slope on the linear (t >= FIT_FROM) tail
+M_VALUES = [1, 2, 4, 6, 8, 10]    # total free-evolution time t = M*T (160..1600 tau)
+FIT_FROM = 640.0          # fit the slope on the linear (t >= FIT_FROM) tail [tau units; was 16 us at tau=25 ns]
 CPMG_DIV = 6             # partner CPMG cycle = T/CPMG_DIV  (Exp B isolation knob)
 SEED     = 20260608
 
@@ -80,7 +80,7 @@ def S_zero(w):
     return jnp.zeros_like(w)
 
 
-def chi_theory_fid(S, t, wmax_int=2 * np.pi * 200e6, n=400001):
+def chi_theory_fid(S, t, wmax_int=2 * np.pi * 5.0, n=400001):
     """Analytic FID decay exponent chi(t) = (1/2)\\int dw/2pi S(w)|F_FID|^2 (one qubit)."""
     w = np.linspace(0.0, wmax_int, n)
     F2 = np.empty_like(w)
@@ -89,7 +89,7 @@ def chi_theory_fid(S, t, wmax_int=2 * np.pi * 200e6, n=400001):
     return (1.0 / (2 * np.pi)) * 2 * np.trapezoid(S(w) * F2, w) * 0.5
 
 
-def run_point(m, pulse, l, spec_vec, cpmg_div=None, midpoint=True):
+def run_point(m, pulse, l, components=None, cpmg_div=None, midpoint=True):
     """One (total-time) point: returns C_{l,0}(MT) and its stderr from the real sim.
 
     midpoint=True uses the bin-midpoint noise-synthesis grid (no spurious w=0
@@ -97,8 +97,8 @@ def run_point(m, pulse, l, spec_vec, cpmg_div=None, midpoint=True):
     """
     cfg = QNSExperimentConfig(M=m, t_grain=T_GRAIN, n_shots=N_SHOTS)
     noise_mats = jnp.array(make_noise_mat_arr(
-        'make', spec_vec=spec_vec, t_vec=cfg.t_vec, w_grain=W_GRAIN, wmax=cfg.wmax,
-        truncate=cfg.truncate, gamma=cfg.gamma, gamma_12=cfg.gamma_12, midpoint=midpoint))
+        'make', t_vec=cfg.t_vec, w_grain=W_GRAIN, wmax=cfg.wmax,
+        truncate=cfg.truncate, midpoint=midpoint, components=components))
     # FID ignores ctime; CPMG partner uses ctime = T/cpmg_div.
     ct = cfg.T if cpmg_div is None else cfg.T / cpmg_div
     means, errs = make_c_a_0_mt(
@@ -108,16 +108,16 @@ def run_point(m, pulse, l, spec_vec, cpmg_div=None, midpoint=True):
     return float(means[0]), float(errs[0]), float(cfg.T)
 
 
-def sweep(label, pulse, l, spec_vec, cpmg_div=None, midpoint=True):
+def sweep(label, pulse, l, components=None, cpmg_div=None, midpoint=True):
     """Sweep total time t = M*T and return (t_array, C_array, err_array)."""
     print(f"\n[{label}] pulse={pulse} l={l} cpmg_div={cpmg_div} midpoint={midpoint}")
     ts, Cs, Es = [], [], []
     for m in M_VALUES:
         t0 = time.time()
-        C, E, T = run_point(m, pulse, l, spec_vec, cpmg_div, midpoint=midpoint)
+        C, E, T = run_point(m, pulse, l, components, cpmg_div, midpoint=midpoint)
         t_tot = m * T
         ts.append(t_tot); Cs.append(C); Es.append(E)
-        print(f"   M={m:2d}  t={t_tot*1e6:5.1f} us   C_{l},0 = {C:9.5f} +/- {E:.5f}   "
+        print(f"   M={m:2d}  t={t_tot:6.0f} tau  C_{l},0 = {C:9.5f} +/- {E:.5f}   "
               f"({time.time()-t0:.1f}s)")
     return np.array(ts), np.array(Cs), np.array(Es)
 
@@ -143,25 +143,26 @@ def main():
     print(f"   S_1212(0) = {S1212_0:9.1f}")
     print("=" * 78)
 
-    spec_full = [S_11, S_22, S_1212]
-    spec_noIsing = [S_11, S_22, S_zero]
+    comps_full = None                              # the real (correlated) model
+    comps_independent = (S_zero, S_zero, S_11, S_22)  # e_A = e_B = 0 -> zeta_12 = 0,
+                                                      # zeta_l = n_l with spectrum S_ll
 
     # --- Experiment A: clean principle (Ising switched off) -> 2*slope == S_aa(0) ---
     # Run A1 on BOTH noise grids: the legacy endpoint grid carries a spurious w=0
     # static tone (DC bias ~ O(dw)); the midpoint grid removes it.
     tA1e, CA1e, EA1e = sweep("A1-endpoint S_11 (legacy w=0 grid)", ['FID', 'FID'], 1,
-                             spec_noIsing, midpoint=False)
+                             comps_independent, midpoint=False)
     tA1, CA1, EA1 = sweep("A1-midpoint S_11 (fixed grid)", ['FID', 'FID'], 1,
-                          spec_noIsing, midpoint=True)
+                          comps_independent, midpoint=True)
     tA2, CA2, EA2 = sweep("A2-midpoint S_22 (fixed grid)", ['FID', 'FID'], 2,
-                          spec_noIsing, midpoint=True)
+                          comps_independent, midpoint=True)
     S11_estA_e, _ = slope_estimate(tA1e, CA1e)
     S11_estA, fitA1 = slope_estimate(tA1, CA1)
     S22_estA, fitA2 = slope_estimate(tA2, CA2)
 
     # --- Experiment B: full model. naive FID/FID leaks S_1212; partner CPMG cleans it.
-    tB0, CB0, EB0 = sweep("B0: full FID/FID (leak)", ['FID', 'FID'], 1, spec_full)
-    tB1, CB1, EB1 = sweep("B1: full FID/CPMG (isolated)", ['FID', 'CPMG'], 1, spec_full,
+    tB0, CB0, EB0 = sweep("B0: full FID/FID (leak)", ['FID', 'FID'], 1, comps_full)
+    tB1, CB1, EB1 = sweep("B1: full FID/CPMG (isolated)", ['FID', 'CPMG'], 1, comps_full,
                           cpmg_div=CPMG_DIV)
     S11_estB0, fitB0 = slope_estimate(tB0, CB0)
     S11_estB1, fitB1 = slope_estimate(tB1, CB1)
@@ -189,14 +190,14 @@ def main():
 
     ax = axs[0]
     tt = np.linspace(0, max(tA1), 200)
-    ax.plot(tt * 1e6, [chi_theory_fid(S_11, t) for t in tt], '-', color='black', lw=1,
+    ax.plot(tt, [chi_theory_fid(S_11, t) for t in tt], '-', color='black', lw=1,
             label=r'theory $\chi_{11}(t)$ (slope $S_{11}(0)/2$)')
-    ax.errorbar(tA1e * 1e6, CA1e, yerr=EA1e, fmt='x', color='#999999',
+    ax.errorbar(tA1e, CA1e, yerr=EA1e, fmt='x', color='#999999',
                 label=f'legacy $w{{=}}0$ grid (ratio {S11_estA_e/S11_0:.2f})')
-    ax.errorbar(tA1 * 1e6, CA1, yerr=EA1, fmt='o', color='#0072B2',
+    ax.errorbar(tA1, CA1, yerr=EA1, fmt='o', color='#0072B2',
                 label=f'midpoint grid (ratio {S11_estA/S11_0:.2f})')
-    ax.axvline(FIT_FROM * 1e6, color='grey', ls=':', lw=0.8)
-    ax.set_xlabel(r'free-evolution time $t = MT$ ($\mu$s)')
+    ax.axvline(FIT_FROM, color='grey', ls=':', lw=0.8)
+    ax.set_xlabel(r'free-evolution time $t = MT$ (units of $\tau$)')
     ax.set_ylabel(r'$C_{1,0}(t)$  (FID decay exponent $\chi_1$)')
     ax.set_title('(a) $2\\,d\\chi/dt$ recovers $S_{11}(0)$ exactly;\n'
                  'legacy $w{=}0$ noise grid biases it high')
@@ -204,17 +205,17 @@ def main():
     ax.grid(alpha=0.3)
 
     ax = axs[1]
-    ax.errorbar(tB0 * 1e6, CB0, yerr=EB0, fmt='o', color='#999999',
+    ax.errorbar(tB0, CB0, yerr=EB0, fmt='o', color='#999999',
                 label=r'FID/FID (leaks $S_{1212}$)')
-    ax.errorbar(tB1 * 1e6, CB1, yerr=EB1, fmt='^', color='#009E73',
+    ax.errorbar(tB1, CB1, yerr=EB1, fmt='^', color='#009E73',
                 label=r'FID/CPMG (partner decoupled)')
     # reference slopes
-    ax.plot(tB1 * 1e6, 0.5 * S11_0 * tB1, '--', color='#009E73', lw=1,
+    ax.plot(tB1, 0.5 * S11_0 * tB1, '--', color='#009E73', lw=1,
             label=r'slope $=S_{11}(0)/2$')
-    ax.plot(tB0 * 1e6, 0.5 * (S11_0 + S1212_0) * tB0, ':', color='#999999', lw=1,
+    ax.plot(tB0, 0.5 * (S11_0 + S1212_0) * tB0, ':', color='#999999', lw=1,
             label=r'slope $=(S_{11}{+}S_{1212})(0)/2$')
-    ax.axvline(FIT_FROM * 1e6, color='grey', ls=':', lw=0.8)
-    ax.set_xlabel(r'free-evolution time $t = MT$ ($\mu$s)')
+    ax.axvline(FIT_FROM, color='grey', ls=':', lw=0.8)
+    ax.set_xlabel(r'free-evolution time $t = MT$ (units of $\tau$)')
     ax.set_ylabel(r'$C_{1,0}(t)$')
     ax.set_title('(b) full model: partner CPMG isolates $S_{11}(0)$\n'
                  f'naive ratio {S11_estB0/(S11_0+S1212_0):.3f} vs leak target; '

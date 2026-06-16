@@ -22,11 +22,19 @@ import jax
 import jax.numpy as jnp
 import jax.scipy.integrate
 jax.config.update("jax_enable_x64", True)
+# OPT-SPEEDUPS (a): persistent XLA compilation cache (see cz.py).
+from qns2q.paths import project_root as _project_root
+jax.config.update("jax_compilation_cache_dir",
+                  os.path.join(_project_root(), ".jax_cache"))
+jax.config.update("jax_persistent_cache_min_compile_time_secs", 0.5)
 import jax.scipy.signal
 import numpy as np
 import scipy.optimize
 
-from qns2q.noise.spectra import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
+from qns2q.noise.spectra import (S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12,
+                                 MODEL_VERSION, line_priors)
+from qns2q.control.tails import tail_extend_interp_complex, smoothfit_curve
+from qns2q.control.padding import pad_targets, pad_count, pad_delays
 from qns2q.paths import run_folder, project_root
 
 # Fixed RNG seed for the unseeded np.random restarts (random pulse counts and
@@ -34,6 +42,10 @@ from qns2q.paths import run_folder, project_root
 # winning-sequence labels reproducible across re-runs. Recorded in the saved
 # optimization data so every figure carries its provenance.
 RANDOM_SEED = 20260608
+
+# OPT-SPEEDUPS (d): SLSQP convergence knobs (see cz.py for rationale).
+SLSQP_TOL = 1e-7
+SLSQP_MAXITER = 300
 
 # Memoizes the (sequence-independent) folded-correlation setup built by
 # prepare_time_domain_overlap. That setup depends only on the spectrum/grid
@@ -86,7 +98,7 @@ class Config:
     def __init__(self, 
                  fname=None,
                  include_cross_spectra=True,
-                 Tg=4 * 14 * 1e-6,
+                 Tg=2240.0,   # tau units (= 4*14us at the legacy tau=25ns anchor)
                  tau_divisor=160,
                  M=1,
                  max_pulses=100,
@@ -95,10 +107,16 @@ class Config:
                  output_path_known="infs_known_id.npz",
                  output_path_opt="infs_opt_id.npz",
                  plot_filename="infs_GateTime_id.pdf",
-                 reps_known=None, 
+                 reps_known=None,
                  reps_opt=None,
                  use_simulated=False,
-                 gate_time_factors=None
+                 gate_time_factors=None,
+                 spectral_model="interp",
+                 max_dim=0,
+                 min_sep_factor=1.0,
+                 char_self_only=False,
+                 informed_counts=False,
+                 plot_data_name="plotting_data_id_v4.npz"
                  ):
 
         """
@@ -121,23 +139,86 @@ class Config:
              self.specs = np.load(sim_path)
              self.params = self.specs
         else:
-             self.specs = np.load(os.path.join(self.path, "specs.npz"))
+             specs_path = os.path.join(self.path, "specs.npz")
+             print(f"Loading reconstructed spectra from {specs_path}")
+             self.specs = np.load(specs_path)
              self.params = np.load(os.path.join(self.path, "params.npz"))
-        
+             if 'spam_protocol' in self.specs.files:
+                 print(f"  specs spam_protocol: {self.specs['spam_protocol']}")
+             # A False *_dc_ok flag means the reconstruction could not determine
+             # that w=0 point (the stored value is a first-harmonic floor or an
+             # insignificant fit) -- surfaced because the SMat consumes it.
+             bad_dc = sorted(k for k in self.specs.files
+                             if k.endswith('_dc_ok') and not bool(self.specs[k]))
+             if bad_dc:
+                 print(f"[idle] NOTE: flagged (undetermined) DC points in specs: "
+                       f"{', '.join(k[:-len('_dc_ok')] for k in bad_dc)}")
+        self.use_simulated = use_simulated
+        # 'interp' = linear interpolation through the comb teeth (+ tails);
+        # 'selfconsistent' = the unfold model's line/tail/head-aware spectra
+        # (OPT-SPECTRAL-MODEL).
+        self.spectral_model = spectral_model
+
+        # OPT-PROVENANCE: spectra generated under a different noise model than
+        # the current one make the ideal benchmark (SMat_ideal, built from the
+        # CURRENT model) a mixed-model comparison -- the trap behind
+        # CA-REPRO-NUMBERS.
+        mv = None
+        for src_ in (self.specs, self.params):
+            if 'model_version' in src_:
+                mv = str(src_['model_version'])
+                break
+        self.model_version = mv if mv is not None else 'unknown'
+        if self.model_version != MODEL_VERSION:
+            print(f"[idle] WARNING: spectra model_version={self.model_version!r} "
+                  f"!= current noise model {MODEL_VERSION!r}; the ideal "
+                  f"benchmark uses the CURRENT model -- regenerate Stage 1/2.")
+
         # System Parameters
         self.Tqns = jnp.float64(self.params['T'])
+        # Units guard: tau-unit data has T = 160; SI-era data has T ~ 4e-6 s.
+        if float(self.Tqns) < 1.0:
+            print(f"[idle] WARNING: loaded T={float(self.Tqns):g} looks like "
+                  f"SI-era data (expected tau-unit T ~ 160). Regenerate the "
+                  f"spectra for this folder before trusting the optimization.")
         self.mc = int(self.params['truncate'])
-        self.gamma = jnp.float64(self.params['gamma'])
-        self.gamma12 = jnp.float64(self.params['gamma_12'])
         self.include_cross_spectra = include_cross_spectra
         
         # Optimization Parameters
         self.Tg = Tg
         self.tau_divisor = tau_divisor
         self.tau = self.Tqns / tau_divisor
-        
+        # Control-bandwidth scenario (SHOWCASE-0612): minimum pulse separation
+        # in units of tau, applied symmetrically to the library, the NT search
+        # and the inits. 1.0 = legacy (separation = tau). The time-domain
+        # overlap resolution stays keyed to tau.
+        if min_sep_factor < 1.0:
+            raise ValueError("min_sep_factor < 1: the minimum separation "
+                             "cannot undercut the time unit tau")
+        self.min_sep_factor = min_sep_factor
+        self.min_sep = min_sep_factor * self.tau
+        if min_sep_factor != 1.0:
+            print(f"[idle] control-bandwidth scenario: min pulse separation = "
+                  f"{min_sep_factor:g} tau")
+        # Ablation rung (c) (SHOWCASE-0612): characterized model from the
+        # single-qubit spectra alone; the ideal benchmark keeps full truth.
+        self.char_self_only = char_self_only
+        # Spectrum-informed pulse-count candidates (SHOWCASE-0612; see cz.py).
+        self.informed_counts = informed_counts
+
         self.M = M
+        if max_pulses == 0:
+            max_pulses = 10**9
+            print("[idle] max_pulses=0: pulse count limited only by the "
+                  "minimum separation tau (n <= T_seq/tau - 1 per qubit "
+                  "per repetition)")
         self.max_pulses = max_pulses
+        # SLSQP tractability guard (UNCAP-0611): when > 0, clip the random
+        # NT search so a single trial never exceeds max_dim optimization
+        # variables (n1 + n2). Clipped blocks are announced in the log --
+        # never a silent cap.
+        self.max_dim = max_dim
+        self.plot_data_name = plot_data_name
         self.num_random_trials = num_random_trials
         self.use_known_as_seed = use_known_as_seed
         
@@ -147,7 +228,7 @@ class Config:
         
         # Extended gate time factors to include larger gate times
         # Factors are powers of 2 divisor of Tqns.
-        # Tqns is typically ~50us.
+        # Tqns is typically 160 tau.
         # Factor -1 -> Tg = Tqns * 2
         # Factor -2 -> Tg = Tqns * 4
         # Factor -3 -> Tg = Tqns * 8
@@ -166,8 +247,10 @@ class Config:
         # Start from 0 to include DC component
         # Extend frequency range to ensure fine time resolution for correlation
         w_max_sys = 2 * jnp.pi * self.mc / self.Tqns
-        # Multiplier to ensure dt is small enough (e.g. ~10-100ns)
-        self.w_max = 2 * w_max_sys
+        # Reach the pulse-spacing Nyquist pi/tau (4*w_max_sys for the
+        # T=160/truncate=20 comb): optimized sequences put filter weight above
+        # the comb's last tooth; a shorter grid silently ignored that band.
+        self.w_max = 8 * w_max_sys
         self.N_w = 20000
         
         self.w = jnp.linspace(0, self.w_max, self.N_w)
@@ -184,43 +267,116 @@ class Config:
         self._calculate_T2()
 
     def _build_interpolated_spectra(self):
-        """Constructs the matrix of interpolated spectra from QNS data."""
+        """Constructs the matrix of interpolated spectra from QNS data.
+
+        The w=0 point comes from the data grid whenever it carries a DC sample
+        (reconstructed specs.npz: the noise-aware slope-fit / double-echo DC
+        experiments land there, OPT-DC-ORACLE). Only a DC-less grid falls back
+        to inserting the analytic S(0) -- simulated_spectra.npz, where the file
+        IS the analytic model evaluated at the teeth, or a legacy specs.npz
+        (warned at load: regenerate Stage 2). The distinction is first-order
+        here: for M > 10 the comb evaluator's term_dc reads SMat[..., 0]
+        directly."""
         # 4x4 Matrix: Indices 0, 1, 2, 3 correspond to 0, 1, 2, 12
         SMat = jnp.zeros((4, 4, self.w.size), dtype=jnp.complex128)
         w0 = jnp.array([0.0])
-        
-        def interp_c(fp):
-            """Interpolates complex data."""
-            # Use right=0. to assume noise decays to zero at high frequencies beyond data
-            return (jnp.interp(self.w, self.wkqns, jnp.real(fp), right=0.) +
-                   1j * jnp.interp(self.w, self.wkqns, jnp.imag(fp), right=0.))
+        grid_has_dc = bool(float(self.wkqns[0]) == 0.0)
+        if not grid_has_dc and not self.use_simulated:
+            print("[idle] WARNING: specs grid carries no w=0 point -- inserting "
+                  "the analytic-model DC (legacy behavior). Regenerate Stage 2 "
+                  "for a measured DC point.")
 
-        def combine(spec_data, dc_func, *args):
-            """Interpolates and inserts exact DC value."""
-            interp = interp_c(spec_data)
-            dc_val = dc_func(w0, *args)[0]
-            return interp.at[0].set(dc_val)
-        
-        # Diagonal elements
-        SMat = SMat.at[1, 1].set(combine(self.specs["S11"], S_11))
-        SMat = SMat.at[2, 2].set(combine(self.specs["S22"], S_22))
-        SMat = SMat.at[3, 3].set(combine(self.specs["S1212"], S_1212))
-        
-        # Off-diagonal elements
+        if self.spectral_model not in ('interp', 'selfconsistent', 'smoothfit'):
+            raise ValueError(f"unknown spectral_model {self.spectral_model!r}")
+        use_sc = (self.spectral_model == 'selfconsistent')
+        use_smooth = (self.spectral_model == 'smoothfit')
+        if use_sc and self.use_simulated:
+            raise ValueError("spectral_model='selfconsistent' models a "
+                             "reconstructed comb; simulated_spectra.npz "
+                             "already IS the analytic model")
+        if use_smooth:
+            print("[idle] spectral_model='smoothfit': LINE-BLIND characterized "
+                  "model (single power law through all teeth per self-"
+                  "spectrum; crosses interp) -- ablation rung (b)")
+        if use_sc:
+            # OPT-SPECTRAL-MODEL: each channel from the same line/tail/head-
+            # aware model the unfold bias correction uses (characterize.
+            # systematics.selfconsistent_spectra). See cz.py for the full
+            # rationale; the blind protocol is preserved (data + experimental
+            # priors only).
+            from qns2q.characterize.systematics import selfconsistent_spectra
+            from qns2q.noise.spectra import line_priors
+            sc_recon = {k: np.nan_to_num(np.asarray(self.specs[k]))
+                        for k in ('S11', 'S22', 'S1212', 'S12', 'S112', 'S212')}
+            sc_fns = selfconsistent_spectra(np.asarray(self.wkqns), sc_recon,
+                                            lines=line_priors())
+            w_np = np.asarray(self.w)
+
+        def combine(key, dc_func):
+            """Channel curve on the dense grid; w=0 from the grid's DC sample
+            when present, else from the analytic model (power-law tail beyond
+            the last tooth either way -- control.tails / the sc model)."""
+            if use_sc:
+                return jnp.asarray(np.asarray(sc_fns[key](w_np), dtype=complex))
+            if use_smooth and key in ("S11", "S22", "S1212"):
+                dc_val = (float(np.real(np.asarray(self.specs[key])[0]))
+                          if grid_has_dc else float(np.real(dc_func(w0)[0])))
+                return smoothfit_curve(self.w, self.wkqns, self.specs[key],
+                                       dc_val=dc_val).astype(jnp.complex128)
+            interp = tail_extend_interp_complex(self.w, self.wkqns,
+                                                self.specs[key])
+            if grid_has_dc:
+                return interp
+            return interp.at[0].set(dc_func(w0)[0])
+
+        # Diagonal elements. NaN here means corrupted data, not a protocol
+        # limitation -- fail loudly.
+        for key in ("S11", "S22", "S1212"):
+            if np.any(np.isnan(np.asarray(self.specs[key]))):
+                raise ValueError(f"self-spectrum {key} contains NaN -- "
+                                 f"corrupted specs.npz?")
+        SMat = SMat.at[1, 1].set(combine("S11", S_11))
+        SMat = SMat.at[2, 2].set(combine("S22", S_22))
+        if self.char_self_only:
+            # Ablation rung (c): a single-qubit-only QNS campaign leaves the
+            # ZZ self-spectrum and every cross unreconstructed -- the blind
+            # objective assumes zero there; SMat_ideal keeps the full truth,
+            # so the benchmark prices what the 2Q reconstruction adds.
+            print("[idle] char_self_only: S1212 + crosses DROPPED from the "
+                  "characterized model (1Q-only QNS counterfactual); the "
+                  "ideal benchmark retains them.")
+            return SMat
+        SMat = SMat.at[3, 3].set(combine("S1212", S_1212))
+
+        # Off-diagonal elements. A channel the protocol could not reconstruct
+        # (robust: all-NaN S112/S212) is dropped from this CHARACTERIZED model
+        # with a notice -- the blind objective then assumes zero there -- while
+        # _build_ideal_spectra keeps the full truth, so the ideal benchmark
+        # prices what losing the channel costs (OPT-ROBUST-NAN). By contrast,
+        # include_cross_spectra=False removes the channels from BOTH models
+        # (the gate-v style counterfactual world).
         if self.include_cross_spectra:
-            # 1-2
-            s12 = combine(self.specs["S12"], S_1_2, self.gamma)
-            SMat = SMat.at[1, 2].set(s12)
-            SMat = SMat.at[2, 1].set(jnp.conj(s12))
-            # 1-12 (Index 1-3)
-            s112 = combine(self.specs["S112"], S_1_12, self.gamma12)
-            SMat = SMat.at[1, 3].set(s112)
-            SMat = SMat.at[3, 1].set(jnp.conj(s112))
-            # 2-12 (Index 2-3)
-            s212 = combine(self.specs["S212"], S_2_12, self.gamma12 - self.gamma)
-            SMat = SMat.at[2, 3].set(s212)
-            SMat = SMat.at[3, 2].set(jnp.conj(s212))
-        
+            def cross(key, dc_func):
+                data = np.asarray(self.specs[key])
+                n_nan = int(np.isnan(data).sum())
+                if n_nan:
+                    proto = (str(self.specs['spam_protocol'])
+                             if 'spam_protocol' in self.specs else 'none')
+                    print(f"[idle] NOTE: {key} not reconstructed ({n_nan}/"
+                          f"{data.size} NaN, spam_protocol={proto}) -- dropped "
+                          f"from the characterized gate model; the ideal "
+                          f"benchmark retains it.")
+                    return None
+                return combine(key, dc_func)
+
+            for r, c, key, fn in ((1, 2, "S12", S_1_2),
+                                  (1, 3, "S112", S_1_12),
+                                  (2, 3, "S212", S_2_12)):
+                val = cross(key, fn)
+                if val is not None:
+                    SMat = SMat.at[r, c].set(val)
+                    SMat = SMat.at[c, r].set(jnp.conj(val))
+
         return SMat
 
     def _build_ideal_spectra(self):
@@ -235,14 +391,14 @@ class Config:
         # Off-diagonal elements
         if self.include_cross_spectra:
             # 1-2
-            SMat_ideal = SMat_ideal.at[1, 2].set(S_1_2(self.w_ideal, self.gamma))
-            SMat_ideal = SMat_ideal.at[2, 1].set(jnp.conj(S_1_2(self.w_ideal, self.gamma)))
+            SMat_ideal = SMat_ideal.at[1, 2].set(S_1_2(self.w_ideal))
+            SMat_ideal = SMat_ideal.at[2, 1].set(jnp.conj(S_1_2(self.w_ideal)))
             # 1-12 (Index 1-3)
-            SMat_ideal = SMat_ideal.at[1, 3].set(S_1_12(self.w_ideal, self.gamma12))
-            SMat_ideal = SMat_ideal.at[3, 1].set(jnp.conj(S_1_12(self.w_ideal, self.gamma12)))
+            SMat_ideal = SMat_ideal.at[1, 3].set(S_1_12(self.w_ideal))
+            SMat_ideal = SMat_ideal.at[3, 1].set(jnp.conj(S_1_12(self.w_ideal)))
             # 2-12 (Index 2-3)
-            SMat_ideal = SMat_ideal.at[2, 3].set(S_2_12(self.w_ideal, self.gamma12 - self.gamma))
-            SMat_ideal = SMat_ideal.at[3, 2].set(jnp.conj(S_2_12(self.w_ideal, self.gamma12 - self.gamma)))
+            SMat_ideal = SMat_ideal.at[2, 3].set(S_2_12(self.w_ideal))
+            SMat_ideal = SMat_ideal.at[3, 2].set(jnp.conj(S_2_12(self.w_ideal)))
         
         return SMat_ideal
 
@@ -258,7 +414,7 @@ class Config:
         self.T2q1 = 2.0 / S11_0 if S11_0 > 0 else jnp.inf
         self.T2q2 = 2.0 / S22_0 if S22_0 > 0 else jnp.inf
         
-        print(f"Calculated T2 times (Ideal): Q1={self.T2q1:.2e} s, Q2={self.T2q2:.2e} s")
+        print(f"Calculated T2 times (Ideal): Q1={self.T2q1:.2e} tau, Q2={self.T2q2:.2e} tau")
 
 
 # ==============================================================================
@@ -386,7 +542,9 @@ def construct_pulse_library(T_seq, tau_min, max_pulses=50):
         cddLib.append(pul)
         cddOrd += 1
 
-    # 2. Create permutations
+    # 2. Create permutations. Unlike cz.py's product(): identical-order (n, n)
+    # pairs give y_12 = +1 (ZZ fully undecoupled) -- essential for the CZ drive
+    # but never useful for idling, so they are deliberately excluded here.
     pLib_times = list(itertools.permutations(cddLib, 2))
 
     # 3. Generate mqCDD sequences
@@ -634,8 +792,8 @@ def prepare_time_domain_overlap(SMat, w_grid, tau, T_seq, M):
     N_sym = SMat_sym.shape[-1]
 
     dt = 2 * np.pi / (N_sym * dw)
-    print(f"  Time-domain setup: pad_factor={pad_factor}, dt={dt*1e9:.2f} ns, "
-          f"tau/4={tau/4*1e9:.2f} ns")
+    print(f"  Time-domain setup: pad_factor={pad_factor}, dt={dt:.4f} tau, "
+          f"tau/4={tau/4:.4f} tau")
 
     lags_R = (jnp.arange(N_sym) - N_sym // 2) * dt
     RMat_vals = jnp.fft.ifft(SMat_sym, axis=-1)
@@ -661,7 +819,7 @@ def prepare_time_domain_overlap(SMat, w_grid, tau, T_seq, M):
 
 @jax.jit
 def calculate_idling_fidelity(I_matrix):
-    """
+    r"""
     Calculate the two-qubit idling gate fidelity $F_I(T)$ from overlap integrals.
 
     This function uses a numerically stable formula to compute the average
@@ -734,121 +892,152 @@ def calculate_idling_fidelity(I_matrix):
 
 
 
+def use_comb_approximation(M, T_seq):
+    """Whether the frequency-comb overlap approximation is valid at (M, T_seq).
+
+    The comb samples S at delta teeth; the TRUE M-fold filter tooth has width
+    ~ 2pi/(M*T_seq). When that width is comparable to the nuclear-line width
+    sigma the comb mis-weights the lines: 8-14% infidelity error at
+    Tg = 320 tau / M = 16, 3-7% at Tg = 640, up to 3.2% at Tg = 1280; every
+    point passing 2pi/Tg < sigma/8 measures <= 1.7% (OPT-COMB-M16 diagnostic
+    + boundary sweep, scripts/diag_comb_vs_folded.py). Smooth (bland) spectra
+    keep the legacy speed cutoff M > 10. Note the published-number path
+    (calculate_infidelity with use_ideal=True) is always folded regardless."""
+    if M <= 10:
+        return False
+    pri = line_priors()
+    if pri is None:
+        return True
+    _, sigma = pri
+    return 2 * np.pi / (M * T_seq) < sigma / 8
+
+
 # ==============================================================================
 # Optimization Logic
 # ==============================================================================
 
-def cost_function(delays_params, n_pulses1, RMat_data, T_seq, tau_min, overlap_fn):
-    """
-    Cost function: 1 - Normalized Fidelity.
-    overlap_fn: A callable that takes (pt_a, pt_b, data) and returns the overlap integral.
-    """
+def _pack_comb(SMat, w_grid, omega_k):
+    """[S(0), S(w_k)] packed per channel for evaluate_overlap_comb."""
+    S_flat = SMat.reshape(-1, SMat.shape[-1])
+
+    def interp_row(fp):
+        return (jnp.interp(omega_k, w_grid, jnp.real(fp), right=0.) +
+                1j * jnp.interp(omega_k, w_grid, jnp.imag(fp), right=0.))
+
+    S_h = jax.vmap(interp_row)(S_flat)
+    return jnp.concatenate([S_flat[:, :1], S_h], axis=1).reshape(4, 4, -1)
+
+
+def _delays_to_pts(delays_params, n_pulses1, T_seq):
     delays1 = delays_params[:n_pulses1]
     delays2 = delays_params[n_pulses1:]
-
     pt1 = delays_to_pulse_times(delays1, T_seq)
     pt2 = delays_to_pulse_times(delays2, T_seq)
     pt12 = make_tk12(pt1, pt2)
-
-    # Dummy pulse sequence for index 0 (Identity).
-    # Since SMat[0,:] is 0, the overlap will be 0 regardless of sequence.
+    # Dummy pulse sequence for index 0 (Identity): SMat[0,:] is 0, so the
+    # overlap vanishes regardless of sequence.
     pt0 = jnp.array([0., T_seq])
+    return [pt0, pt1, pt2, pt12]
 
-    pts = [pt0, pt1, pt2, pt12]
 
-    # Calculate I_matrix (4x4)
-    vals = []
-    for i in range(4):
-        row_vals = []
-        for j in range(4):
-            val = overlap_fn(pts[i], pts[j], RMat_data[i, j])
-            row_vals.append(val)
-        vals.append(row_vals)
+def _cost_folded(delays_params, RMat_data, dt, T_seq, n_pulses1, n_base_steps):
+    """Idling cost (1 - F/16) on the folded evaluator. Every input is a
+    runtime ARGUMENT (OPT-SPEEDUPS (b)): the value_and_grad wrappers below
+    are stable module-level objects, so restarts and (Tg, M) blocks reuse
+    compiled programs per (shape, static) instead of recompiling per fresh
+    closure, and the HLO is spectrum-value-independent (persistent cache
+    works across runs/repeats)."""
+    pts = _delays_to_pts(delays_params, n_pulses1, T_seq)
+    I_mat = jnp.array([[evaluate_overlap_folded(pts[i], pts[j], RMat_data[i, j],
+                                                dt, n_base_steps)
+                        for j in range(4)] for i in range(4)])
+    return 1.0 - calculate_idling_fidelity(I_mat) / 16.0
 
-    I_mat = jnp.array(vals)
-    
-    fid = calculate_idling_fidelity(I_mat)
-    norm_fid = fid / 16.0
-    infidelity = 1.0 - norm_fid
-    
-    return infidelity
+
+def _cost_comb(delays_params, S_packed, omega_k, T_seq, n_pulses1, M):
+    """Idling cost on the comb evaluator (see _cost_folded for the design)."""
+    pts = _delays_to_pts(delays_params, n_pulses1, T_seq)
+    I_mat = jnp.array([[evaluate_overlap_comb(pts[i], pts[j], S_packed[i, j],
+                                              omega_k, T_seq, M)
+                        for j in range(4)] for i in range(4)])
+    return 1.0 - calculate_idling_fidelity(I_mat) / 16.0
+
+
+cost_vag_folded = jax.jit(jax.value_and_grad(_cost_folded),
+                          static_argnames=('n_pulses1', 'n_base_steps'))
+cost_vag_comb = jax.jit(jax.value_and_grad(_cost_comb),
+                        static_argnames=('n_pulses1', 'M'))
 
 def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
     """Optimizes random sequences for a given repetition count M."""
     T_seq = config.Tg / M
     best_inf = 1.0
     best_seq = None
-    
+
     # Setup Evaluation Method
-    use_comb = (M > 10)
-    
+    use_comb = use_comb_approximation(M, T_seq)
+
     if use_comb:
         print(f"Using Frequency Comb Approximation (M={M})...")
-        # 1. Determine Harmonics
         w0 = 2 * jnp.pi / T_seq
         max_k = int(config.w_max / w0)
-        k_vals = jnp.arange(1, max_k + 1)
-        omega_k = k_vals * w0
+        omega_k = jnp.arange(1, max_k + 1) * w0
+        S_packed = _pack_comb(config.SMat, config.w, omega_k)
 
-        # 2. Interpolate Spectra
-        S_flat = config.SMat.reshape(-1, config.SMat.shape[-1])
-
-        def interp_row(fp):
-            return (jnp.interp(omega_k, config.w, jnp.real(fp), right=0.) +
-                   1j * jnp.interp(omega_k, config.w, jnp.imag(fp), right=0.))
-
-        S_harmonics_flat = jax.vmap(interp_row)(S_flat) # (16, K)
-        S_DC_flat = S_flat[:, 0]
-
-        # Pack: (16, K+1) -> (4, 4, K+1)
-        S_packed_flat = jnp.concatenate([S_DC_flat[:, None], S_harmonics_flat], axis=1)
-        RMat_data = S_packed_flat.reshape(4, 4, -1)
-
-        @jax.jit
-        def overlap_fn(pt_a, pt_b, data):
-            return evaluate_overlap_comb(pt_a, pt_b, data, omega_k, T_seq, M)
-            
+        def vag(xp, n1p):
+            return cost_vag_comb(xp, S_packed, omega_k, T_seq,
+                                 n_pulses1=n1p, M=M)
     else:
         print(f"Using Folded Noise Matrix (M={M})...")
         RMat_data, dt, n_base_steps = prepare_time_domain_overlap(
             config.SMat, config.w, config.tau, T_seq, M
         )
 
-        @jax.jit
-        def overlap_fn(pt_a, pt_b, data):
-            return evaluate_overlap_folded(pt_a, pt_b, data, dt, n_base_steps)
+        def vag(xp, n1p):
+            return cost_vag_folded(xp, RMat_data, dt, T_seq,
+                                   n_pulses1=n1p, n_base_steps=n_base_steps)
+
+    # One compiled cost per parity class for the whole trial list
+    # (control.padding shape unification).
+    all_ns = [int(n) for pair in n_pulses_list for n in pair]
+    if seed_seq is not None:
+        all_ns += [len(seed_seq[0]) - 2, len(seed_seq[1]) - 2]
+    opt_targets = pad_targets(all_ns)
 
     def run_single_optimization(n1, n2, initial_params, label):
         nonlocal best_inf, best_seq
 
-        # Bounds
-        bounds = [(config.tau, T_seq) for _ in range(len(initial_params))]
-        
-        # Partial cost function for JIT
-        cost_for_n = functools.partial(cost_function, n_pulses1=n1,
-                                       RMat_data=RMat_data,
-                                       T_seq=T_seq, tau_min=config.tau,
-                                       overlap_fn=overlap_fn)
-        
-        val_and_grad = jax.jit(jax.value_and_grad(cost_for_n))
+        # Bounds (min_sep = tau unless the control-bandwidth scenario raises it)
+        bounds = [(config.min_sep, T_seq) for _ in range(len(initial_params))]
 
+        n1p = pad_count(n1, opt_targets)
+        n2p = pad_count(n2, opt_targets)
+        pad1 = np.zeros(n1p - n1)
+        pad2 = np.zeros(n2p - n2)
+
+        # The pads are appended/stripped here in the wrapper (exact identity,
+        # control.padding); SLSQP sees the original (n1 + n2)-dim problem.
         def fun_wrapper(x):
-            v, g = val_and_grad(x)
-            return jnp.float64(v), jnp.array(g)
+            xp = jnp.asarray(np.concatenate([x[:n1], pad1, x[n1:], pad2]))
+            v, g = vag(xp, n1p)
+            g = np.asarray(g)
+            return float(v), np.concatenate([g[:n1], g[n1p:n1p + n2]])
 
         # Linear constraints
         A = np.zeros((2, n1 + n2))
         A[0, :n1] = 1
         A[1, n1:] = 1
-        linear_cons = scipy.optimize.LinearConstraint(A, -np.inf, T_seq - config.tau)
-        
+        linear_cons = scipy.optimize.LinearConstraint(A, -np.inf,
+                                                      T_seq - config.min_sep)
+
         try:
-            res = scipy.optimize.minimize(fun_wrapper, jnp.array(initial_params), method='SLSQP',
+            res = scipy.optimize.minimize(fun_wrapper, np.asarray(initial_params), method='SLSQP',
                                           bounds=bounds, constraints=linear_cons, jac=True,
-                                          tol=1e-10, options={'maxiter': 1000, 'disp': False})
-            
+                                          tol=SLSQP_TOL,
+                                          options={'maxiter': SLSQP_MAXITER, 'disp': False})
+
             inf = res.fun
-            
+
             if inf < best_inf:
                 best_inf = inf
                 d1_opt = jnp.array(res.x[:n1])
@@ -856,9 +1045,9 @@ def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
                 pt1 = delays_to_pulse_times(d1_opt, T_seq)
                 pt2 = delays_to_pulse_times(d2_opt, T_seq)
                 best_seq = (pt1, pt2)
-                
+
             print(f"  {label} (n={n1},{n2}): Infidelity = {inf:.6e}")
-            
+
         except Exception as e:
             print(f"  {label} failed for n={n1},{n2}: {e}")
             # traceback.print_exc()
@@ -876,7 +1065,7 @@ def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
 
     # 2. Random Optimization
     for n1, n2 in n_pulses_list:
-        if (n1 + 1) * config.tau > T_seq or (n2 + 1) * config.tau > T_seq:
+        if (n1 + 1) * config.min_sep > T_seq or (n2 + 1) * config.min_sep > T_seq:
             print(f"Skipping Random Opt (n={n1},{n2}): Over-constrained (Too many pulses for T_seq)")
             continue
 
@@ -895,45 +1084,42 @@ def evaluate_known_sequences(config, M, pLib):
     best_idx = -1
     
     print(f"Evaluating {len(pLib)} known sequences...")
-    
+
     # Setup Evaluation Method
-    use_comb = (M > 10)
-    
+    use_comb = use_comb_approximation(M, T_seq)
+
     if use_comb:
         print(f"Using Frequency Comb Approximation (M={M})...")
         w0 = 2 * jnp.pi / T_seq
         max_k = int(config.w_max / w0)
-        k_vals = jnp.arange(1, max_k + 1)
-        omega_k = k_vals * w0
+        omega_k = jnp.arange(1, max_k + 1) * w0
+        S_packed = _pack_comb(config.SMat, config.w, omega_k)
 
-        S_flat = config.SMat.reshape(-1, config.SMat.shape[-1])
-
-        def interp_row(fp):
-            return (jnp.interp(omega_k, config.w, jnp.real(fp), right=0.) +
-                   1j * jnp.interp(omega_k, config.w, jnp.imag(fp), right=0.))
-
-        S_harmonics_flat = jax.vmap(interp_row)(S_flat)
-        S_DC_flat = S_flat[:, 0]
-        S_packed_flat = jnp.concatenate([S_DC_flat[:, None], S_harmonics_flat], axis=1)
-        RMat_data = S_packed_flat.reshape(4, 4, -1)
-
-        @jax.jit
-        def overlap_fn(pt_a, pt_b, data):
-            return evaluate_overlap_comb(pt_a, pt_b, data, omega_k, T_seq, M)
-            
+        def overlap_fn(pt_a, pt_b, r, c):
+            return evaluate_overlap_comb(pt_a, pt_b, S_packed[r, c],
+                                         omega_k, T_seq, M)
     else:
         print(f"Using Folded Noise Matrix (M={M})...")
         RMat_data, dt, n_base_steps = prepare_time_domain_overlap(
             config.SMat, config.w, config.tau, T_seq, M
         )
 
-        @jax.jit
-        def overlap_fn(pt_a, pt_b, data):
-            return evaluate_overlap_folded(pt_a, pt_b, data, dt, n_base_steps)
+        def overlap_fn(pt_a, pt_b, r, c):
+            return evaluate_overlap_folded(pt_a, pt_b, RMat_data[r, c],
+                                           dt, n_base_steps)
+
+    # Shape-unify the library with exact-identity padding (control.padding):
+    # <= 2 shapes per qubit (parity classes) instead of one compile per
+    # distinct CDD/mqCDD length. Padded arrays are used for EVALUATION only;
+    # the recorded winner keeps its original (unpadded) pulse times.
+    targets1 = pad_targets([np.asarray(d1).shape[0] for d1, _ in pLib])
+    targets2 = pad_targets([np.asarray(d2).shape[0] for _, d2 in pLib])
 
     for i, (d1, d2) in enumerate(pLib):
-        pt1 = delays_to_pulse_times(d1, T_seq)
-        pt2 = delays_to_pulse_times(d2, T_seq)
+        d1p = pad_delays(d1, pad_count(np.asarray(d1).shape[0], targets1))
+        d2p = pad_delays(d2, pad_count(np.asarray(d2).shape[0], targets2))
+        pt1 = delays_to_pulse_times(d1p, T_seq)
+        pt2 = delays_to_pulse_times(d2p, T_seq)
         pt12 = make_tk12(pt1, pt2)
         pt0 = jnp.array([0., T_seq])
 
@@ -943,7 +1129,7 @@ def evaluate_known_sequences(config, M, pLib):
         for r in range(4):
             row_vals = []
             for c in range(4):
-                val = overlap_fn(pts[r], pts[c], RMat_data[r, c])
+                val = overlap_fn(pts[r], pts[c], r, c)
                 row_vals.append(val)
             vals.append(row_vals)
         I_mat = jnp.array(vals)
@@ -953,35 +1139,31 @@ def evaluate_known_sequences(config, M, pLib):
 
         if inf < best_inf:
             best_inf = inf
-            best_seq = (pt1, pt2)
+            # Record the ORIGINAL (unpadded) sequence -- padding is an
+            # evaluation-shape detail, not part of the winner.
+            best_seq = (delays_to_pulse_times(d1, T_seq),
+                        delays_to_pulse_times(d2, T_seq))
             best_idx = i
-            
+
     return best_seq, best_inf, best_idx
 
 def calculate_infidelity(seq, config, M, T_seq, use_ideal=False):
     if seq is None: return 1.0
-    
+
     SMat = config.SMat_ideal if use_ideal else config.SMat
     w_grid = config.w_ideal if use_ideal else config.w
-    
-    use_comb = (M > 10)
+
+    # use_ideal=True is the published-number path (the true-infidelity
+    # benchmark of the blind winner): always take the exact folded evaluator
+    # there, so quoted numbers carry NO comb approximation. The comb remains a
+    # search-side speed optimization only (OPT-COMB-M16 hardening).
+    use_comb = (not use_ideal) and use_comb_approximation(M, T_seq)
     
     if use_comb:
         w0 = 2 * jnp.pi / T_seq
-        limit_w = w_grid[-1]
-        max_k = int(limit_w / w0)
-
-        k_vals = jnp.arange(1, max_k + 1)
-        omega_k = k_vals * w0
-
-        S_flat = SMat.reshape(-1, SMat.shape[-1])
-        def interp_row(fp):
-            return (jnp.interp(omega_k, w_grid, jnp.real(fp), right=0.) +
-                   1j * jnp.interp(omega_k, w_grid, jnp.imag(fp), right=0.))
-        S_harmonics_flat = jax.vmap(interp_row)(S_flat)
-        S_DC_flat = S_flat[:, 0]
-        S_packed_flat = jnp.concatenate([S_DC_flat[:, None], S_harmonics_flat], axis=1)
-        RMat_data = S_packed_flat.reshape(4, 4, -1)
+        max_k = int(w_grid[-1] / w0)
+        omega_k = jnp.arange(1, max_k + 1) * w0
+        RMat_data = _pack_comb(SMat, w_grid, omega_k)
 
         overlap_fn = lambda pt_a, pt_b, data: evaluate_overlap_comb(pt_a, pt_b, data, omega_k, T_seq, M)
 
@@ -1060,7 +1242,7 @@ def run_optimization_pipeline(config):
         config.Tg = Tg
         config.T_seq = Tg / config.M
         
-        print(f"\nGate Time: {Tg*1e6:.2f} us (Tg/T2q1={Tg/config.T2q1:.4f}, Tg/T2q2={Tg/config.T2q2:.4f})")
+        print(f"\nGate Time: {Tg:.1f} tau (Tg/T2q1={Tg/config.T2q1:.4f}, Tg/T2q2={Tg/config.T2q2:.4f})")
         
         # No Pulse Calculation
         pt_nopulse = jnp.array([0., config.T_seq])
@@ -1070,7 +1252,7 @@ def run_optimization_pipeline(config):
         print(f"  No Pulse (Ideal): {inf_nopulse:.6e}")
         
         # 1. Known Sequences
-        pLib_delays, pLib_desc = construct_pulse_library(config.T_seq, config.tau, config.max_pulses_per_rep)
+        pLib_delays, pLib_desc = construct_pulse_library(config.T_seq, config.min_sep, config.max_pulses_per_rep)
         
         best_known_seq = None
         best_known_inf = 1.0
@@ -1106,11 +1288,40 @@ def run_optimization_pipeline(config):
         best_opt_seq = None
         
         # Random candidate selection
-        max_n_physical = int(config.T_seq / config.tau) - 1
+        max_n_physical = int(config.T_seq / config.min_sep) - 1
         upper_bound_physical = max(1, max_n_physical - 1)
         effective_max = min(config.max_pulses_per_rep, upper_bound_physical)
-        
+        if config.max_dim > 0 and 2 * effective_max > config.max_dim:
+            print(f"  NOTE: SLSQP dim guard clips the NT search at this "
+                  f"(Tg, M): per-qubit max {effective_max} -> "
+                  f"{config.max_dim // 2} (max_dim={config.max_dim}); the "
+                  f"separation limit is reachable at M >= "
+                  f"{int(np.ceil(config.Tg / (config.tau * (config.max_dim // 2 + 2))))}")
+            effective_max = config.max_dim // 2
+
         n_pulses_list = []
+        if config.informed_counts and effective_max >= 2:
+            # Spectrum-informed windows (SHOWCASE-0612, mirrors cz.py): rank
+            # uniform-train counts by the CHARACTERIZED self-spectra at the
+            # fundamental and guarantee the best windows are tried, as sync
+            # and near-sync pairs; the random draws below still explore.
+            ns = np.arange(2, effective_max + 1)
+            w_fund = jnp.asarray(np.pi * ns / config.T_seq)
+            proxy = np.asarray(
+                jnp.interp(w_fund, config.w, jnp.real(config.SMat[1, 1]))
+                + jnp.interp(w_fund, config.w, jnp.real(config.SMat[2, 2])))
+            picked = []
+            for idx in np.argsort(proxy):
+                n_pick = int(ns[idx])
+                if all(abs(n_pick - p) > 2 for p in picked):
+                    picked.append(n_pick)
+                if len(picked) >= 3:
+                    break
+            print(f"  Spectrum-informed windows (characterized): {sorted(picked)}")
+            for p in picked:
+                n_pulses_list.append((p, p))
+                if p > 1:
+                    n_pulses_list.append((p, p - 1))
         for _ in range(config.num_random_trials):
             n1 = np.random.randint(0, effective_max + 1)
             n2 = np.random.randint(0, effective_max + 1)
@@ -1165,13 +1376,22 @@ def run_optimization_pipeline(config):
         'tau': config.tau,
         'seed': RANDOM_SEED,
         # Frequency grid kept for reference; the full-resolution SMat is omitted
-        # (the plot scripts recompute spectra from spectra_input, so saving the
-        # 4x4x20000 matrix here is ~5 MB of dead weight per file).
+        # (the plot scripts recompute spectra from the analytic noise model
+        # (qns2q.noise.spectra), so saving the 4x4x20000 matrix here is ~5 MB
+        # of dead weight per file).
         'w': np.array(config.w),
         'w_max': float(config.w_max),
         'M': int(config.M),
         'Tg': float(config.Tg),
         'gate_type': 'id',
+        # OPT-PROVENANCE: noise-model version the input spectra were generated
+        # under (the viz overlays warn when it differs from the current model).
+        'model_version': config.model_version,
+        'spectral_model': config.spectral_model,
+        # UNCAP-0611 provenance: the caps this run searched under
+        # (max_pulses=10**9 = separation-limited; max_dim=0 = no guard).
+        'max_pulses': int(config.max_pulses),
+        'max_dim': int(config.max_dim),
     }
 
     if best_known_seq_overall is not None:
@@ -1184,8 +1404,8 @@ def run_optimization_pipeline(config):
         save_dict['best_opt_seq_pt2'] = np.array(best_opt_seq_overall[1])
         save_dict['T_seq_best_opt'] = T_seq_best_opt
 
-    np.savez(os.path.join(plotting_dir, "plotting_data_id_v4.npz"), **save_dict)
-    print(f"Saved all plotting data to {os.path.join(plotting_dir, 'plotting_data_id_v4.npz')}")
+    np.savez(os.path.join(plotting_dir, config.plot_data_name), **save_dict)
+    print(f"Saved all plotting data to {os.path.join(plotting_dir, config.plot_data_name)}")
 
     np.savez(os.path.join(config.path, config.output_path_opt), infs_opt=np.array(yaxis_opt),
              taxis=np.array(xaxis_opt))
@@ -1217,6 +1437,67 @@ def run_optimization_pipeline(config):
     }
 
 if __name__ == "__main__":
+    import argparse
+
+    # Defaults match the manuscript: the idling M-sweep runs on the SPAM-free
+    # reconstructed spectra (specs.npz) of the active regime's NoSPAM folder.
+    # --protocol points at a SPAM arm instead (OPT-ARM-PLUMBING); --simulated
+    # optimizes on the ground-truth file.
+    parser = argparse.ArgumentParser(description="Idling-gate (DD) optimization M-sweep")
+    src = parser.add_mutually_exclusive_group()
+    src.add_argument('--folder', help="run-folder name under the repo root "
+                     "(default: the active regime's NoSPAM folder)")
+    src.add_argument('--protocol',
+                     choices=('reference', 'raw', 'mitigated', 'robust'),
+                     help="read the SPAM arm DraftRun_SPAM_<regime>_<protocol>")
+    parser.add_argument('--simulated', action='store_true',
+                        help="optimize on simulated_spectra.npz (ground truth) "
+                             "instead of the reconstructed specs.npz")
+    parser.add_argument('--no-cross', action='store_true',
+                        help="counterfactual: drop the cross-spectra from BOTH "
+                             "the characterized and ideal gate models (channels "
+                             "a protocol cannot reconstruct, e.g. robust "
+                             "S112/S212, are auto-dropped from the "
+                             "characterized model alone)")
+    parser.add_argument('--spectral-model',
+                        choices=('interp', 'selfconsistent', 'smoothfit'),
+                        default='interp',
+                        help="characterized-SMat construction: linear interp "
+                             "through the teeth (+tails); the unfold "
+                             "model's line/tail/head-aware spectra "
+                             "(OPT-SPECTRAL-MODEL); or the LINE-BLIND single "
+                             "power law (ablation rung (b), SHOWCASE-0612)")
+    parser.add_argument('--min-sep', type=float, default=1.0,
+                        help="minimum pulse separation in units of tau "
+                             "(SHOWCASE-0612 control-bandwidth scenario; "
+                             "default 1.0 = legacy)")
+    parser.add_argument('--self-only', action='store_true',
+                        help="ablation rung (c): characterized model from "
+                             "S11/S22 alone (S1212 + crosses dropped); the "
+                             "ideal benchmark keeps the full truth")
+    parser.add_argument('--informed-counts', action='store_true',
+                        help="guarantee spectrum-informed pulse-count windows "
+                             "(top quiet windows of the CHARACTERIZED "
+                             "spectra) in the NT trial list (SHOWCASE-0612)")
+    parser.add_argument('--max-pulses', type=int, default=1000,
+                        help="total pulse-count cap across all repetitions "
+                             "(default 1000, the published-run value); 0 = "
+                             "separation-limited, i.e. only the minimum "
+                             "separation tau bounds the per-repetition count "
+                             "(UNCAP-0611)")
+    parser.add_argument('--max-dim', type=int, default=0,
+                        help="SLSQP tractability guard: clip any single NT "
+                             "trial to this many optimization variables "
+                             "(n1+n2); 0 = no guard. Clips are announced in "
+                             "the log.")
+    parser.add_argument('--tag', type=str, default="",
+                        help="suffix for all output files, so a rerun does "
+                             "not overwrite the published outputs")
+    cli = parser.parse_args()
+    cli_fname = cli.folder or (run_folder(spam=True, protocol=cli.protocol)
+                               if cli.protocol else None)
+    sfx = f"_{cli.tag}" if cli.tag else ""
+
     try:
         # Pin the RNG so the random pulse-count selection and delay seeding are
         # reproducible across the whole M sweep (SEED-OPT). Seeded once here so
@@ -1244,16 +1525,24 @@ if __name__ == "__main__":
 
             # Initialize configuration with testing parameters
             config = Config(
+                fname=cli_fname,
+                include_cross_spectra=not cli.no_cross,
+                spectral_model=cli.spectral_model,
                 use_known_as_seed=False,
                 M=m,
-                max_pulses=1000,
+                max_pulses=cli.max_pulses,
+                max_dim=cli.max_dim,
+                min_sep_factor=cli.min_sep,
+                char_self_only=cli.self_only,
+                informed_counts=cli.informed_counts,
                 num_random_trials=20,
                 tau_divisor=160,
-                use_simulated=False, # Enable simulated spectra by default for testing
+                use_simulated=cli.simulated,
                 gate_time_factors=[-5, -4, -3, -2, -1, 0], # Range of gate times
-                output_path_known=f"infs_known_id_M{m}.npz",
-                output_path_opt=f"infs_opt_id_M{m}.npz",
-                plot_filename=f"infs_GateTime_id_M{m}.pdf"
+                output_path_known=f"infs_known_id_M{m}{sfx}.npz",
+                output_path_opt=f"infs_opt_id_M{m}{sfx}.npz",
+                plot_filename=f"infs_GateTime_id_M{m}{sfx}.pdf",
+                plot_data_name=f"plotting_data_id_v4{sfx}.npz"
             )
             last_config = config
             print(f"Configuration loaded for M={m}.")
@@ -1291,13 +1580,21 @@ if __name__ == "__main__":
         
         if last_config:
             # Save all data generated in the optimization
-            save_all_path = os.path.join(last_config.path, "optimization_data_all_M.npz")
+            save_all_path = os.path.join(last_config.path, f"optimization_data_all_M{sfx}.npz")
             data_to_save = {}
             data_to_save['M_values'] = np.array(M_values)
             data_to_save['seed'] = RANDOM_SEED
+            data_to_save['max_pulses'] = int(last_config.max_pulses)
+            data_to_save['max_dim'] = int(last_config.max_dim)
+            data_to_save['min_sep_factor'] = float(last_config.min_sep_factor)
+            data_to_save['char_self_only'] = bool(last_config.char_self_only)
+            data_to_save['informed_counts'] = bool(last_config.informed_counts)
             # Frequency grid kept for reference; SMat omitted (plot scripts
-            # recompute spectra from spectra_input -- avoids ~5 MB of dead weight).
+            # recompute spectra from the analytic noise model -- avoids ~5 MB
+            # of dead weight).
             data_to_save['tau'] = float(last_config.tau)
+            data_to_save['model_version'] = last_config.model_version
+            data_to_save['spectral_model'] = last_config.spectral_model
             data_to_save['w'] = np.array(last_config.w)
             data_to_save['w_max'] = float(last_config.w_max)
 

@@ -11,18 +11,30 @@ import qutip as qt
 import jax
 import jax.numpy as jnp
 
+from qns2q.noise import spectra as _model_spectra
+
 
 def make_noise_mat_arr(act, **kwargs):
     """
-    Generate or load matrices for temporally-correlated noise trajectories.
+    Generate or load the component noise-synthesis matrices.
+
+    The noise model is the two-correlated-local-fields construction of
+    ``qns2q.noise.spectra`` (see NOISE_MODEL_SPEC.md): channels are assembled
+    per shot by ``make_channel_trajs`` from five independent component
+    trajectories. This function precomputes the (sine, cosine) synthesis
+    matrices for the five component streams:
+
+        index 0: S_el_A   (electrical field at qubit 1, unshifted)
+        index 1: S_el_B   shifted by dt_shift (the shared part of e_B)
+        index 2: S_el_B   unshifted (the local part of e_B)
+        index 3: S_nuc_1  (qubit-1 local nuclear)
+        index 4: S_nuc_2  (qubit-2 local nuclear)
 
     Parameters
     ----------
     act : str
         Action to perform: 'load', 'make', or 'save'.
     **kwargs
-        spec_vec : list of callable
-            Spectral density functions.
         t_vec : jax.Array
             Time vector for evolution.
         w_grain : int
@@ -31,39 +43,77 @@ def make_noise_mat_arr(act, **kwargs):
             Maximum frequency cutoff.
         truncate : int
             Number of harmonics to include.
-        gamma : float
-            Time shift for qubit 2.
-        gamma_12 : float
-            Time shift for Ising interaction.
+        components : tuple of callable, optional
+            (S_el_A, S_el_B, S_nuc_1, S_nuc_2); defaults to the model's.
+        dt_shift : float, optional
+            Lag of e_B's shared part; defaults to spectra.DT_SHIFT.
 
     Returns
     -------
     jax.Array
-        Array of sine and cosine noise matrices.
+        Array of shape [5][2][n_t][n_w] of sine/cosine synthesis matrices.
     """
-    spec_vec = kwargs.get('spec_vec')
+    if kwargs.get('spec_vec') is not None or kwargs.get('gamma') is not None \
+            or kwargs.get('gamma_12') is not None:
+        raise TypeError(
+            "spec_vec/gamma/gamma_12 were removed: the noise model components "
+            "and cross-spectrum lag now live in qns2q.noise.spectra (see "
+            "NOISE_MODEL_SPEC.md). Pass components=/dt_shift= to override.")
     t_vec = kwargs.get('t_vec')
     w_grain = kwargs.get('w_grain')
     wmax = kwargs.get('wmax')
     truncate = kwargs.get('truncate')
-    gamma = kwargs.get('gamma')
-    gamma_12 = kwargs.get('gamma_12')
+    components = kwargs.get('components')
+    if components is None:
+        components = (_model_spectra.S_el_A, _model_spectra.S_el_B,
+                      _model_spectra.S_nuc_1, _model_spectra.S_nuc_2)
+    dt_shift = kwargs.get('dt_shift')
+    if dt_shift is None:
+        dt_shift = _model_spectra.DT_SHIFT
     # `midpoint=True` samples the noise-synthesis frequency grid at bin midpoints
     # (k+1/2)dw instead of the endpoints k*dw, which excludes the exact w=0 tone.
     # The w=0 tone otherwise injects a spurious *static* offset of variance
     # dw*S(0)/pi into every trajectory, biasing DC-sensitive observables (e.g. the
     # T2*/Ramsey decay) by O(dw). Default False preserves legacy seeded runs.
     midpoint = kwargs.get('midpoint', False)
+    # Showcase regime: a SIXTH stream carries the independent coupler-defect
+    # process j(t) on the ZZ channel (zeta_12 = A_J e_A - B_J e_B + j). The
+    # five-stream regimes are untouched -- same array shape, same key budget,
+    # bit-identical draws. Pass zz_extra=None to force the five-stream model.
+    zz_extra = kwargs.get('zz_extra', _model_spectra.S_zz_extra)
+    # Showcase shared carrier (SHOWCASE-0612): the slow carrier moves out of
+    # the local nuc components into its own shared+local pair -- components
+    # 3/4 become the (strictly local) line families and components 6/7 carry
+    # the carrier filters of qubits 1/2, driven by one common stream plus one
+    # local stream each in make_channel_trajs. Only active when the model
+    # declares HAS_QS_SHARED and the caller did not override `components`.
+    qs_pair = kwargs.get('qs_pair', '__model__')
+    if qs_pair == '__model__':
+        qs_pair = ((_model_spectra.S_qs_1, _model_spectra.S_qs_2)
+                   if getattr(_model_spectra, 'HAS_QS_SHARED', False)
+                   and kwargs.get('components') is None else None)
     if act == 'load':
         return np.load('noise_mats.npy', allow_pickle=True)
     elif act == 'make':
-        S_11, C_11 = make_noise_mat(spec_vec[0], t_vec, w_grain=w_grain, wmax=wmax, trunc_n=truncate, gamma=0.,
-                                    midpoint=midpoint)
-        S_22g, C_22g = make_noise_mat(spec_vec[1], t_vec, w_grain=w_grain, wmax=wmax, trunc_n=truncate, gamma=gamma,
-                                      midpoint=midpoint)
-        S_1212g, C_1212g = make_noise_mat(spec_vec[2], t_vec, w_grain=w_grain, wmax=wmax, trunc_n=truncate,
-                                      gamma=gamma_12, midpoint=midpoint)
-        return jnp.array([[S_11, C_11], [S_22g, C_22g], [S_1212g, C_1212g]])
+        s_el_a, s_el_b, s_nuc_1, s_nuc_2 = components
+        if qs_pair is not None:
+            # carrier split: local rows carry the lines only
+            s_nuc_1 = _model_spectra.S_lines_1
+            s_nuc_2 = _model_spectra.S_lines_2
+        mk = lambda spec, shift: make_noise_mat(
+            spec, t_vec, w_grain=w_grain, wmax=wmax, trunc_n=truncate,
+            gamma=shift, midpoint=midpoint)
+        rows = [mk(s_el_a, 0.), mk(s_el_b, dt_shift), mk(s_el_b, 0.),
+                mk(s_nuc_1, 0.), mk(s_nuc_2, 0.)]
+        if zz_extra is not None:
+            rows.append(mk(zz_extra, 0.))
+        if qs_pair is not None:
+            if zz_extra is None:
+                raise ValueError("qs_pair without zz_extra would collide with "
+                                 "the 6-stream shape; not a supported regime")
+            rows.append(mk(qs_pair[0], 0.))
+            rows.append(mk(qs_pair[1], 0.))
+        return jnp.array(rows)
     elif act == 'save':
         mats = make_noise_mat_arr('make', **kwargs)
         np.save('noise_mats.npy', mats)
@@ -160,7 +210,17 @@ def make_noise_mat(spec, t_vec, **kwargs):
         w = jnp.linspace(0, 2 * wmax, size_w)
     Sf = jax.vmap(jax.vmap(sinM, in_axes=(None, 0, None, None, None)), in_axes=(None, None, 0, None, None))
     Cf = jax.vmap(jax.vmap(cosM, in_axes=(None, 0, None, None, None)), in_axes=(None, None, 0, None, None))
-    return Sf(spec, w, t_vec, dw, gamma), Cf(spec, w, t_vec, dw, gamma)
+    # Build in time-blocks: the fused full-grid build materializes ~3x the
+    # [n_t x size_w] output and OOMs a 12 GB GPU at Nyquist-band grids. The
+    # matrices are elementwise in (t, w), so block-row concatenation is exact.
+    n_t = int(jnp.size(t_vec))
+    blk = 2048
+    blocks_s, blocks_c = [], []
+    for s in range(0, n_t, blk):
+        tb = t_vec[s:s + blk]
+        blocks_s.append(Sf(spec, w, tb, dw, gamma))
+        blocks_c.append(Cf(spec, w, tb, dw, gamma))
+    return jnp.concatenate(blocks_s, axis=0), jnp.concatenate(blocks_c, axis=0)
 
 
 @jax.jit
@@ -190,6 +250,89 @@ def make_noise_traj(S, C, key):
     return traj
 
 
+# Mixing constants of the noise model (single source of truth: noise/spectra.py).
+_C_SH = jnp.sqrt(_model_spectra.C2_SHARE)
+_C_LOC = jnp.sqrt(1. - _model_spectra.C2_SHARE)
+_A_J = _model_spectra.A_J
+_B_J = _model_spectra.B_J
+# Shared-carrier split (showcase): one common stream + one local stream per
+# qubit through the carrier filters (components 6/7).
+_QS_SH = jnp.sqrt(_model_spectra._SC_C2_QS)
+_QS_LOC = jnp.sqrt(1. - _model_spectra._SC_C2_QS)
+
+
+@jax.jit
+def make_channel_trajs(noise_mats, key):
+    """
+    Assemble the three channel trajectories (zeta_1, zeta_2, zeta_12) for one shot.
+
+    Five independent Gaussian streams drive the component matrices produced by
+    ``make_noise_mat_arr`` ('shared' electrical, local-A, local-B, nuclear-1,
+    nuclear-2); the channels are the linear mixture of NOISE_MODEL_SPEC.md
+    section 5:
+
+        e_A     = sqrt(C2)*g0 + sqrt(1-C2)*g_A
+        e_B     = sqrt(C2)*g0(t + DT_SHIFT) + sqrt(1-C2)*g_B
+        zeta_1  = e_A + n_1
+        zeta_2  = e_B + n_2
+        zeta_12 = A_J*e_A - B_J*e_B
+
+    The same shared draws (stream 0) enter both e_A and e_B, which is what
+    produces the partial inter-channel coherence with the measured (+, +, -)
+    sign pattern.
+
+    Parameters
+    ----------
+    noise_mats : jax.Array
+        [5][2][n_t][n_w] synthesis matrices from `make_noise_mat_arr`.
+    key : jax.Array
+        Pair of integers seeding this shot's ten Gaussian draws.
+
+    Returns
+    -------
+    jax.Array
+        Array [3][n_t]: trajectories for [qubit1, qubit2, Ising].
+    """
+    # The sixth (showcase) stream is the independent coupler defect j(t) on the
+    # ZZ channel; streams 7/8 (when present) are the shared-carrier split:
+    # ONE common stream through both carrier filters plus one local stream
+    # each (SHOWCASE-0612 cross-spectra story). Stream count is a static array
+    # shape, so these branches are resolved at trace time; the five-stream
+    # path keeps the exact legacy key budget (split(base, 10)) -- existing
+    # regimes' draws are bit-identical.
+    n_streams = jnp.size(noise_mats, 0)
+    has_zz = (n_streams >= 6)
+    has_qs = (n_streams == 8)
+    base = jax.random.fold_in(jax.random.PRNGKey(key[0]), key[1])
+    ks = jax.random.split(base, 18 if has_qs else (12 if has_zz else 10))
+    n_w = jnp.size(noise_mats, 3)
+    draw = lambda k: jax.random.normal(k, (n_w, 1))
+    comp = lambda i, ka, kb: jnp.matmul(noise_mats[i, 0], draw(ka)) \
+        + jnp.matmul(noise_mats[i, 1], draw(kb))
+    g0_a = comp(0, ks[0], ks[1])      # shared stream through the e_A filter
+    h_a = comp(0, ks[2], ks[3])       # local-A stream, same filter
+    g0_b = comp(1, ks[0], ks[1])      # SAME shared stream, shifted e_B filter
+    h_b = comp(2, ks[4], ks[5])       # local-B stream, unshifted e_B filter
+    n_1 = comp(3, ks[6], ks[7])
+    n_2 = comp(4, ks[8], ks[9])
+    e_a = _C_SH*g0_a + _C_LOC*h_a
+    e_b = _C_SH*g0_b + _C_LOC*h_b
+    zeta_1 = e_a + n_1
+    zeta_2 = e_b + n_2
+    zeta_12 = _A_J*e_a - _B_J*e_b
+    if has_zz:
+        zeta_12 = zeta_12 + comp(5, ks[10], ks[11])
+    if has_qs:
+        # qs_c: SAME draws (ks[12:14]) through both carrier filters ->
+        # common-mode; the zeta_12 difference coupling never sees the carrier.
+        zeta_1 = zeta_1 + _QS_SH*comp(6, ks[12], ks[13]) \
+            + _QS_LOC*comp(6, ks[14], ks[15])
+        zeta_2 = zeta_2 + _QS_SH*comp(7, ks[12], ks[13]) \
+            + _QS_LOC*comp(7, ks[16], ks[17])
+    return jnp.array([jnp.ravel(zeta_1), jnp.ravel(zeta_2),
+                      jnp.ravel(zeta_12)])
+
+
 
 def make_init_state(a_sp, c, **kwargs):
     """
@@ -203,7 +346,11 @@ def make_init_state(a_sp, c, **kwargs):
         State preparation errors (coherence) along X/Y axes for [qubit1, qubit2].
     **kwargs
         state : str
-            Target state to generate: 'p0', 'p1', '0p', '1p', or 'pp'.
+            Target state to generate: 'p0', 'p1', '0p', '1p', 'pp', or 'pp_wrung'.
+            'pp_wrung' is the wringing partner of 'pp': a high-fidelity Z1Z2
+            conjugation applied to the (faulty) 'pp' preparation, used by the
+            SPAM-robust protocol to symmetrize transverse SP errors
+            (W_pm{E_rho0[O]} = (E_rho0[O] pm E_{Z1Z2 rho0 Z1Z2}[O])/2).
 
     Returns
     -------
@@ -234,6 +381,10 @@ def make_init_state(a_sp, c, **kwargs):
         return x_gates[0] * ry[1] * rho0 * ry[1].dag() * x_gates[0].dag()
     elif kwargs.get('state') == 'pp':
         return ry[1] * ry[0] * rho0 * ry[0].dag() * ry[1].dag()
+    elif kwargs.get('state') == 'pp_wrung':
+        zz = qt.tensor(qt.sigmaz(), qt.sigmaz())
+        rho_pp = ry[1] * ry[0] * rho0 * ry[0].dag() * ry[1].dag()
+        return zz * rho_pp * zz.dag()
     else:
         raise Exception("Invalid state input")
 
@@ -503,13 +654,175 @@ def single_shot_prop(noise_mats, t_vec, y_uv, rho0, key):
     """
     size = jnp.size(t_vec)
     y_uv = y_uv[:, :, :size]
-    bvec_1 = make_noise_traj(noise_mats[0, 0], noise_mats[0, 1], key)[:size]
-    bvec_2_g = make_noise_traj(noise_mats[1, 0], noise_mats[1, 1], key)[:size]
-    bvec_1212g = make_noise_traj(noise_mats[2, 0], noise_mats[2, 1], key)[:size]
-    H_t = make_Hamiltonian(y_uv, jnp.array([bvec_1, bvec_2_g, bvec_1212g]))
+    b_t = make_channel_trajs(noise_mats, key)[:, :size]
+    H_t = make_Hamiltonian(y_uv, b_t)
     U = make_propagator(H_t, t_vec)
     rho_MT = jnp.matmul(jnp.matmul(U, rho0), U.conjugate().transpose())
     return rho_MT
+
+
+# Diagonal phase basis of the dephasing Hamiltonian: H(t) is diagonal in the
+# 8-dim (2 qubits + aux) computational basis with diag(H) = sum_a C'_a(t) d_a,
+# d_a = diag(Z_a (x) 1). The full propagator is then U = exp(-i sum_a C_a d_a)
+# with C_a = int 0.5 y_a(t) b_a(t) dt -- three numbers per shot determine the
+# entire evolution. This is what makes the record/replay SPAM pipeline cheap.
+_PAULI_Z_DIAG = np.array([1., -1.])
+_DIAG_BASIS = jnp.array([
+    np.kron(np.kron(_PAULI_Z_DIAG, np.ones(2)), np.ones(2)),   # Z1
+    np.kron(np.kron(np.ones(2), _PAULI_Z_DIAG), np.ones(2)),   # Z2
+    np.kron(np.kron(_PAULI_Z_DIAG, _PAULI_Z_DIAG), np.ones(2)),  # Z1Z2
+])
+
+
+@jax.jit
+def single_shot_phase_coeffs(noise_mats, t_vec, y_uv, key):
+    """Per-shot dephasing phase coefficients C_a = int 0.5 y_a b_a dt, a in
+    {1, 2, 12}. Identical trajectory draw to `single_shot_prop` (same key ->
+    same noise); the propagator is U = exp(-i C . _DIAG_BASIS)."""
+    size = jnp.size(t_vec)
+    y_uv = y_uv[:, :, :size]
+    b_t = make_channel_trajs(noise_mats, key)[:, :size]
+    integrand = 0.5*jnp.stack([y_uv[0, 0]*b_t[0], y_uv[1, 1]*b_t[1],
+                               y_uv[2, 2]*b_t[2]])
+    return jax.scipy.integrate.trapezoid(integrand, t_vec, axis=1)
+
+
+def solver_phase_coeffs(y_uv, noise_mats, t_vec, n_shots):
+    """Phase-coefficient counterpart of `solver_prop`: returns (n_shots, 3).
+
+    Mirrors `solver_prop`'s chunking and np.random key draws exactly, so a run
+    that records phases consumes the same RNG stream (and therefore the same
+    noise realizations) as a legacy run."""
+    y_uv = jnp.array(y_uv)
+    output = []
+    slice_size = 2000
+    n_slices = int(np.ceil(n_shots / slice_size))
+    for i in range(n_slices):
+        current_slice_size = min(slice_size, n_shots - i * slice_size)
+        n_arr = jnp.array(np.random.randint(0, 10000, (current_slice_size, 2)))
+        result = jax.vmap(single_shot_phase_coeffs,
+                          in_axes=[None, None, None, 0])(noise_mats, t_vec, y_uv, n_arr)
+        output.append(result)
+    return jnp.concatenate(output, axis=0)
+
+
+@jax.jit
+def _filter_vectors(noise_mats, t_vec, y_uv):
+    """Per-call filter vectors F[a, comp, sin/cos, w] = int 0.5 y_a(t) Mat(t, w) dt.
+
+    The phase coefficients are LINEAR in the Gaussian draws, so the entire
+    (t x w) trajectory synthesis can be contracted against the control toggles
+    ONCE per call; every shot then costs ten dot products of length n_w instead
+    of six (t x w) matvecs (~1000x less). The einsum reproduces the trapezoid
+    integral exactly on the uniform time grid."""
+    size = jnp.size(t_vec)
+    y = y_uv[:, :, :size]
+    ys = jnp.stack([y[0, 0], y[1, 1], y[2, 2]])          # (3, t)
+    mats = noise_mats[:, :, :size, :]                     # (5, 2, t, w)
+    dt = t_vec[1] - t_vec[0]
+    wt = jnp.full(size, dt).at[0].set(0.5*dt).at[-1].set(0.5*dt)
+    return jnp.einsum('at,cstw->acsw', 0.5*ys*wt[None, :], mats)
+
+
+@jax.jit
+def _shot_coeffs_from_filters(F, key):
+    """One shot's (3,) phase coefficients from precomputed filter vectors.
+
+    Identical RNG scheme to `make_channel_trajs` (same fold_in/split and the
+    same per-stream normal draws), so the same key yields the same noise
+    realization as the trajectory-level path, up to float reassociation."""
+    # Same static-shape branch as make_channel_trajs: component axis 1 of F is
+    # the stream axis, so a 6-stream (showcase) run carries the coupler-defect
+    # filter at index 5 and an 8-stream run adds the shared-carrier filters at
+    # 6/7; the 5-stream path keeps the legacy key budget.
+    n_comp = jnp.size(F, 1)
+    has_zz = (n_comp >= 6)
+    has_qs = (n_comp == 8)
+    base = jax.random.fold_in(jax.random.PRNGKey(key[0]), key[1])
+    ks = jax.random.split(base, 18 if has_qs else (12 if has_zz else 10))
+    n_w = jnp.size(F, 3)
+    draw = lambda k: jax.random.normal(k, (n_w, 1))[:, 0]
+
+    def comp(a, c, ka, kb):
+        return jnp.dot(F[a, c, 0], draw(ka)) + jnp.dot(F[a, c, 1], draw(kb))
+
+    # streams: ks[0:2] shared, ks[2:4] local-A, ks[4:6] local-B, ks[6:8] n1,
+    # ks[8:10] n2 (+ ks[10:12] coupler defect; + ks[12:14] common carrier,
+    # ks[14:16] local carrier 1, ks[16:18] local carrier 2 when present);
+    # components: 0 = el_A, 1 = el_B shifted, 2 = el_B, 3 = n1, 4 = n2
+    # (+ 5 = zz_extra; + 6/7 = carrier filters) -- make_noise_mat_arr order.
+    def channel_parts(a):
+        e_a = _C_SH*comp(a, 0, ks[0], ks[1]) + _C_LOC*comp(a, 0, ks[2], ks[3])
+        e_b = _C_SH*comp(a, 1, ks[0], ks[1]) + _C_LOC*comp(a, 2, ks[4], ks[5])
+        return e_a, e_b
+
+    e_a1, _ = channel_parts(0)
+    _, e_b2 = channel_parts(1)
+    e_a12, e_b12 = channel_parts(2)
+    c1 = e_a1 + comp(0, 3, ks[6], ks[7])
+    c2 = e_b2 + comp(1, 4, ks[8], ks[9])
+    c12 = _A_J*e_a12 - _B_J*e_b12
+    if has_zz:
+        c12 = c12 + comp(2, 5, ks[10], ks[11])
+    if has_qs:
+        c1 = c1 + _QS_SH*comp(0, 6, ks[12], ks[13]) \
+            + _QS_LOC*comp(0, 6, ks[14], ks[15])
+        c2 = c2 + _QS_SH*comp(1, 7, ks[12], ks[13]) \
+            + _QS_LOC*comp(1, 7, ks[16], ks[17])
+    return jnp.stack([c1, c2, c12])
+
+
+def solver_phase_coeffs_fast(y_uv, noise_mats, t_vec, n_shots):
+    """Filter-vector phase solver: same statistics (and same per-key noise
+    realizations, to float reassociation) as `solver_phase_coeffs` at ~1000x
+    less per-shot compute. Used by the recording SPAM pipeline; shots are no
+    longer the runtime budget."""
+    F = _filter_vectors(noise_mats, jnp.asarray(t_vec), jnp.array(y_uv))
+    output = []
+    slice_size = 20000
+    n_slices = int(np.ceil(n_shots / slice_size))
+    for i in range(n_slices):
+        current_slice_size = min(slice_size, n_shots - i * slice_size)
+        n_arr = jnp.array(np.random.randint(0, 10000, (current_slice_size, 2)))
+        output.append(jax.vmap(_shot_coeffs_from_filters,
+                               in_axes=[None, 0])(F, n_arr))
+    return jnp.concatenate(output, axis=0)
+
+
+class PhasedState:
+    """Per-shot diagonal-propagator state: phases u (n_shots, 8) + prep rho (8, 8).
+
+    Equivalent to the dense (n_shots, 8, 8) stack U_s rho U_s^dag (U_s diagonal)
+    but ~24x lighter; `observables.compute_probs_jax` consumes it through an
+    exact quadratic-form fast path (probs = u^dag [ (G^dag M G)^T o rho ] u)."""
+
+    def __init__(self, u, rho):
+        self.u = u
+        self.rho = rho
+
+    @property
+    def shape(self):
+        return (self.u.shape[0], 8, 8)
+
+
+def phased_state(coeffs, rho):
+    """Build the PhasedState for stored per-shot phase coefficients."""
+    u = jnp.exp(-1j*jnp.matmul(jnp.asarray(coeffs), _DIAG_BASIS))
+    return PhasedState(u, jnp.asarray(rho))
+
+
+@jax.jit
+def apply_phase_coeffs(coeffs, rho):
+    """Evolve `rho` through stored per-shot phase coefficients.
+
+    Returns the (n_shots, 8, 8) stack of U_s rho U_s^dag with the diagonal
+    U_s = exp(-i coeffs_s . _DIAG_BASIS) -- the exact replay of what
+    `solver_prop` would have produced for these noise realizations, for ANY
+    initial state (the SPAM-protocol arms differ only in rho and in estimator
+    post-processing, so one recorded dataset serves them all)."""
+    p = jnp.matmul(coeffs, _DIAG_BASIS)            # (n_shots, 8)
+    u = jnp.exp(-1j*p)
+    return u[:, :, None]*rho[None, :, :]*jnp.conj(u)[:, None, :]
 
 
 def solver_prop(y_uv, noise_mats, t_vec, rho, n_shots):

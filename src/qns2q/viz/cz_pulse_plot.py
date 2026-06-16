@@ -3,7 +3,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from qns2q.paths import run_path
+from qns2q.paths import run_path, project_root
 
 def make_tk12(tk1, tk2):
     """
@@ -40,7 +40,7 @@ def get_switching_function(pulse_times, T, num_points=2000):
             
     return t_grid, y
 
-def generate_pulse_plot():
+def generate_pulse_plot(folder=None, tag=""):
     # 1. Configuration
     # ----------------
     FIG_WIDTH = 7.0
@@ -67,7 +67,11 @@ def generate_pulse_plot():
     
     # 2. Load Data
     # ------------
-    data_file = os.path.join(run_path(), "plotting_data", "plotting_data_cz_v2.npz")
+    if folder is None:
+        base = run_path()
+    else:
+        base = folder if os.path.isabs(folder) else os.path.join(project_root(), folder)
+    data_file = os.path.join(base, "plotting_data", f"plotting_data_cz_v2{tag}.npz")
     
     if not os.path.exists(data_file):
         print(f"Error: Data file not found at {data_file}")
@@ -114,27 +118,27 @@ def generate_pulse_plot():
     
     # --- Column 0: Known ---
     # Row 0: Qubit 1
-    axs[0, 0].step(t_known_1 * 1e6, y_known_1, where='post', color=COLOR_KNOWN)
+    axs[0, 0].step(t_known_1, y_known_1, where='post', color=COLOR_KNOWN)
     axs[0, 0].set_title("Best Known Sequence")
     
     # Row 1: Qubit 2
-    axs[1, 0].step(t_known_2 * 1e6, y_known_2, where='post', color=COLOR_KNOWN)
+    axs[1, 0].step(t_known_2, y_known_2, where='post', color=COLOR_KNOWN)
     
     # Row 2: Interaction
-    axs[2, 0].step(t_known_12 * 1e6, y_known_12, where='post', color=COLOR_KNOWN)
-    axs[2, 0].set_xlabel(r"Time ($\mu$s)")
+    axs[2, 0].step(t_known_12, y_known_12, where='post', color=COLOR_KNOWN)
+    axs[2, 0].set_xlabel(r"$t/\tau$")
 
     # --- Column 1: Optimized ---
     # Row 0: Qubit 1
-    axs[0, 1].step(t_opt_1 * 1e6, y_opt_1, where='post', color=COLOR_OPT)
+    axs[0, 1].step(t_opt_1, y_opt_1, where='post', color=COLOR_OPT)
     axs[0, 1].set_title("Best Optimized Sequence")
     
     # Row 1: Qubit 2
-    axs[1, 1].step(t_opt_2 * 1e6, y_opt_2, where='post', color=COLOR_OPT)
+    axs[1, 1].step(t_opt_2, y_opt_2, where='post', color=COLOR_OPT)
     
     # Row 2: Interaction
-    axs[2, 1].step(t_opt_12 * 1e6, y_opt_12, where='post', color=COLOR_OPT)
-    axs[2, 1].set_xlabel(r"Time ($\mu$s)")
+    axs[2, 1].step(t_opt_12, y_opt_12, where='post', color=COLOR_OPT)
+    axs[2, 1].set_xlabel(r"$t/\tau$")
 
     # 5. Styling & Labels
     # -------------------
@@ -174,4 +178,16 @@ def generate_pulse_plot():
     print(f"Successfully generated pulse comparison plot: {output_path}")
 
 if __name__ == "__main__":
-    generate_pulse_plot()
+    import argparse
+    ap = argparse.ArgumentParser(
+        description="Plot the best-known vs best-NT CZ pulse-sequence comparison "
+                    "(the paper's showcase_pulse_sequences figure).")
+    ap.add_argument("--folder", default=None,
+                    help="run folder holding plotting_data/, relative to the repo root "
+                         "or absolute (e.g. DraftRun_NoSPAM_showcase_cap). "
+                         "Default: the active QNS2Q_REGIME's canonical NoSPAM folder.")
+    ap.add_argument("--tag", default="",
+                    help="filename tag on the plotting-data npz, e.g. _cap for "
+                         "plotting_data_cz_v2_cap.npz.")
+    args = ap.parse_args()
+    generate_pulse_plot(folder=args.folder, tag=args.tag)
