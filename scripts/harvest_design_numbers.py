@@ -34,7 +34,7 @@ from qns2q.control import idle as idmod
 
 ROOT = project_root()
 CAP = "DraftRun_NoSPAM_showcase_cap"
-ARMS = ("reference", "raw", "mitigated")
+ARMS = ("reference", "raw", "mitigated", "robust")
 CZ_TG = 320.0
 ID_TGS = (640.0, 10240.0)
 
@@ -116,13 +116,17 @@ def main():
     for arm in ARMS:
         folder = run_folder(spam=True, protocol=arm)
         tag = f"rung_d_{arm}"
-        kt = cz_true_at(folder, tag, kind='known')
-        nt = cz_true_at(folder, tag, kind='opt')
-        cfg = czmod.CZOptConfig(fname=folder, min_sep_factor=8.0,
-                                max_pulses=10**9, gate_time_factors=[])
-        seq = cz_winner_seq(folder, tag)
-        npred = float(czmod.calculate_infidelity(seq, cfg, 1, CZ_TG,
-                                                 use_ideal=False))
+        try:
+            kt = cz_true_at(folder, tag, kind='known')
+            nt = cz_true_at(folder, tag, kind='opt')
+            cfg = czmod.CZOptConfig(fname=folder, min_sep_factor=8.0,
+                                    max_pulses=10**9, gate_time_factors=[])
+            seq = cz_winner_seq(folder, tag)
+            npred = float(czmod.calculate_infidelity(seq, cfg, 1, CZ_TG,
+                                                     use_ideal=False))
+        except (FileNotFoundError, KeyError) as e:
+            print(f"  {arm:10s} SKIPPED (no rung-d gate data: {e})")
+            continue
         out[f'cz_arm_{arm}'] = np.array([kt, nt, npred])
         print(f"  {arm:10s} {kt:.4e} / {nt:.4e} / {npred:.4e}  "
               f"(label NT({len(seq[0])-2},{len(seq[1])-2}))")
@@ -131,12 +135,16 @@ def main():
     for arm in ARMS:
         folder = run_folder(spam=True, protocol=arm)
         tag = f"rung_d_idle_{arm}"
-        kt = idle_best_over_M(folder, tag, 640.0, kind='known')
-        nt, m, seq = idle_best_over_M(folder, tag, 640.0, want_seq=True)
-        cfg = idmod.Config(fname=folder, M=m, max_pulses=10**9,
-                           min_sep_factor=8.0)
-        npred = float(idmod.calculate_infidelity(seq, cfg, m, 640.0 / m,
-                                                 use_ideal=False))
+        try:
+            kt = idle_best_over_M(folder, tag, 640.0, kind='known')
+            nt, m, seq = idle_best_over_M(folder, tag, 640.0, want_seq=True)
+            cfg = idmod.Config(fname=folder, M=m, max_pulses=10**9,
+                               min_sep_factor=8.0)
+            npred = float(idmod.calculate_infidelity(seq, cfg, m, 640.0 / m,
+                                                     use_ideal=False))
+        except (FileNotFoundError, KeyError) as e:
+            print(f"  {arm:10s} SKIPPED (no rung-d gate data: {e})")
+            continue
         out[f'id_arm_{arm}'] = np.array([kt, nt, npred])
         print(f"  {arm:10s} {kt:.4e} / {nt:.4e} / {npred:.4e}  (M={m})")
 

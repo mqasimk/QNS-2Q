@@ -132,6 +132,7 @@ ARM_STYLE = {
     'reference': dict(color=C_REF, marker='o', label='no SPAM (reference)'),
     'raw':       dict(color=C_RAW, marker='v', label='SPAM, unmitigated'),
     'mitigated': dict(color=C_MIT, marker='^', label='SPAM-mitigated'),
+    'robust':    dict(color=C_ROB, marker='D', label='SPAM-robust (4 spectra)'),
 }
 
 
@@ -145,9 +146,12 @@ def _sig_parts(err):
 def fig_spam_comparison():
     from qns2q.characterize.systematics import analytic_spectra
 
-    arms = {a: np.load(SPAM_FMT.format(arm=a) + "/specs.npz",
-                       allow_pickle=True)
-            for a in ('reference', 'raw', 'mitigated')}
+    # robust included when present: its self-spectra carry the C_l,12=0 leakage
+    # bias and its S_1,12/S_2,12 are NaN (not reconstructible) -- the panels show
+    # both directly.
+    arms = {a: np.load(SPAM_FMT.format(arm=a) + "/specs.npz", allow_pickle=True)
+            for a in ('reference', 'raw', 'mitigated', 'robust')
+            if os.path.exists(SPAM_FMT.format(arm=a) + "/specs.npz")}
     truth = analytic_spectra()
     wk = np.asarray(next(iter(arms.values()))['wk'])
     w_fine = np.linspace(0, wk.max() * 1.02, 2000)
@@ -430,23 +434,34 @@ def fig_design_experiments(ladder_cz, ladder_id=None, arms_cz=None,
 
 
 def _arms_bars(ax, arms, title, ylabel=r"$1-F_\mathrm{pro}$ at $T_G=320\tau$"):
-    order = [a for a in ('reference', 'mitigated', 'raw') if a in arms]
+    # The SPAM story in one panel: the DESIGN is SPAM-invariant (best-NT TRUE
+    # infidelity, dark bars, sits on the dashed line for every arm) while the
+    # CERTIFICATION is not (best-NT PREDICTED on each arm's own reconstruction,
+    # light bars: raw over-certifies, mitigation/robust recover the truth).
+    order = [a for a in ('reference', 'mitigated', 'robust', 'raw') if a in arms]
     pretty = {'reference': 'reference\n(SPAM-free recon.)',
               'mitigated': 'SPAM-mitigated\nrecon.',
+              'robust': 'SPAM-robust\nrecon. (4 spectra)',
               'raw': 'raw\n(SPAM-biased recon.)'}
     x = np.arange(len(order))
     ntv = [arms[a][1] for a in order]
     ncv = [arms[a][2] for a in order]
-    ax.bar(x - 0.12, ntv, width=0.22, color=C_REF, alpha=0.85,
+    true_val = float(np.mean(ntv))            # SPAM-invariant design value
+    ax.axhline(true_val, ls='--', lw=1.0, color='0.35', zorder=1,
+               label='true infidelity (SPAM-invariant)')
+    ax.bar(x - 0.12, ntv, width=0.22, color=C_REF, alpha=0.85, zorder=2,
            label='best NT (true)')
-    ax.bar(x + 0.12, ncv, width=0.22, color=C_REF, alpha=0.45,
-           label='best NT (predicted)')
-    for xi, v in zip(x - 0.12, ntv):
-        ax.text(xi, v * 1.04, f"{v:.2e}", ha='center', fontsize=6.5)
-    ax.set_xticks(x, [pretty[a] for a in order], fontsize=8)
+    ax.bar(x + 0.12, ncv, width=0.22, color=C_REF, alpha=0.40, zorder=2,
+           label='best NT (predicted/certified)')
+    # annotate the certification error (predicted vs the SPAM-invariant truth)
+    for xi, v in zip(x + 0.12, ncv):
+        pct = 100.0 * (v - true_val) / true_val
+        ax.text(xi, v * 1.05, f"{pct:+.0f}\\%", ha='center', fontsize=6.5,
+                color=(C_RAW if abs(pct) > 3 else '0.3'))
+    ax.set_xticks(x, [pretty[a] for a in order], fontsize=7.5)
     ax.set_ylabel(ylabel)
     ax.set_title(title, fontsize=9.5)
-    ax.legend(frameon=False, fontsize=8)
+    ax.legend(frameon=False, fontsize=7.5)
     ax.grid(True, alpha=0.25, axis='y')
 
 
@@ -495,13 +510,15 @@ def fig_design():
                     "(a) entangling (CZ), $T_G=320\\tau$: blind NT design\n"
                     "vs the optimizer's spectral knowledge")
     _arms_bars(axs[0, 1], {a: dn[f'cz_arm_{a}']
-                           for a in ('reference', 'mitigated', 'raw')},
+                           for a in ('reference', 'mitigated', 'robust', 'raw')
+                           if f'cz_arm_{a}' in dn.files},
                "(b) entangling (CZ): gates designed on the\n"
                "SPAM arms' reconstructions ($T_G=320\\tau$)")
     _ladder_grouped(axs[1, 0], dn, 'id_ladder', [640.0, 10240.0],
                     "(c) idle (best over $M$): the same ladder")
     _arms_bars(axs[1, 1], {a: dn[f'id_arm_{a}']
-                           for a in ('reference', 'mitigated', 'raw')},
+                           for a in ('reference', 'mitigated', 'robust', 'raw')
+                           if f'id_arm_{a}' in dn.files},
                "(d) idle: SPAM-arm designs ($T_G=640\\tau$)",
                ylabel=r"$1-F_\mathrm{pro}$ at $T_G=640\tau$")
     fig.tight_layout()

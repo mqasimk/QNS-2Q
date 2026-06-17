@@ -65,7 +65,7 @@ _REGIME = current_regime()
 # fast-Rabi anchor, where T2* = 3500 tau = 17.6 us matches Hendrickx 2024).
 _TAU_SI = 5.0e-9 if _REGIME == "showcase" else 2.5e-8
 
-MODEL_VERSION = ("showcase-trap-20260612" if _REGIME == "showcase"
+MODEL_VERSION = ("showcase-trap-20260616" if _REGIME == "showcase"
                  else "anchored-tarucha-20260610")
 
 
@@ -97,7 +97,15 @@ C2_SHARE = 0.8                   # shared fraction of the electrical noise power
 A_J = 4.270645e-01               # J difference-coupling weights; B_J/A_J = 1.05
 B_J = 4.484177e-01               # (B_J > A_J*C2_SHARE makes c_{2,12} anti-phase);
                                  # overall scale sets S_1212/sqrt(S11 S22) = 0.10
-DT_SHIFT = 1.5                   # causal lag of e_B's shared part [C, Im parts]
+DT_SHIFT = 4.0 if _REGIME == "showcase" else 1.5
+# causal lag of e_B's shared electrical part [C, Im-part generator].
+# Anchored classes keep the documented knob-4 value 1.5 (NOISE_MODEL_SPEC.md).
+# 2026-06-16 (showcase only): raised 1.5 -> 4.0 so the lagged quiet-floor cross
+# term gives a clean single Im lobe (|Im S_1_2|/|Re| ~ 1 at the NT parking
+# window, ~2.4x the prior in-band Im) with NO in-band sign reversal (DT >= 5
+# introduces one) and PSD positivity intact (min eig of the 3x3 ~1e-8 > 0). The
+# common-mode carrier + shared-TLF line stay zero-lag/real, so the
+# average-fidelity invariance (the storage-split story) is untouched.
 
 # Class-F lines: GaAs nuclear-difference triplet at B_eff = 600 mT
 # [Malinowski 2017]. Absolute amplitudes (the x3.2 / x8 peak-over-smooth-total
