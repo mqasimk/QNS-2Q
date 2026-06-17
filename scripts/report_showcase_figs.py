@@ -529,9 +529,10 @@ def fig_design():
 
 def fig_storage():
     """Entanglement-storage panel: holding Phi+ through the idle. The
-    in-phase/anti-phase implementations of the SAME symmetric train are
-    indistinguishable to single-qubit QNS and in average fidelity; the
-    measured Re S_1_2 > 0 dictates anti-phase. Data: storage_panel.npz."""
+    collective-mode/differential-mode implementations of the SAME CPMG train
+    are indistinguishable to single-qubit QNS and in average fidelity; the
+    measured Re S_1_2 > 0 dictates the differential mode. Data:
+    storage_panel.npz."""
     d = np.load(os.path.join(RUN_GATES, "storage_panel.npz"))
     tg = np.asarray(d['Tg'], dtype=float)
     fig, ax = plt.subplots(1, 1, figsize=(5.6, 3.6))
@@ -540,15 +541,15 @@ def fig_storage():
     ax.plot(tg, d['fid_psi'], '-.', color=C_RAW, marker='^', ms=4, mfc='none',
             label='free induction, $\\Psi^+$ (DFS-protected)')
     ax.plot(tg, d['sync_phi'], '-', color=C_MIT, marker='o', ms=4,
-            label='symmetric train, in-phase\n(simultaneous pulses)')
+            label='collective-mode decoupling\n($\\Phi^+$, synchronized pulses)')
     ax.plot(tg, d['anti_phi'], '-', color=C_REF, marker='s', ms=4,
-            label='same train, anti-phase\n(the measured $\\mathrm{Re}\\,S_{1,2}>0$ choice)')
+            label='differential-mode decoupling\n($\\Phi^+$, frames anti-aligned)')
     ax.plot(tg, d['nt_phi'], '--', color=C_ROB, marker='D', ms=3.5,
             label='blind NT idle (avg.-fidelity winner)')
     ax.plot(tg, d['sync_phi_pred'], 'o', ms=7, mfc='none', color=C_MIT,
-            alpha=0.7, label='predicted (blind recon.), in-phase')
+            alpha=0.7, label='predicted (blind recon.), collective')
     ax.plot(tg, d['anti_phi_pred'], 's', ms=7, mfc='none', color=C_REF,
-            alpha=0.7, label='predicted (blind recon.), anti-phase')
+            alpha=0.7, label='predicted (blind recon.), differential')
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_xlabel(r"storage time $T_G/\tau$")
