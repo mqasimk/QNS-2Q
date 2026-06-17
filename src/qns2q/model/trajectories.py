@@ -811,6 +811,19 @@ def phased_state(coeffs, rho):
     return PhasedState(u, jnp.asarray(rho))
 
 
+def fast_solver(y_uv, noise_mats, t_vec, rho, n_shots):
+    """Drop-in for ``solver_prop`` on the filter-vector fast path: returns a
+    ``PhasedState`` (exact for this diagonal-propagator dephasing model, for ANY
+    ``rho``) at ~1000x less per-shot compute. Unlike ``PhaseRecorder`` it stores
+    nothing -- it lets an arm whose suite cannot replay the recorded non-robust
+    dataset (the SPAM-robust D^+- estimators) run on the fast path WITHOUT the
+    record/replay machinery, so the dense ``solver_prop`` is not needed there.
+    (Downstream estimators consume the output only through
+    ``observables.compute_probs_jax``, which has an exact PhasedState fast path.)"""
+    coeffs = solver_phase_coeffs_fast(y_uv, noise_mats, t_vec, n_shots)
+    return phased_state(coeffs, rho)
+
+
 @jax.jit
 def apply_phase_coeffs(coeffs, rho):
     """Evolve `rho` through stored per-shot phase coefficients.

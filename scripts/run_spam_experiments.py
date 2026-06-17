@@ -115,6 +115,11 @@ if __name__ == "__main__":
     #   this arm's preps + estimators (~minutes instead of ~40 at --tuned).
     record = '--record' in args
     replay = '--replay' in args
+    # --fast: solve on the filter-vector PhasedState path (exact for this
+    #   dephasing model) instead of the dense solver_prop. --dense forces the
+    #   old path (validation only).
+    fast = '--fast' in args
+    dense = '--dense' in args
     args = [a for a in args if not a.startswith('--')]
     protocol = args[0] if args else 'mitigated'
     if protocol not in ('raw', 'mitigated', 'robust', 'reference'):
@@ -122,10 +127,16 @@ if __name__ == "__main__":
                          "expected raw|mitigated|robust|reference")
     if record and replay:
         raise SystemExit("--record and --replay are mutually exclusive")
+    # The SPAM-robust suite cannot replay the non-robust dataset and is
+    # intractable on the dense solver (~hours/experiment), so default it to the
+    # exact fast path; --dense opts back into solver_prop for validation.
+    if protocol == 'robust' and not dense:
+        fast = True
     config = build_config(protocol, reduced, strong, medium, tuned, fine)
     print(f"[spam] protocol={protocol} reduced={reduced} medium={medium} "
           f"tuned={tuned} fine={fine} strong={strong} record={record} "
           f"replay={replay} -> {config.fname}")
     main(config,
          record_to=dataset_path() if record else None,
-         replay_from=dataset_path() if replay else None)
+         replay_from=dataset_path() if replay else None,
+         fast=fast)

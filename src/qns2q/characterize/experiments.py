@@ -30,7 +30,8 @@ from qns2q.characterize.spam import (estimate_spam, make_c_12_0_mt_robust,
                                      make_c_12_12_mt_robust, make_c_a_0_mt_robust)
 from qns2q.noise.spectra import S_11, S_22, S_1212
 from qns2q.model.trajectories import (make_noise_mat_arr, solver_prop,
-                                      solver_phase_coeffs_fast, phased_state)
+                                      solver_phase_coeffs_fast, phased_state,
+                                      fast_solver)
 from qns2q.model import observables as _observables
 from qns2q.paths import run_folder, project_root
 
@@ -499,7 +500,7 @@ def load_phase_dataset(path, config):
     return PhaseReplayer(calls, d['t_lens'])
 
 
-def main(config=None, record_to=None, replay_from=None):
+def main(config=None, record_to=None, replay_from=None, fast=False):
     """
     Main function to run the QNS experiments.
 
@@ -532,6 +533,13 @@ def main(config=None, record_to=None, replay_from=None):
         solver = load_phase_dataset(replay_from, config)
         print(f"[dataset] replaying phase coefficients <- {replay_from} "
               f"({len(solver.calls)} calls)")
+    elif fast:
+        # Filter-vector fast path without a dataset: the suite still synthesizes
+        # its noise matrices but solves on the cheap PhasedState path. This is how
+        # the SPAM-robust suite (which cannot replay the non-robust dataset) runs
+        # without the intractable dense solver_prop.
+        solver = fast_solver
+        print("[solver] filter-vector fast path (PhasedState; no dataset)")
     runner = ExperimentRunner(config, solver=solver,
                               make_mats=replay_from is None)
 
