@@ -361,3 +361,50 @@ def test_cross_coefficient_is_one_half():
     infid = 0.25 * (1 - np.cosh(2 * I12))          # exact bare-pair, only I_{1,2} != 0
     assert abs(infid - XCOEF * I12 ** 2) < 1e-12   # XCOEF = -1/2
     assert abs(infid - (-0.75) * I12 ** 2) > 1e-8  # the erratum would be wrong here
+
+
+# ------- worst-case-over-spectator-states certificate (Eq. worstcase) -------
+def _reduced_infid(W, sigma, N):
+    D = reduced_ptm_exact(W, np.asarray(sigma, dtype=complex), N)
+    return 1.0 - np.trace(D).real / 16.0
+
+
+@pytest.mark.parametrize("N", [3, 4])
+def test_infidelity_linear_in_populations(N):
+    """1-F(sigma) = sum_z p(z)(1-F_z): the reduced infidelity is linear in the
+    spectator computational populations (coherences drop). This convex
+    decomposition is what makes the worst spectator state a computational config.
+    """
+    ch, idx, p, sigma, base = _setup(N)
+    W = decay_matrix(ch, base, N)
+    Dsp = 1 << (N - 2)
+    rng = np.random.default_rng(11)
+    H = rng.standard_normal((Dsp, Dsp)) + 1j * rng.standard_normal((Dsp, Dsp))
+    H = H + H.conj().T
+    np.fill_diagonal(H, 0.0)                          # add coherences, keep populations p
+    sig = np.diag(p).astype(complex) + 1e-2 * H
+    lhs = _reduced_infid(W, sig, N)
+    rhs = sum(p[z] * _reduced_infid(W, np.diag(np.eye(Dsp)[z]).astype(complex), N)
+              for z in range(Dsp))
+    assert abs(lhs - rhs) < 1e-10
+
+
+@pytest.mark.parametrize("N", [3, 4])
+def test_worst_state_is_a_config(N):
+    """Eq. (worstcase): the maximum reduced infidelity over all spectator states is
+    attained at a computational configuration. No sampled state -- pure, mixed,
+    correlated, or coherent -- exceeds the worst config.
+    """
+    ch, idx, p, sigma, base = _setup(N)
+    W = decay_matrix(ch, base, N)
+    Dsp = 1 << (N - 2)
+    config_max = max(_reduced_infid(W, np.diag(np.eye(Dsp)[z]).astype(complex), N)
+                     for z in range(Dsp))
+    rng = np.random.default_rng(5)
+    sampled_max = 0.0
+    for _ in range(300):
+        A = rng.standard_normal((Dsp, Dsp)) + 1j * rng.standard_normal((Dsp, Dsp))
+        rho = A @ A.conj().T
+        rho /= np.trace(rho).real                     # random mixed spectator state
+        sampled_max = max(sampled_max, _reduced_infid(W, rho, N))
+    assert sampled_max <= config_max + 1e-10
