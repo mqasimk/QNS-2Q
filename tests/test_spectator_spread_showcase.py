@@ -101,7 +101,10 @@ def n3_problem():
     I4[1, 3] = I4[3, 1] = I2[0, 2]
     I4[2, 3] = I4[3, 2] = I2[1, 2]
     bare_repo = 1.0 - float(idmod.calculate_idling_fidelity(jnp.asarray(I4))) / 16.0
-    W2 = tsl.decay_matrix(tsl.channels(2), I2, 2)
+    # evaluate_overlap_folded returns the BARE overlap J = int(dw/2pi) S G; the exact
+    # oracle (test_spectator_locality) uses the paper's 1/2-convention I = J/2
+    # (<phi_a phi_b> = 2 I), so feed 0.5 * I into decay_matrix.
+    W2 = tsl.decay_matrix(tsl.channels(2), 0.5 * I2, 2)
     bare_mach = 1.0 - np.trace(
         tsl.reduced_ptm_exact(W2, np.eye(1, dtype=complex), 2)).real / 16.0
 
@@ -117,7 +120,7 @@ def n3_problem():
     s(0, 4, ov((1, 3), pt0, pt0)); s(2, 4, ov((2, 3), idle, pt0))     # q0 spectator-coupler driver
     s(1, 5, ov((1, 3), pt1, pt1)); s(2, 5, ov((2, 3), idle, pt1))     # q1 driver: aligned (worst geometry)
 
-    W3 = tsl.decay_matrix(tsl.channels(3), I3, 3)
+    W3 = tsl.decay_matrix(tsl.channels(3), 0.5 * I3, 3)   # bare J -> 1/2-convention I
 
     def infid(sig):
         return 1.0 - np.trace(tsl.reduced_ptm_exact(W3, np.asarray(sig, complex), 3)).real / 16.0

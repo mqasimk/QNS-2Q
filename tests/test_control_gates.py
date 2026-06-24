@@ -74,7 +74,9 @@ def _cz_fidelity_expm_reference(I_matrix, J, M, dc_12):
         val = jnp.zeros((4, 4), dtype=jnp.complex128)
         for a in range(3):
             for b in range(3):
-                coeff = -0.5 * (cz.sgn(Oi, a + 1, 0) - 1.0)
+                c_a = 0.5 * (1.0 - cz.sgn(Oi, a + 1, 0))
+                c_b = 0.5 * (1.0 - cz.sgn(Oi, b + 1, 0))
+                coeff = 0.5 * c_a * c_b
                 val = val + coeff * I_matrix[a + 1, b + 1] * (z2q[a + 1] @ z2q[b + 1])
         rot = (1.0 - cz.sgn(Oi, 1, 2)) * M * J * dc_12
         G = jax.scipy.linalg.expm(-1j * rot * z2q[3] - val)

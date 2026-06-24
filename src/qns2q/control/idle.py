@@ -851,22 +851,19 @@ def calculate_idling_fidelity(I_matrix):
             c2 = comm_with_z[p2]
             c12 = (c1 + c2) % 2
             
-            # lambda_a^{(k)} = sgn(P_k, a, 0) - 1
-            lam = jnp.array([
-                0.0,          # lambda_0
-                -2.0 * c1,    # lambda_1
-                -2.0 * c2,    # lambda_2
-                -2.0 * c12    # lambda_12
-            ])
+            # Anticommutation flags c_a = (1 - sgn(P_k, a, 0))/2 in {0, 1} for the
+            # register channels a in {0, 1, 2, 12}.
+            c_vec = jnp.array([0.0, c1, c2, c12])
             
-            # Calculate Theta_l = sum_{j} lambda_j * I_{j, j XOR l}
-            # Vectorized calculation for l=0,1,2,3
+            # Theta_l = coeff of Z_l in C^{(2)}_{P_k}/2! = sum_j c_j c_{j XOR l} I_{j, j XOR l}.
+            # A pair (j, j XOR l) contributes only when P_k anticommutes with BOTH
+            # Z_j and Z_{j XOR l} (paper Eq. c2_spectra, both-index parity); the 1/2 of
+            # the dephasing convention is carried by the E_i factors below.
             Thetas = jnp.zeros(4, dtype=jnp.complex128)
             for l in range(4):
-                # Indices for j XOR l
                 col_indices = jnp.arange(4) ^ l
-                # Sum over j: lam[j] * I[j, col_indices[j]]
-                val = -jnp.sum(lam * I_matrix[jnp.arange(4), col_indices])
+                val = jnp.sum(c_vec * c_vec[col_indices]
+                              * I_matrix[jnp.arange(4), col_indices])
                 Thetas = Thetas.at[l].set(val)
             
             # Ensure Thetas are real (overlap integrals are real)

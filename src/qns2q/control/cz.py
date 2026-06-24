@@ -752,13 +752,16 @@ def calculate_cz_fidelity(I_matrix, J, M, dc_12):
                 idx_i = i + 1
                 idx_j = j + 1
 
-                # Second-cumulant decay coefficient. Mirrors calculate_idling_fidelity
-                # (id_optimize.py): the per-channel weight is
-                #   -1/2 * (sgn(O, a, 0) - 1) * I_{a,b},  summed over a, b in {1, 2, 12}.
-                # I_matrix is the (1/2pi)-normalized overlap returned by
-                # evaluate_overlap_comb, so it enters directly (no extra factor of 2),
-                # and every (a, b) pair contributes (no gating by sgn(O, a, b)).
-                coeff = -0.5 * (sgn(Oi, idx_i, 0) - 1.0)
+                # Second-cumulant decay coefficient (paper Eq. c2_spectra, corrected
+                # both-index parity). Mirrors calculate_idling_fidelity: with the
+                # anticommutation flag c_a = (1 - sgn(O, a, 0))/2 in {0, 1}, a pair
+                # (a, b) contributes only when O anticommutes with BOTH Z_a and Z_b,
+                # carrying weight 1/2 c_a c_b on the bare overlap I_{a,b} (the 1/2 is
+                # the dephasing-convention factor). I_matrix is the (1/2pi)-normalized
+                # overlap from evaluate_overlap_comb (bare, no 1/2 folded in).
+                c_a = 0.5 * (1.0 - sgn(Oi, idx_i, 0))
+                c_b = 0.5 * (1.0 - sgn(Oi, idx_j, 0))
+                coeff = 0.5 * c_a * c_b
 
                 val += coeff * I_matrix[idx_i, idx_j] * (z2q_diag[idx_i] * z2q_diag[idx_j])
 
