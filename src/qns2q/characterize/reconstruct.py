@@ -212,11 +212,20 @@ class SpectraReconConfig:
     # Fold the deterministic comb-inversion systematic into the quoted error bars
     # (see characterize.systematics). True for honest, n_shots-independent error bars.
     compute_systematic: bool = True
-    # Bias-corrected unfolding: subtract the SELF-CONSISTENT comb-inversion bias
-    # (forward model built from the reconstructed spectra alone -- no ground-truth
-    # knowledge, so it is experimentally legitimate) and quote the iteration
-    # residual as the remaining systematic. Two fixed-point iterations.
-    unfold_bias: bool = True
+    # Bias-corrected unfolding (OFF by default): subtract the SELF-CONSISTENT
+    # comb-inversion bias (forward model built from the reconstructed spectra
+    # alone -- no ground-truth knowledge) and quote the iteration residual as the
+    # remaining systematic. Disabled because the high-k cross-spectra (S_1_12,
+    # S_2_12) inversion bias is dominated by out-of-band aliasing from the
+    # [w_max, 2 w_max] band, which the blind self-consistent tail extrapolation
+    # cannot capture: the unfold then applies ~no correction there yet quotes a
+    # ~zero residual, under-covering the true bias ~10x (sub-nano bars -> spurious
+    # 4-sigma teeth; V10-QNS-BARFIX-0624). With unfold off, add_systematic_errors
+    # folds the EXACT forward-model comb systematic into the bars -- the method
+    # described in the paper (App. qns_sim) -- giving correct coverage (max pull
+    # ~2 sigma across all six spectra). Re-enable only with a cross-spectra-aware
+    # self-consistent model that captures the out-of-band weight.
+    unfold_bias: bool = False
     # Fraction of the APPLIED correction conservatively retained as residual
     # systematic (standard unfolding practice: the self-consistent model is
     # built from noisy points, so the fixed-point increment alone under-quotes
