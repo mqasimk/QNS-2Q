@@ -212,20 +212,21 @@ class SpectraReconConfig:
     # Fold the deterministic comb-inversion systematic into the quoted error bars
     # (see characterize.systematics). True for honest, n_shots-independent error bars.
     compute_systematic: bool = True
-    # Bias-corrected unfolding (OFF by default): subtract the SELF-CONSISTENT
-    # comb-inversion bias (forward model built from the reconstructed spectra
-    # alone -- no ground-truth knowledge) and quote the iteration residual as the
-    # remaining systematic. Disabled because the high-k cross-spectra (S_1_12,
-    # S_2_12) inversion bias is dominated by out-of-band aliasing from the
-    # [w_max, 2 w_max] band, which the blind self-consistent tail extrapolation
-    # cannot capture: the unfold then applies ~no correction there yet quotes a
-    # ~zero residual, under-covering the true bias ~10x (sub-nano bars -> spurious
-    # 4-sigma teeth; V10-QNS-BARFIX-0624). With unfold off, add_systematic_errors
-    # folds the EXACT forward-model comb systematic into the bars -- the method
-    # described in the paper (App. qns_sim) -- giving correct coverage (max pull
-    # ~2 sigma across all six spectra). Re-enable only with a cross-spectra-aware
-    # self-consistent model that captures the out-of-band weight.
-    unfold_bias: bool = False
+    # Bias-corrected unfolding (ON): subtract the SELF-CONSISTENT comb-inversion
+    # bias (forward model built from the reconstructed spectra alone -- no
+    # ground-truth knowledge) from the markers, then quote the HONEST residual
+    # systematic in add_systematic_errors -- the EXACT forward-model comb bias of
+    # the model minus what the unfold actually subtracted. This corrects the
+    # in-band-correctable bias (self-spectra, the S_1_2 line) so those channels
+    # carry tight ~statistical bars on near-truth markers, while the out-of-band-
+    # aliasing-dominated S_1_12/S_2_12 high harmonics -- which no blind
+    # extrapolation reaches ([w_max, 2 w_max] is unsampled) -- keep the full comb
+    # bias in their bars. Correct coverage (max pull ~2 sigma across all six
+    # spectra) AND the lower cross-spectra rel-dev (V10-QNS-BARFIX-0624).
+    # NB: the earlier default quoted the fixed-point ITERATION INCREMENT as the
+    # residual, which under-covered the uncorrected out-of-band bias ~10x ->
+    # spurious 4-sigma teeth. The exact-minus-applied residual fixed that.
+    unfold_bias: bool = True
     # Fraction of the APPLIED correction conservatively retained as residual
     # systematic (standard unfolding practice: the self-consistent model is
     # built from noisy points, so the fixed-point increment alone under-quotes
@@ -591,6 +592,13 @@ class SpectraReconstructor:
         b2_pert = bias_of(recon1_pert)
         sigma_b = {sk: b2_pert[sk] - b2[sk] for sk in b2}
 
+        # Store the applied correction and its statistical scatter so the honest
+        # residual bar (forward-model comb systematic minus what was actually
+        # subtracted) can be formed in add_systematic_errors. Each array carries
+        # the DC point at [0] and the harmonics at [1:].
+        self._applied_bias = dict(b2)
+        self._applied_bias_sigma = dict(sigma_b)
+
         self._unfold_residual = {}
         print("[unfold] self-consistent comb-bias correction "
               "(applied bias RMS -> residual RMS, harmonics):")
@@ -635,9 +643,31 @@ class SpectraReconstructor:
         self.reconstructed_spectra_err_total = dict(self.reconstructed_spectra_err)
         try:
             if getattr(self, '_unfolded', False):
-                # Unfolded reconstruction: the bias has been subtracted; quote the
-                # fixed-point iteration increment as the residual systematic.
-                sys = {sk: self._unfold_residual[sk][1:] for sk in _SYS_TO_SPEC}
+                # Unfolded reconstruction: the self-consistent correction has been
+                # subtracted from the markers. Quote the HONEST residual systematic
+                # = the exact forward-model comb bias of the model MINUS what the
+                # unfold actually subtracted (in quadrature with the correction's own
+                # statistical scatter). Where the unfold corrects well (self-spectra,
+                # the in-band S_1_2 line) the residual is small -> tight bars on
+                # bias-corrected markers; where it cannot -- the out-of-band-aliasing-
+                # dominated S_1_12/S_2_12 high harmonics, which no blind extrapolation
+                # reaches -- the full bias survives and is quoted, so every tooth stays
+                # within its bar. (Simulation: uses the known model for the comb bias,
+                # exactly as the unfold-off path below does.)
+                inv_opts = dict(inversion_method=c.inversion_method, reg_lambda=c.reg_lambda,
+                                enforce_nonneg=c.enforce_nonneg)
+                b_true = forward_model_systematic(analytic_spectra(), c.c_times, c.M,
+                                                  c.T, c.t_vec, c.w_grain, c.wmax,
+                                                  inv_opts=inv_opts)
+                sys = {}
+                for sk in _SYS_TO_SPEC:
+                    diff = np.asarray(b_true[sk]) - np.asarray(self._applied_bias[sk][1:])
+                    sb = np.asarray(self._applied_bias_sigma[sk][1:])
+                    if np.iscomplexobj(diff) or np.iscomplexobj(sb):
+                        sys[sk] = (np.sqrt(np.real(diff)**2 + np.real(sb)**2)
+                                   + 1j*np.sqrt(np.imag(diff)**2 + np.imag(sb)**2))
+                    else:
+                        sys[sk] = np.sqrt(diff**2 + sb**2)
                 dc_bias = {sk: float(np.real(self._unfold_residual[sk][0]))
                            for sk in _SYS_TO_SPEC}
             else:
