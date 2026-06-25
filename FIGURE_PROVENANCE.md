@@ -15,7 +15,7 @@ holdover and were deleted):
 
 | Folder | Holds |
 |---|---|
-| `DraftRun_NoSPAM_showcase_cap` | the 128k characterization + both gates' optimization + margins + design ladder + storage panel (the bulk of the figures) |
+| `DraftRun_NoSPAM_showcase_cap` | the 256k characterization + both gates' optimization + margins + design ladder + storage panel (the bulk of the figures) |
 | `DraftRun_SPAM_showcase_reference` | SPAM arm: no-SPAM reference (64k) |
 | `DraftRun_SPAM_showcase_raw` | SPAM arm: unmitigated |
 | `DraftRun_SPAM_showcase_mitigated` | SPAM arm: mitigated |
@@ -46,7 +46,7 @@ paper copies are byte-identical renames:
 | Paper file | report fig | LaTeX |
 |---|---|---|
 | `showcase_model.pdf` | `fig_model_spectra.pdf` | the six-spectrum featured model |
-| `showcase_recon.pdf` | `fig_recon_capture.pdf` | blind 128k reconstruction vs truth |
+| `showcase_recon.pdf` | `fig_recon_capture.pdf` | blind 256k reconstruction vs truth |
 | `showcase_spam_arms.pdf` | `fig_spam_comparison.pdf` | three SPAM arms |
 | `showcase_design.pdf` | `fig_design_experiments.pdf` | knowledge-ladder + SPAM design (reads `design_numbers.npz`) |
 | `showcase_storage.pdf` | `fig_storage.pdf` | Bell-pair storage split (reads `storage_panel.npz`) |

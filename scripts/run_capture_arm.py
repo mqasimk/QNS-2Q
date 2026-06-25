@@ -1,7 +1,8 @@
 """SHOWCASE-0612 capture-grade NoSPAM arm (stage 1 + stage 2).
 
-Reproduces the 2026-06-12 capture battery exactly; the config is the one
-recovered from the cap arm's params.npz: 128k shots per estimator, M=16 DC
+Reproduces the 2026-06-12 capture battery, now at 256k shots per estimator
+(doubled from the recovered 128k; see the VISUAL-PARITY-0616 note below). The
+rest of the config is the one recovered from the cap arm's params.npz: M=16 DC
 sweeps with the harmonic sweeps extended to 160*16 = 2560 tau, t_grain=1600,
 truncate=20, w_grain=350, midpoint synthesis grid. Records the per-shot phase
 dataset alongside (phases.npz) and runs the reconstruction in the same
