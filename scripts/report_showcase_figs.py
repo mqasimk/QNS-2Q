@@ -103,14 +103,14 @@ def fig_model_spectra():
     axs[0, 2].annotate('visible only to\ntwo-qubit QNS',
                        xy=(0.42, 0.78), xycoords='axes fraction', fontsize=8,
                        color=C_ROB)
-    # the shared-TLF line is common-mode: it sits on S11/S22 (already marked) AND
+    # the shared-TLF line is correlated: it sits on S11/S22 (already marked) AND
     # in Re S_1_2 -- the cross-channel peak the decoupling train passes.
     sh_c = pri['S12'][0][0]
     axs[1, 0].axvline(sh_c, color=C_MIT, lw=1.1, alpha=0.9,
-                      label='shared-TLF line (common-mode: on $S_{1,1},S_{2,2}$\nand $\\mathrm{Re}\\,S_{1,2}$)')
-    axs[1, 0].annotate('common-mode slow carrier\n+ shared-TLF line\n(decide which Bell\ncoherence an idle protects)',
-                       xy=(0.34, 0.62), xycoords='axes fraction', fontsize=7.0,
-                       color=C_REF)
+                      label='shared-TLF line (correlated: on $S_{1,1},S_{2,2}$\nand $\\mathrm{Re}\\,S_{1,2}$)')
+    axs[1, 0].annotate('slow correlated noise\n+ shared-TLF line\n(decide which Bell\ncoherence an idle protects)',
+                       xy=(0.97, 0.93), xycoords='axes fraction', fontsize=6.5,
+                       ha='right', va='top', color=C_REF)
     for ax in axs[1]:
         ax.set_xlabel(r"$\omega\tau$")
     for ax in axs[:, 0]:
@@ -529,9 +529,9 @@ def fig_design():
 
 def fig_storage():
     """Entanglement-storage panel: holding Phi+ through the idle. The
-    collective-mode/differential-mode implementations of the SAME CPMG train
-    are indistinguishable to single-qubit QNS and in average fidelity; the
-    measured Re S_1_2 > 0 dictates the differential mode. Data:
+    aligned (y2=+y1) and opposed (y2=-y1) implementations of the SAME CPMG
+    train are indistinguishable to single-qubit QNS and in average fidelity;
+    the measured Re S_1_2 > 0 makes the opposed train protect Phi+. Data:
     storage_panel.npz."""
     d = np.load(os.path.join(RUN_GATES, "storage_panel.npz"))
     tg = np.asarray(d['Tg'], dtype=float)
@@ -539,17 +539,17 @@ def fig_storage():
     ax.plot(tg, d['fid_phi'], ':', color=C_RAW, marker='v', ms=4,
             label='free induction, $\\Phi^+$')
     ax.plot(tg, d['fid_psi'], '-.', color=C_RAW, marker='^', ms=4, mfc='none',
-            label='free induction, $\\Psi^+$ (DFS-protected)')
+            label='free induction, $\\Psi^+$ (protected)')
     ax.plot(tg, d['sync_phi'], '-', color=C_MIT, marker='o', ms=4,
-            label='collective-mode decoupling\n($\\Phi^+$, synchronized pulses)')
+            label='aligned pulses, $\\Phi^+$\n($y_2=+y_1$)')
     ax.plot(tg, d['anti_phi'], '-', color=C_REF, marker='s', ms=4,
-            label='differential-mode decoupling\n($\\Phi^+$, frames anti-aligned)')
+            label='opposed pulses, $\\Phi^+$\n($y_2=-y_1$)')
     ax.plot(tg, d['nt_phi'], '--', color=C_ROB, marker='D', ms=3.5,
             label='blind NT idle (avg.-fidelity winner)')
     ax.plot(tg, d['sync_phi_pred'], 'o', ms=7, mfc='none', color=C_MIT,
-            alpha=0.7, label='predicted (blind recon.), collective')
+            alpha=0.7, label='predicted (blind recon.), aligned')
     ax.plot(tg, d['anti_phi_pred'], 's', ms=7, mfc='none', color=C_REF,
-            alpha=0.7, label='predicted (blind recon.), differential')
+            alpha=0.7, label='predicted (blind recon.), opposed')
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_xlabel(r"storage time $T_G/\tau$")
