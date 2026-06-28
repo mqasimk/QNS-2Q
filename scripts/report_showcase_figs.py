@@ -108,9 +108,6 @@ def fig_model_spectra():
     sh_c = pri['S12'][0][0]
     axs[1, 0].axvline(sh_c, color=C_MIT, lw=1.1, alpha=0.9,
                       label='shared-TLF line (correlated: on $S_{1,1},S_{2,2}$\nand $\\mathrm{Re}\\,S_{1,2}$)')
-    axs[1, 0].annotate('slow correlated noise\n+ shared-TLF line\n(decide which Bell\ncoherence an idle protects)',
-                       xy=(0.97, 0.93), xycoords='axes fraction', fontsize=6.5,
-                       ha='right', va='top', color=C_REF)
     for ax in axs[1]:
         ax.set_xlabel(r"$\omega\tau$")
     for ax in axs[:, 0]:
@@ -461,7 +458,11 @@ def _arms_bars(ax, arms, title, ylabel=r"$1-F_\mathrm{pro}$ at $T_G=320\tau$"):
     ax.set_xticks(x, [pretty[a] for a in order], fontsize=7.5)
     ax.set_ylabel(ylabel)
     ax.set_title(title, fontsize=9.5)
-    ax.legend(frameon=False, fontsize=7.5)
+    # Headroom above the (near-equal-height) predicted bars and their +x%%
+    # annotations, so the legend sits clear; loc='best' otherwise lands on top
+    # of the right-column bars.
+    ax.set_ylim(top=max(ncv) * 1.7)
+    ax.legend(frameon=False, fontsize=7.5, loc='upper left')
     ax.grid(True, alpha=0.25, axis='y')
 
 
