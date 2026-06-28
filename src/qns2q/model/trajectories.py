@@ -323,8 +323,8 @@ def make_channel_trajs(noise_mats, key):
     if has_zz:
         zeta_12 = zeta_12 + comp(5, ks[10], ks[11])
     if has_qs:
-        # qs_c: SAME draws (ks[12:14]) through both carrier filters ->
-        # common-mode; the zeta_12 difference coupling never sees the carrier.
+        # qs_c: SAME draws (ks[12:14]) through both qubits' slow-noise filters
+        # -> correlated; the zeta_12 difference coupling never sees it.
         zeta_1 = zeta_1 + _QS_SH*comp(6, ks[12], ks[13]) \
             + _QS_LOC*comp(6, ks[14], ks[15])
         zeta_2 = zeta_2 + _QS_SH*comp(7, ks[12], ks[13]) \

@@ -6,11 +6,11 @@ produces it. Rewritten 2026-06-16 after the repo was leaned down to the machiner
 regenerates the paper results (`CLEANUP-0616`); the pre-cleanup history of this file is in
 git.
 
-## One regime, four run folders
+## One regime, five run folders
 
 Everything the paper shows is the **showcase** regime (`QNS2Q_REGIME=showcase`), the
-June-13 featured model with the shared common-mode TLF in `Re S_{1,2}`. All paper data
-lives in four run folders (all other `DraftRun_*`/`GateRun_*`/`backup_*` dirs were
+June-13 featured model with the shared TLF in `Re S_{1,2}`. All paper data
+lives in five run folders (all other `DraftRun_*`/`GateRun_*`/`backup_*` dirs were
 holdover and were deleted):
 
 | Folder | Holds |
@@ -19,6 +19,7 @@ holdover and were deleted):
 | `DraftRun_SPAM_showcase_reference` | SPAM arm: no-SPAM reference (64k) |
 | `DraftRun_SPAM_showcase_raw` | SPAM arm: unmitigated |
 | `DraftRun_SPAM_showcase_mitigated` | SPAM arm: mitigated |
+| `DraftRun_SPAM_showcase_robust` | SPAM arm: SPAM-robust (4 spectra, M-regression) |
 | `DraftRun_NoSPAM_showcase_cap_diag3`, `…_robust4` | knowledge-ladder rungs feeding `design_numbers.npz` only |
 
 These folders are tracked as **small summary npz only**; the multi-GB raw-trajectory
@@ -40,14 +41,14 @@ SHOWCASE_FIGS_DIR=reports/showcase_0613/figs python scripts/report_showcase_figs
 
 Reads `DraftRun_NoSPAM_showcase_cap/{specs,optimization_data_all_M_cap,margin_band_*_cap,
 design_numbers,storage_panel}.npz` + `plotting_data/plotting_data_cz_v2_cap*.npz` and the
-three `DraftRun_SPAM_showcase_*/specs.npz`. Emits to `reports/showcase_0613/figs/`; the
+four `DraftRun_SPAM_showcase_*/specs.npz`. Emits to `reports/showcase_0613/figs/`; the
 paper copies are byte-identical renames:
 
 | Paper file | report fig | LaTeX |
 |---|---|---|
 | `showcase_model.pdf` | `fig_model_spectra.pdf` | the six-spectrum featured model |
 | `showcase_recon.pdf` | `fig_recon_capture.pdf` | blind 256k reconstruction vs truth |
-| `showcase_spam_arms.pdf` | `fig_spam_comparison.pdf` | three SPAM arms |
+| `showcase_spam_arms.pdf` | `fig_spam_comparison.pdf` | four SPAM arms (reference, raw, mitigated, robust) |
 | `showcase_design.pdf` | `fig_design_experiments.pdf` | knowledge-ladder + SPAM design (reads `design_numbers.npz`) |
 | `showcase_storage.pdf` | `fig_storage.pdf` | Bell-pair storage split (reads `storage_panel.npz`) |
 | `showcase_gates.pdf` | `fig_gates.pdf` | both gates' infidelity + margin bands |
