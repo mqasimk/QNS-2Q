@@ -39,7 +39,7 @@ prun() {  # prun N <stage-label>   (commands on stdin, one per line)
     _ {}
 }
 
-echo "=== [1/8] SPAM arms (64k fine; reference records, raw/mitigated replay, robust synthesizes) ==="
+echo "=== [1/8] SPAM arms (256k fine; reference records, raw/mitigated replay, robust synthesizes) ==="
 # The reference --record and robust arms are the synthesis-heavy stages (they
 # build the noise matrices via make_noise_mat_arr); each runs alone, so hand it
 # (nearly) the whole GPU. The 0.30 global cap is sized for GATE_JOBS parallel gate

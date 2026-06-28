@@ -16,7 +16,7 @@ holdover and were deleted):
 | Folder | Holds |
 |---|---|
 | `DraftRun_NoSPAM_showcase_cap` | the 256k characterization + both gates' optimization + margins + design ladder + storage panel (the bulk of the figures) |
-| `DraftRun_SPAM_showcase_reference` | SPAM arm: no-SPAM reference (64k) |
+| `DraftRun_SPAM_showcase_reference` | SPAM arm: no-SPAM reference (256k) |
 | `DraftRun_SPAM_showcase_raw` | SPAM arm: unmitigated |
 | `DraftRun_SPAM_showcase_mitigated` | SPAM arm: mitigated |
 | `DraftRun_SPAM_showcase_robust` | SPAM arm: SPAM-robust (4 spectra, M-regression) |

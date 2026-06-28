@@ -87,9 +87,12 @@ def build_config(protocol: str, reduced: bool, strong: bool = False,
     elif fine:
         # Fine preset (2026-06-10): for use with --record/--replay. The
         # filter-vector phase solver makes shots nearly free, so this restores
-        # the full grids AND takes 8x the tuned shots -- statistical bars
-        # tighten ~2.8x vs --tuned, sqrt(16)=4x vs --medium.
-        common.update(dict(t_grain=1000, w_grain=500, truncate=20, n_shots=64000))
+        # the full grids AND takes the paper-quality shot count.
+        # SHOT-PARITY-0628: 64k -> 256k so every showcase arm shares the
+        # NoSPAM capture arm's shot budget (run_capture_arm.py, n_shots=256000);
+        # the paper now quotes a single shot count across all figures. Bars
+        # tighten 2x vs the old 64k fine preset.
+        common.update(dict(t_grain=1000, w_grain=500, truncate=20, n_shots=256000))
     return QNSExperimentConfig(**common)
 
 
