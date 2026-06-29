@@ -28,7 +28,7 @@ needed for every figure (incl. the formerly-untracked `design_numbers.npz`,
 `storage_panel.npz`, and the `*_short`/`_diag3`/`_robust4`/`_rung_d` summaries) are
 whitelisted in `.gitignore` and committed, so a fresh clone regenerates all figures.
 
-## The 9 figures
+## The 8 figures
 
 Run from the repo root with the venv active and `QNS2Q_REGIME=showcase`.
 
@@ -53,18 +53,22 @@ paper copies are byte-identical renames:
 | `showcase_storage.pdf` | `fig_storage.pdf` | Bell-pair storage split (reads `storage_panel.npz`) |
 | `showcase_gates.pdf` | `fig_gates.pdf` | both gates' infidelity + margin bands |
 
-### Three standalone figures
+### Two standalone figures
 
 | Paper file | Command | Notes |
 |---|---|---|
-| `C_1_0_MT_vs_M.pdf` | `python scripts/run_single_qubit.py` | self-contained seeded single-qubit SPAM-robustness sim; no run folder needed (writes `C_1_0_MT_1_vs_M_formal.pdf`, manually renamed) |
-| `spectral_reconstruction_cross_pub.pdf` | `python scripts/run_reconstruct.py --folder DraftRun_NoSPAM_showcase_cap` | appendix cross-spectra validation; faithful regeneration (matplotlib stamps a fresh timestamp, so not byte-identical to the shipped PDF) |
+| `C_1_0_MT_vs_M.pdf` | `python scripts/run_single_qubit.py` | self-contained seeded single-qubit SPAM-robustness sim; no run folder needed (writes `C_1_0_MT_vs_M.pdf` directly) |
 | `showcase_pulse_sequences.pdf` | `python scripts/run_cz_pulse_plot.py --folder DraftRun_NoSPAM_showcase_cap --tag _cap` | best-known vs best-NT CZ pulse comparison; faithful regeneration |
 
-The `--folder`/`--tag` arguments were added in `CLEANUP-0616` so these two stock entry
-points target the `_cap` folder/filenames directly (the showcase data carries a vestigial
-`_cap` filename tag). `run_reconstruct.py` re-saves `specs.npz` into the target folder, so
-point it at a scratch copy if you want to preserve the committed `specs.npz`.
+The `--folder`/`--tag` arguments were added in `CLEANUP-0616` so these stock entry points
+target the `_cap` folder/filenames directly (the showcase data carries a vestigial `_cap`
+filename tag).
+
+`run_reconstruct.py` no longer produces a paper figure — the appendix cross-spectra
+validation panel (`spectral_reconstruction_cross_pub.pdf`) was dropped from `main_v10.tex`.
+It is kept as a load-bearing utility because it re-saves `specs.npz` into the target folder
+(point it at a scratch copy if you want to preserve the committed `specs.npz`) and remains a
+useful cross-spectra sanity check.
 
 ## Re-deriving the design ladder from scratch
 
@@ -78,6 +82,13 @@ python scripts/harvest_design_numbers.py    # -> DraftRun_NoSPAM_showcase_cap/de
 This consumes the `_rung_c`, `_diag3`, `_robust4`, and per-SPAM-arm `_rung_d` summaries
 (all whitelisted/committed). `storage_panel.npz` is rebuilt with
 `python scripts/showcase_storage_panel.py`.
+
+**Robust SPAM arm — intentional design-data omission.** The `reference`, `raw`, and
+`mitigated` arms carry `_rung_d`/`_rung_d_idle` gate-design summaries; the `robust` arm
+deliberately does **not**. Its reconstruction (`specs.npz`) still feeds the robust curve in
+`showcase_spam_arms.pdf`, but it is by design not carried through to gate design, so
+`harvest_design_numbers.py` skips it (the `try/except FileNotFoundError` is expected, not an
+error) and the robust bar is intentionally absent from `showcase_design.pdf` panels (b)/(d).
 
 ## Re-running characterization
 

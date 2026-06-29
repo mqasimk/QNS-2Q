@@ -1,8 +1,8 @@
 """Solve the amplitude constants for the SHOWCASE noise landscape (SHOWCASE-0612).
 
 Self-contained (does NOT import qns2q.noise.spectra -- it derives the constants
-that get baked INTO that module's `showcase` regime branch). Companion to
-scripts/calibrate_noise_model.py, which owns the anchored bland/featured classes.
+that get baked INTO that module's `showcase` regime branch). The anchored
+bland/featured classes were calibrated by the now-retired calibrate_noise_model.py.
 
 Design (paper-repo REVIEW_TRACKER.md, REGIME-0612 post-meeting direction):
 an engineered "trap" landscape -- contrived contrast, measured feature TYPES --
@@ -43,8 +43,8 @@ the measured comb band [0.039, 0.785].
 
 The proxy table below evaluates first-order chi for the actual cddn() pulse-time
 generator plus uniform (CPMG-n) trains on the analytic landscape -- a fast
-stand-in for the real library/optimizer used to pre-tune heights before the
-gates_helper probe runs.
+stand-in for the real library/optimizer used to pre-tune the noise-landscape
+heights.
 """
 import numpy as np
 

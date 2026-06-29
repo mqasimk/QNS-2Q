@@ -20,7 +20,7 @@ This mirrors the susceptibility model validated in Yoneda et al., Nat. Phys. 19,
 1793 (2023), which measured all six auto-/cross-PSDs of (nu_A, nu_B, J) in a
 Si/SiGe qubit pair: the (+, +, -) sign pattern of the three coherences is
 impossible with a single fully-shared source. Achieved in-band values here
-(scripts/calibrate_noise_model.py): |c_12| = 0.67, c_1,12 = 0.28+0.50j,
+(calibration script retired -- see git history): |c_12| = 0.67, c_1,12 = 0.28+0.50j,
 c_2,12 = -0.43+0.44j at w~ = 0.35 [measured at <~ Hz: 0.7 / +0.8 / -(0.3-0.6)].
 
 Spectral shapes (broken-power-law exponents measured in-band, 10 kHz-1 MHz):
@@ -81,7 +81,7 @@ def Gauss(w, w0, sig):
     return 0.5*(jnp.exp(-(w-w0)**2/(2*sig**2))+jnp.exp(-(w+w0)**2/(2*sig**2)))
 
 
-# --- Calibrated constants (solved by scripts/calibrate_noise_model.py) -----------
+# --- Calibrated constants (bland/featured; calibration script in git history) ----
 # Targets and provenance: NOISE_MODEL_SPEC.md sections 3-5.
 
 W_IR = 0.02                      # IR cutoff [C, constrained by the DC protocol]

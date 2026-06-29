@@ -299,7 +299,7 @@ class SpectraReconConfig:
                 print(f"[reconstruct] WARNING: run folder '{self.data_folder}' was "
                       f"generated with tau={tau_run:g} (SI-era units). Theory "
                       f"overlays/systematics assume tau-unit data -- regenerate "
-                      f"Stage 1 (scripts/run_experiments.py) for this folder.")
+                      f"Stage 1 (scripts/run_capture_arm.py) for this folder.")
 
         # Noise-synthesis half-band override (the simulated world spans twice
         # this; 0.0 = legacy formula wmax). Needed by the echo-DC mirror so it

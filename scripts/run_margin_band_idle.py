@@ -29,8 +29,8 @@ from run_margin_band import draw_specs
 
 def load_best_over_M(opt_path):
     """(Tg, kind, label, M, (pt1, pt2)) for the best-over-M winner at each
-    gate time, selected on the stored (true-benchmark) infidelities exactly
-    like viz.id_plots.generate_best_M_plot and the report table."""
+    gate time, selected on the stored (true-benchmark) infidelities, like
+    the report table."""
     import jax.numpy as jnp
     d = np.load(opt_path, allow_pickle=True)
     M_values = [int(m) for m in d['M_values']]

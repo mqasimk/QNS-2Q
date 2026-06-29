@@ -300,34 +300,6 @@ def test_smat_self_only_drops_zz_and_crosses(builder):
         assert np.all(np.asarray(SMat[c, r]) == 0)
 
 
-def test_smoothfit_recovers_powerlaw_and_caps_at_dc():
-    from qns2q.control.tails import smoothfit_curve
-    wk = np.concatenate([[0.0], np.linspace(0.05, 0.8, 20)])
-    A_true, p_true, dc = 5e-6, 0.9, 3e-4
-    comp = np.concatenate([[dc], A_true * wk[1:] ** (-p_true)])
-    w_dense = jnp.linspace(0.0, 2.0, 1000)
-    out = np.asarray(smoothfit_curve(w_dense, wk, comp, dc_val=dc))
-    mid = (np.asarray(w_dense) > 0.1) & (np.asarray(w_dense) < 1.5)
-    expect = A_true * np.asarray(w_dense)[mid] ** (-p_true)
-    assert np.allclose(out[mid], expect, rtol=1e-6)
-    assert np.isclose(out[0], dc, rtol=1e-12)        # capped, not divergent
-
-
-def test_smoothfit_is_line_blind():
-    """A narrow line on a flat background must NOT survive the smooth fit: the
-    fitted curve at the line center stays near the background level (within
-    the line's small pull on the global fit), nowhere near the line peak."""
-    from qns2q.control.tails import smoothfit_curve
-    wk = np.linspace(0.04, 0.8, 20)
-    bg = 1e-7 * (wk / 0.3) ** (-0.9)
-    line = 2e-5 * np.exp(-(wk - 0.204) ** 2 / (2 * 0.022 ** 2))
-    out = np.asarray(smoothfit_curve(jnp.array([0.204]), wk, bg + line,
-                                     dc_val=1e-4))
-    bg_at_line = 1e-7 * (0.204 / 0.3) ** (-0.9)
-    assert out[0] < 10 * bg_at_line, "smooth fit should average the line away"
-    assert out[0] < 0.05 * 2e-5, "smooth fit must not track the line peak"
-
-
 def test_min_sep_prunes_library_and_caps_density():
     """The pulse library under a min-sep floor: every spacing >= min_sep, and
     the deep-nesting CDD orders that violate it are pruned."""

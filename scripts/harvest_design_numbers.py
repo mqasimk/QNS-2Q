@@ -34,6 +34,10 @@ from qns2q.control import idle as idmod
 
 ROOT = project_root()
 CAP = "DraftRun_NoSPAM_showcase_cap"
+# The robust arm intentionally carries NO rung_d gate-design data -- only its
+# reconstruction (specs.npz) feeds showcase_spam_arms.pdf. The rung_d loops below
+# SKIP it by design (the FileNotFoundError is expected), so it has no bar in the
+# showcase_design.pdf SPAM-arm panels (b)/(d).
 ARMS = ("reference", "raw", "mitigated", "robust")
 CZ_TG = 320.0
 ID_TGS = (640.0, 10240.0)

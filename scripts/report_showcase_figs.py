@@ -383,53 +383,6 @@ def fig_gates():
     plt.close(fig)
 
 
-def _ladder_panel(ax, entries, title):
-    """The ablation ladder: every bar is the TRUE infidelity of the gate a
-    designer ends up with, given what they know about the noise."""
-    labels = [e[0] for e in entries]
-    vals = [e[1] for e in entries]
-    cols = [e[2] for e in entries]
-    x = np.arange(len(entries))
-    ax.bar(x, vals, width=0.62, color=cols, alpha=0.88)
-    for xi, v in zip(x, vals):
-        ax.text(xi, v * 1.12, f"{v:.2e}", ha='center', fontsize=6.5)
-    ax.set_yscale('log')
-    ax.set_ylim(min(vals) / 2.2, max(vals) * 3.5)
-    ax.set_xticks(x, labels, fontsize=7)
-    ax.set_ylabel(r"true $1-F_\mathrm{pro}$")
-    ax.set_title(title, fontsize=9.5)
-    ax.grid(True, alpha=0.25, axis='y')
-
-
-def fig_design_experiments(ladder_cz, ladder_id=None, arms_cz=None,
-                           arms_id=None):
-    """ladder_*: list of (label, true_infidelity, color); arms_*: dict with
-    keys reference/raw/mitigated -> (known_true, nt_true, nt_char)."""
-    n_rows = 2 if ladder_id is not None else 1
-    fig, axs = plt.subplots(n_rows, 2, figsize=(9.6, 3.4 * n_rows),
-                            squeeze=False)
-    _ladder_panel(axs[0, 0], ladder_cz,
-                  "(a) entangling (CZ), $T_G=320\\tau$: the same device,\n"
-                  "five levels of noise knowledge")
-    if arms_cz:
-        _arms_bars(axs[0, 1], arms_cz,
-                   "(b) entangling (CZ): gates designed on the\n"
-                   "SPAM arms' reconstructions")
-    else:
-        axs[0, 1].set_axis_off()
-    if ladder_id is not None:
-        _ladder_panel(axs[1, 0], ladder_id,
-                      "(c) idle: the knowledge ladder")
-        if arms_id:
-            _arms_bars(axs[1, 1], arms_id, "(d) idle: SPAM-arm designs")
-        else:
-            axs[1, 1].set_axis_off()
-    fig.tight_layout()
-    fig.savefig(os.path.join(OUT, "fig_design_experiments.pdf"),
-                bbox_inches='tight')
-    plt.close(fig)
-
-
 def _arms_bars(ax, arms, title, ylabel=r"$1-F_\mathrm{pro}$ at $T_G=320\tau$"):
     # The SPAM story in one panel: the DESIGN is SPAM-invariant (best-NT TRUE
     # infidelity, dark bars, sits on the dashed line for every arm) while the

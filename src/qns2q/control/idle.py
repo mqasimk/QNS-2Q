@@ -33,7 +33,7 @@ import scipy.optimize
 
 from qns2q.noise.spectra import (S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12,
                                  MODEL_VERSION, line_priors)
-from qns2q.control.tails import tail_extend_interp_complex, smoothfit_curve
+from qns2q.control.tails import tail_extend_interp_complex
 from qns2q.control.padding import pad_targets, pad_count, pad_delays
 from qns2q.paths import run_folder, project_root
 
@@ -286,18 +286,13 @@ class Config:
                   "the analytic-model DC (legacy behavior). Regenerate Stage 2 "
                   "for a measured DC point.")
 
-        if self.spectral_model not in ('interp', 'selfconsistent', 'smoothfit'):
+        if self.spectral_model not in ('interp', 'selfconsistent'):
             raise ValueError(f"unknown spectral_model {self.spectral_model!r}")
         use_sc = (self.spectral_model == 'selfconsistent')
-        use_smooth = (self.spectral_model == 'smoothfit')
         if use_sc and self.use_simulated:
             raise ValueError("spectral_model='selfconsistent' models a "
                              "reconstructed comb; simulated_spectra.npz "
                              "already IS the analytic model")
-        if use_smooth:
-            print("[idle] spectral_model='smoothfit': LINE-BLIND characterized "
-                  "model (single power law through all teeth per self-"
-                  "spectrum; crosses interp) -- ablation rung (b)")
         if use_sc:
             # OPT-SPECTRAL-MODEL: each channel from the same line/tail/head-
             # aware model the unfold bias correction uses (characterize.
@@ -318,11 +313,6 @@ class Config:
             the last tooth either way -- control.tails / the sc model)."""
             if use_sc:
                 return jnp.asarray(np.asarray(sc_fns[key](w_np), dtype=complex))
-            if use_smooth and key in ("S11", "S22", "S1212"):
-                dc_val = (float(np.real(np.asarray(self.specs[key])[0]))
-                          if grid_has_dc else float(np.real(dc_func(w0)[0])))
-                return smoothfit_curve(self.w, self.wkqns, self.specs[key],
-                                       dc_val=dc_val).astype(jnp.complex128)
             interp = tail_extend_interp_complex(self.w, self.wkqns,
                                                 self.specs[key])
             if grid_has_dc:
@@ -1364,7 +1354,7 @@ def run_optimization_pipeline(config):
 
     # Note: min_gate_time (= pi/(4*Jmax)) is a CZ entangling-gate bound and is
     # not meaningful for the idling gate, so it is intentionally not saved here
-    # (MINGATE-METADATA). id_plots.py reads it only if present.
+    # (MINGATE-METADATA).
     save_dict = {
         'taxis': np.array(xaxis_known),
         'infs_known': np.array(yaxis_known),
@@ -1457,13 +1447,12 @@ if __name__ == "__main__":
                              "S112/S212, are auto-dropped from the "
                              "characterized model alone)")
     parser.add_argument('--spectral-model',
-                        choices=('interp', 'selfconsistent', 'smoothfit'),
+                        choices=('interp', 'selfconsistent'),
                         default='interp',
                         help="characterized-SMat construction: linear interp "
-                             "through the teeth (+tails); the unfold "
+                             "through the teeth (+tails); or the unfold "
                              "model's line/tail/head-aware spectra "
-                             "(OPT-SPECTRAL-MODEL); or the LINE-BLIND single "
-                             "power law (ablation rung (b), SHOWCASE-0612)")
+                             "(OPT-SPECTRAL-MODEL)")
     parser.add_argument('--min-sep', type=float, default=1.0,
                         help="minimum pulse separation in units of tau "
                              "(SHOWCASE-0612 control-bandwidth scenario; "

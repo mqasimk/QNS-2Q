@@ -62,7 +62,6 @@ QNS-2Q/
 │   ├── characterize/                # QNS arm: experiments -> reconstruction
 │   │   ├── experiments.py           # Stage 1: QNS experiment simulation
 │   │   ├── single_qubit.py          # single-qubit QNS variant (the C_1_0_MT_vs_M figure)
-│   │   ├── dc_ramsey.py             # DC-spectrum Ramsey validator
 │   │   ├── inversion.py             # least-squares spectral inversion + filter functions
 │   │   ├── reconstruct.py           # Stage 2: spectral reconstruction + reconstruction figures
 │   │   ├── spam.py                  # SPAM calibration / estimation / robust estimators
@@ -71,14 +70,13 @@ QNS-2Q/
 │   │   ├── cz.py                    # Stage 3a: CZ gate optimization
 │   │   ├── idle.py                  # Stage 3b: idle / dynamical-decoupling optimization
 │   │   └── tails.py, padding.py     # spectral-tail model + pulse-sequence padding
-│   └── viz/                         # plotting: cz_plots, id_plots, cz_pulse_plot, qns_plots
-├── scripts/                         # thin per-stage entry points, all run from the repo root
-│   ├── run_experiments.py  run_reconstruct.py  run_cz.py  run_idle.py
-│   ├── run_spam_experiments.py  run_spam_reconstruct.py  run_capture_arm.py
+│   └── viz/cz_pulse_plot.py        # CZ pulse-sequence figure (showcase_pulse_sequences.pdf)
+├── scripts/                         # per-stage entry points, all run from the repo root
+│   ├── run_capture_arm.py  run_spam_experiments.py  run_spam_reconstruct.py  run_reconstruct.py
 │   ├── run_margin_band.py  run_margin_band_idle.py  harvest_design_numbers.py
-│   ├── run_{cz,id,qns}_plots.py  run_cz_pulse_plot.py  run_single_qubit.py  run_dc_ramsey.py
-│   ├── calibrate_noise_model.py  calibrate_showcase.py  gates_helper.py
+│   ├── run_cz_pulse_plot.py  run_single_qubit.py  calibrate_showcase.py
 │   └── report_showcase_figs.py  showcase_storage_panel.py   # the paper's showcase figures
+│       # CZ/idle optimizers run as: PYTHONPATH=src python -m qns2q.control.{cz,idle}
 ├── tests/                           # pytest suite (run: pytest tests/)
 ├── reports/showcase_0613/          # the paper's showcase report + its figure PDFs
 └── DraftRun_{NoSPAM,SPAM}_showcase*/   # showcase run data (summary .npz) feeding the figures
@@ -88,44 +86,35 @@ QNS-2Q/
 
 ## Pipeline Overview
 
-The simulation pipeline has four stages. Each stage reads outputs from the previous stage and produces data files and/or figures.
+The simulation pipeline has four stages; each reads the previous stage's outputs.
 
 ```text
-┌──────────────────────────┐     ┌──────────────────────────┐
-│  Stage 1: QNS Experiments │────>│  Stage 2: Reconstruct     │
-│  scripts/run_experiments  │     │  scripts/run_reconstruct  │
-│  (run_capture_arm /        │     │                           │
-│   run_spam_experiments)    │     │  Output: specs.npz        │
-│  Output: results, params   │     │          recon figures    │
-└──────────────────────────┘     └──────────┬───────────────┘
-                                            │
-                          ┌─────────────────┴────────────────┐
-                          │                                  │
-                ┌─────────▼──────────┐          ┌───────────▼─────────┐
-                │  Stage 3a: CZ gate │          │  Stage 3b: idle/DD   │
-                │  scripts/run_cz    │          │  scripts/run_idle    │
-                │  Output:           │          │  Output:             │
-                │  plotting_data_cz  │          │  optimization_data_M │
-                └─────────┬──────────┘          └───────────┬─────────┘
-                          │   (run_margin_band, harvest_design_numbers,
-                          │    showcase_storage_panel build the bands/ladder/panel)
-                          └─────────────────┬────────────────┘
-                                            │
-                          ┌─────────────────▼──────────────────┐
-                          │  Stage 4: Figures                   │
-                          │  scripts/report_showcase_figs       │  <- the paper's 6 panels
-                          │  run_reconstruct / run_cz_pulse_plot│  <- cross + pulse-seq figures
-                          │  run_single_qubit                   │  <- C_1_0_MT_vs_M
-                          │  (run_{cz,id,qns}_plots: per-stage) │
-                          └─────────────────────────────────────┘
+Stage 1: QNS experiments    scripts/run_capture_arm.py        ->  results.npz, params.npz
+         (SPAM arms)         scripts/run_spam_experiments.py
+                                      |
+Stage 2: Reconstruct        scripts/run_reconstruct.py        ->  specs.npz (+ recon figures)
+                                      |
+         +----------------------------+----------------------------+
+         |                                                         |
+Stage 3a: CZ gate           python -m qns2q.control.cz            Stage 3b: idle / DD
+          ->  plotting_data_cz_v2.npz                             python -m qns2q.control.idle
+                                                                  ->  optimization_data_all_M.npz
+
+         (run_margin_band[_idle], harvest_design_numbers, showcase_storage_panel
+          build the margin bands / design ladder / storage panel)
+                                      |
+Stage 4: Figures            scripts/report_showcase_figs.py   ->  the paper's 6 showcase panels
+                            scripts/run_cz_pulse_plot.py      ->  pulse-sequence figure
+                            scripts/run_single_qubit.py       ->  C_1_0_MT_vs_M
 ```
 
 ---
 
 ## Usage
 
-All stages are run from the **repo root** via the thin `scripts/run_*.py` entry points;
-paths resolve from `qns2q.paths.project_root()`, so there is no `cd src/` step.
+All stages are run from the **repo root**: Stages 1/2/4 via the `scripts/*.py` entry
+points, and the Stage-3 optimizers as modules (`PYTHONPATH=src python -m qns2q.control.cz`).
+Paths resolve from `qns2q.paths.project_root()`, so there is no `cd src/` step.
 Configuration is done by editing the config dataclass in each stage's `main()`.
 
 The active noise model *and* output folder are selected by the `QNS2Q_REGIME` environment
@@ -144,7 +133,7 @@ export QNS2Q_REGIME=showcase    # or: featured | bland   (run from the repo root
 Simulates QNS experiments using configurable pulse sequences (CPMG, CDD1, CDD3) and computes correlation function observables ($C_{12,0}$, $C_{12,12}$, $C_{a,0}$, $C_{a,b}$) with error bars.
 
 ```bash
-python scripts/run_experiments.py
+python scripts/run_capture_arm.py    # NoSPAM arm (also runs Stage 2); run_spam_experiments.py for SPAM arms
 ```
 
 **Configuration:** Edit `QNSExperimentConfig` in the script.
@@ -181,9 +170,9 @@ Loads the noise spectra (the reconstructed `specs.npz`, or the ground-truth `sim
 **CZ Gate Optimization** -- Builds pulse-sequence libraries, computes overlap integrals, and optimizes the coupling strength $J$ via `scipy.optimize`. Both optimizers default to the reconstructed `specs.npz` from Stage 2; flags select alternatives.
 
 ```bash
-python scripts/run_cz.py                       # reconstructed specs of the active regime
-python scripts/run_cz.py --simulated           # ground-truth simulated_spectra.npz
-python scripts/run_cz.py --protocol mitigated  # a SPAM arm's reconstruction
+PYTHONPATH=src python -m qns2q.control.cz                       # reconstructed specs of the active regime
+PYTHONPATH=src python -m qns2q.control.cz --simulated           # ground-truth simulated_spectra.npz
+PYTHONPATH=src python -m qns2q.control.cz --protocol mitigated  # a SPAM arm's reconstruction
 # regenerate ground truth if needed:  PYTHONPATH=src python -m qns2q.noise.spectra
 ```
 
@@ -192,7 +181,7 @@ python scripts/run_cz.py --protocol mitigated  # a SPAM arm's reconstruction
 **Identity Gate (DD) Optimization** -- Time-domain infidelity minimization with parametric pulse timing across M-repetition values.
 
 ```bash
-python scripts/run_idle.py
+PYTHONPATH=src python -m qns2q.control.idle
 ```
 
 **Configuration:** Edit `Config` in `qns2q/control/idle.py`; same `--folder`/`--protocol`/`--simulated` flags.
@@ -201,24 +190,15 @@ python scripts/run_idle.py
 
 ### Stage 4: Generate Publication Figures
 
-Per-stage plotters:
-
-```bash
-python scripts/run_cz_plots.py        # CZ gate infidelity figures
-python scripts/run_id_plots.py        # idle gate infidelity figures
-python scripts/run_cz_pulse_plot.py   # CZ pulse-sequence comparison
-python scripts/run_qns_plots.py       # QNS spectra comparison
-```
-
-**The paper's figures (showcase regime)** are produced by `report_showcase_figs.py` plus a
-standalone trio; `FIGURE_PROVENANCE.md` is the authoritative map. In brief:
+**The paper's figures (showcase regime)** are produced by `report_showcase_figs.py` (the
+six showcase panels) plus two standalone figures; `FIGURE_PROVENANCE.md` is the
+authoritative figure->data->command map. In brief:
 
 ```bash
 export QNS2Q_REGIME=showcase
-SHOWCASE_FIGS_DIR=reports/showcase_0613/figs python scripts/report_showcase_figs.py
-python scripts/run_single_qubit.py                                                   # C_1_0_MT_vs_M
-python scripts/run_reconstruct.py   --folder DraftRun_NoSPAM_showcase_cap            # cross-spectra
-python scripts/run_cz_pulse_plot.py --folder DraftRun_NoSPAM_showcase_cap --tag _cap # pulse sequences
+SHOWCASE_FIGS_DIR=reports/showcase_0613/figs PYTHONPATH=src python scripts/report_showcase_figs.py
+PYTHONPATH=src python scripts/run_single_qubit.py                                     # C_1_0_MT_vs_M
+PYTHONPATH=src python scripts/run_cz_pulse_plot.py --folder DraftRun_NoSPAM_showcase_cap --tag _cap # pulse sequences
 ```
 
 ---
