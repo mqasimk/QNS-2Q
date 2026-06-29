@@ -1,17 +1,17 @@
 """Exact verification of the App. E.5 register->pair reduction cascade (EMBED-REDUX).
 
 Companion to the paper appendix "Embedding the active pair in an N-qubit register"
-(main_v10.tex, Eqs. E16-E22).  This script is the *runnable report* form; the
+(main_v10.tex, App. E.5).  This script is the *runnable report* form; the
 pytest regression guards for the same appendix live in
 ``tests/test_spectator_locality.py`` (exact reduction, Jensen split, worst-state,
 the -1/2 cross coefficient).  This script adds the four checks that test is missing:
 
   (A) NON-GAUSSIAN generality -- the reduction and the PTM character sum
-      [D_z]_mm = sum_R (prod_{k in R} s_k) D_{(m,1),(m,R)}   (Eq. E20)
+      [D_z]_mm = sum_R (prod_{k in R} s_k) D_{(m,1),(m,R)}   (eq::reduced_diag)
       hold for an arbitrary classical dephasing channel (a finite ensemble of
       diagonal unitaries), not only for the Gaussian model.  They use only the
       computational-diagonal structure, so are exact at all orders, any statistics.
-  (B) the operational-overlap FOLD  I~_{l,l} = I_{l,l} + sum_k I_{lk,lk}  (Eq. E22).
+  (B) the operational-overlap FOLD  I~_{l,l} = I_{l,l} + sum_k I_{lk,lk}  (eq::operationalI).
   (C) the SINGLE-ELEMENT DEFECT: the conditional diagonal [D_z]_mm is the
       spectator-conditioned read of the register; the bare element D_{(m,1),(m,1)}
       is only its R=0 (unpolarized) term.  The defect is nonzero exactly when the
@@ -100,7 +100,7 @@ def two_qubit_paulis():
     return ops, names
 
 
-# --- the reduction objects (Eqs. E17, E20, E22) ---------------------------- #
+# --- reduction objects: conditioning (eq::cond_gens), char sum (eq::reduced_diag), fold (eq::operationalI) --- #
 def _layout(N, pair=(0, 1)):
     l, lp = pair
     spec = [q for q in range(N) if q not in pair]
@@ -145,7 +145,7 @@ def conditional_diag(W, N, bits, mu_idx, P2, layout):
 
 
 def char_sum(W, N, bits, mu, P2name, mu_list, layout, subsets):
-    """sum_R (prod_{k in R} s_k) D_{(mu,1),(mu,R)} -- Eq. E20."""
+    """sum_R (prod_{k in R} s_k) D_{(mu,1),(mu,R)} -- eq::reduced_diag."""
     l, lp, spec, _, _, pair_op_full = layout
     s = {spec[i]: 1 - 2 * bits[i] for i in range(len(spec))}
     out = pair_op_full(mu, {k: I2 for k in spec})            # P_mu (x) 1_spec
@@ -176,7 +176,7 @@ def check_reduction_and_charsum(W, N, pair=(0, 1)):
 
 
 def overlap_fold_error(Imat, N, pair=(0, 1)):
-    """(B) z-independent part of I~_{l,l}(z) == I_{l,l} + sum_k I_{lk,lk}  (Eq. E22)."""
+    """(B) z-independent part of I~_{l,l}(z) == I_{l,l} + sum_k I_{lk,lk}  (eq::operationalI)."""
     l, lp = pair
     spec = [q for q in range(N) if q not in pair]
     gens = generators(N)
@@ -294,8 +294,8 @@ def report_case(label, N, Imat):
     e_cs = check_reduction_and_charsum(W, N)
     e_fold = overlap_fold_error(Imat, N)
     defect = single_element_defect(W, N)
-    print(f"    (A) [D_z]_mm == char sum (Eq. E20)        max|err| = {e_cs:.2e}")
-    print(f"    (B) operational-overlap fold (Eq. E22)    max|err| = {e_fold:.2e}")
+    print(f"    (A) [D_z]_mm == char sum (eq::reduced_diag)        max|err| = {e_cs:.2e}")
+    print(f"    (B) operational-overlap fold (eq::operationalI)    max|err| = {e_fold:.2e}")
     print(f"    (C) single-element defect |[D_z]-D_(m,1,m,1)| = {defect:.3e}  "
           f"({'polarization present' if defect > 1e-6 else 'no pair-spectator cross'})")
     assert e_cs < TOL and e_fold < TOL, f"{label}: identity failed"

@@ -1,15 +1,15 @@
 """Exact verification of the App E.5 register->pair reduction cascade (V10-EMBED-REDUX-0629).
 
 Self-contained (NumPy only) regression guards for main_v10.tex App "Embedding the
-active pair in an N-qubit register" (Eqs. E16-E22), complementing the locality
+active pair in an N-qubit register" (App. E.5), complementing the locality
 formulas already pinned in test_spectator_locality.py.  Adds the four checks that
 test lacks:
 
-  (A) NON-GAUSSIAN generality of the reduction + PTM character sum (Eq. E20):
+  (A) NON-GAUSSIAN generality of the reduction + PTM character sum (eq::reduced_diag):
       [D_z]_mm = sum_R (prod_{k in R} s_k) D_{(m,1),(m,R)} holds for an arbitrary
       classical dephasing channel (a finite ensemble of diagonal unitaries), since
       it uses only the computational-diagonal structure -- exact at all orders.
-  (B) the operational-overlap FOLD  I~_{l,l} = I_{l,l} + sum_k I_{lk,lk}  (Eq. E22).
+  (B) the operational-overlap FOLD  I~_{l,l} = I_{l,l} + sum_k I_{lk,lk}  (eq::operationalI).
   (C) the SINGLE-ELEMENT DEFECT: the bare element D_{(m,1),(m,1)} is only the R=0
       (unpolarized) term of the conditional diagonal [D_z]_mm; the polarization
       defect is nonzero exactly when the pair-spectator cross I_{l,lk} != 0.  This
@@ -222,7 +222,7 @@ def test_reduction_charsum_gaussian(N):
 
 @pytest.mark.parametrize("N", [3, 4])
 def test_reduction_charsum_nongaussian(N):
-    # arbitrary diagonal-unitary ensemble: reduction + Eq. E20 are structure-only
+    # arbitrary diagonal-unitary ensemble: reduction + eq::reduced_diag are structure-only
     assert _reduction_charsum_err(_ensemble_factor(N, seed=10 + N), N) < 1e-10
 
 
