@@ -5,7 +5,7 @@ active pair in an N-qubit register" (App. E.5), complementing the locality
 formulas already pinned in test_spectator_locality.py.  Adds the four checks that
 test lacks:
 
-  (A) NON-GAUSSIAN generality of the reduction + PTM character sum (eq::reduced_diag):
+  (A) NON-GAUSSIAN generality of the reduction + PTM character sum (cf. eq::pop_only):
       [D_z]_mm = sum_R (prod_{k in R} s_k) D_{(m,1),(m,R)} holds for an arbitrary
       classical dephasing channel (a finite ensemble of diagonal unitaries), since
       it uses only the computational-diagonal structure -- exact at all orders.
@@ -222,7 +222,7 @@ def test_reduction_charsum_gaussian(N):
 
 @pytest.mark.parametrize("N", [3, 4])
 def test_reduction_charsum_nongaussian(N):
-    # arbitrary diagonal-unitary ensemble: reduction + eq::reduced_diag are structure-only
+    # arbitrary diagonal-unitary ensemble: reduction + PTM char-sum (cf. eq::pop_only) are structure-only
     assert _reduction_charsum_err(_ensemble_factor(N, seed=10 + N), N) < 1e-10
 
 

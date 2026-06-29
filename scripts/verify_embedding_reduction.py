@@ -7,7 +7,7 @@ pytest regression guards for the same appendix live in
 the -1/2 cross coefficient).  This script adds the four checks that test is missing:
 
   (A) NON-GAUSSIAN generality -- the reduction and the PTM character sum
-      [D_z]_mm = sum_R (prod_{k in R} s_k) D_{(m,1),(m,R)}   (eq::reduced_diag)
+      [D_z]_mm = sum_R (prod_{k in R} s_k) D_{(m,1),(m,R)}   (cf. eq::pop_only)
       hold for an arbitrary classical dephasing channel (a finite ensemble of
       diagonal unitaries), not only for the Gaussian model.  They use only the
       computational-diagonal structure, so are exact at all orders, any statistics.
@@ -100,7 +100,7 @@ def two_qubit_paulis():
     return ops, names
 
 
-# --- reduction objects: conditioning (eq::cond_gens), char sum (eq::reduced_diag), fold (eq::operationalI) --- #
+# --- reduction objects: conditioning (eq::cond_gens), char sum (cf. eq::pop_only), fold (eq::operationalI) --- #
 def _layout(N, pair=(0, 1)):
     l, lp = pair
     spec = [q for q in range(N) if q not in pair]
@@ -145,7 +145,7 @@ def conditional_diag(W, N, bits, mu_idx, P2, layout):
 
 
 def char_sum(W, N, bits, mu, P2name, mu_list, layout, subsets):
-    """sum_R (prod_{k in R} s_k) D_{(mu,1),(mu,R)} -- eq::reduced_diag."""
+    """sum_R (prod_{k in R} s_k) D_{(mu,1),(mu,R)} -- PTM char-sum form, cf. eq::pop_only."""
     l, lp, spec, _, _, pair_op_full = layout
     s = {spec[i]: 1 - 2 * bits[i] for i in range(len(spec))}
     out = pair_op_full(mu, {k: I2 for k in spec})            # P_mu (x) 1_spec
@@ -294,7 +294,7 @@ def report_case(label, N, Imat):
     e_cs = check_reduction_and_charsum(W, N)
     e_fold = overlap_fold_error(Imat, N)
     defect = single_element_defect(W, N)
-    print(f"    (A) [D_z]_mm == char sum (eq::reduced_diag)        max|err| = {e_cs:.2e}")
+    print(f"    (A) [D_z]_mm == char sum (cf. eq::pop_only)        max|err| = {e_cs:.2e}")
     print(f"    (B) operational-overlap fold (eq::operationalI)    max|err| = {e_fold:.2e}")
     print(f"    (C) single-element defect |[D_z]-D_(m,1,m,1)| = {defect:.3e}  "
           f"({'polarization present' if defect > 1e-6 else 'no pair-spectator cross'})")

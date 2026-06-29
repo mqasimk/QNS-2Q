@@ -17,12 +17,12 @@ fixes the single-Pauli decay to 1-E ~ I_aa, the paper's overlap normalization).
 Pair = qubits {0,1} (l,l'); spectators = qubits {2..N-1}.
 
 What is asserted:
-  * exact reduction      D_sigma = Tr_spec[E(. (x) sigma)]  ==  conditional dressed-phase
-                         channel  sum_z p(z) D_z   (Eqs. dressed_phases),  and  == the
-                         Stage-1 PTM reduction  sum_Q s_Q E_{(.,1),(.,Q)}.    [L1-L3]
+  * exact reduction      D_sigma = Tr_spec[E(. (x) sigma)]  ==  conditional-channel mixture
+                         sum_z p(z) D_z (Eq. convex_mix; per-config cond_gens/cond_cumulant), and ==
+                         PTM char-sum  sum_Q s_Q E_{(.,1),(.,Q)}  (Eq. pop_only).    [L1-L3]
   * coherence independence: F_pro depends only on the Z-diagonal part of sigma.   [L1]
-  * Jensen split         1-F = G(Ibar) + Delta   (Eqs. jensen / jensen_delta /
-                         jensen_cov) reproduces the conditional average exactly.
+  * Jensen split         1-F = G(Ibar) + Delta   (auxiliary 2nd-order decomposition; the
+                         paper's exact form is Eq. infid_exact) reproduces the cond. average.
   * order of accuracy    O(I) locality (Eq. locality) residual ~ lam^2;
                          O(I^2) Jensen residual ~ lam^3  ->  this is the regression
                          guard on the cross-overlap coefficient: it is -1/2
@@ -161,7 +161,7 @@ def Gfun(Ill, Ilplp, Iz, Illp, Ilz, Ilpz):
 
 
 def reduced_ptm_cond(Iov, ch, idx, p, N):
-    """Conditional dressed-phase reduction:  sum_z p(z) D_z  (Eqs. dressed_phases)."""
+    """Conditional-channel mixture:  sum_z p(z) D_z  (Eq. convex_mix)."""
     labs = ['l', 'lp', 'llp']
     Dred = np.zeros((16, 16), dtype=complex)
 
@@ -185,7 +185,7 @@ def reduced_ptm_cond(Iov, ch, idx, p, N):
 
 
 def reduced_ptm_eq1(W, sigma, N):
-    """Stage-1 PTM reduction:  [D]_{mu,nu} = sum_Q s_Q E_{(mu,1),(nu,Q)}  (Eq. 1)."""
+    """PTM char-sum reduction:  [D]_{mu,nu} = sum_Q s_Q E_{(mu,1),(nu,Q)}  (Eq. pop_only)."""
     spec = N - 2
     Dm = np.zeros((16, 16), dtype=complex)
     Qlist = ([(lab, kron([s1[ch] for ch in lab])) for lab in it.product(SPEC1, repeat=spec)]
@@ -203,7 +203,7 @@ def reduced_ptm_eq1(W, sigma, N):
 
 
 def cov_master(ab, cd, Iov, ch, idx, p, N):
-    """Cov_z(tilde I_ab, tilde I_cd) via the master formula, Eq. (jensen_cov)."""
+    """Cov_z(tilde I_ab, tilde I_cd) via the master formula (Jensen split, auxiliary; paper exact form Eq. infid_exact)."""
     spec = list(range(2, N))
 
     def W(lab, S):
@@ -226,7 +226,7 @@ def cov_master(ab, cd, Iov, ch, idx, p, N):
 
 
 def o2_jensen(Iov, ch, idx, p, N):
-    """G(Ibar) + Delta, Eqs. (jensen)/(jensen_delta)/(jensen_cov)."""
+    """G(Ibar) + Delta (Jensen split, auxiliary; paper exact form Eq. infid_exact at Eq. dressed_decomp)."""
     labs = {'ll': ('l', 'l'), 'lplp': ('lp', 'lp'), 'llp': ('l', 'lp'),
             'l_z': ('l', 'llp'), 'lp_z': ('lp', 'llp'), 'z': ('llp', 'llp')}
     bar = {k: sum(p[c] * tI(*lab, c, Iov, ch, idx, N) for c in range(len(p)))
@@ -285,7 +285,7 @@ def _setup(N, seed=1, state='correlated'):
 # ----------------------------- tests -----------------------------
 @pytest.mark.parametrize("N", [2, 3, 4, 5, 6])
 def test_exact_reduction(N):
-    """L3 (dressed-phase) and Eq.1 (PTM) reductions equal the brute-force trace."""
+    """L3 (mixture, Eq. convex_mix) and PTM char-sum (Eq. pop_only) reductions equal the brute-force trace."""
     ch, idx, p, sigma, base = _setup(N)
     W = decay_matrix(ch, base, N)
     Dex = reduced_ptm_exact(W, sigma, N)
