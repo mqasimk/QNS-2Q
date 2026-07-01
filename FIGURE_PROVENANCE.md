@@ -6,6 +6,12 @@ produces it. Rewritten 2026-06-16 after the repo was leaned down to the machiner
 regenerates the paper results (`CLEANUP-0616`); the pre-cleanup history of this file is in
 git.
 
+**TL;DR one-command version:** `python scripts/generate_paper_figures.py` runs every
+command below in order (add `--full-regen` to also re-derive the run folders themselves
+first, or `--dry-run` to preview). This file remains the source of truth for what each
+individual command does and why -- read on if you want to regenerate just one figure, or
+if the wrapper script and this file ever disagree (trust this file).
+
 ## One regime, five run folders
 
 Everything the paper shows is the **showcase** regime (`QNS2Q_REGIME=showcase`), the

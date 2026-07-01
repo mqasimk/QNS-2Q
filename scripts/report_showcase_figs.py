@@ -1,24 +1,68 @@
-"""Figures for the SHOWCASE-0612 report (the engineered trap landscape).
+"""Stage 4 of the pipeline: assemble the paper's showcase-regime figures.
 
-Same four-figure set and styling as report_lorenza_figs.py (the 2026-06-11
-report): setup_pub_rcparams('compact'), Okabe-Ito palette, dashed-black
-analytic truth, top-center figure legends, grid alpha 0.25. Run under
-QNS2Q_REGIME=showcase so the spectra module exports the showcase landscape.
+Physics/pipeline role
+----------------------
+This is the FINAL step of the two-arm pipeline described in CLAUDE.md: Stage 1
+(`characterize/experiments.py` via `scripts/run_capture_arm.py`) simulates the
+QNS experiments, Stage 2 (`characterize/reconstruct.py`) inverts them into
+reconstructed noise power spectral densities (`specs.npz`), Stage 3
+(`control/cz.py`, `control/idle.py`) optimizes control pulses against those
+spectra. This script does NOT run any new physics simulation or optimization
+-- it only *reads* the small summary `.npz` files those earlier stages already
+wrote to disk (all committed to the repo; see the "Run folders" table in
+FIGURE_PROVENANCE.md) and turns them into the eight PDF panels used in the
+manuscript (`main_v10.tex`). Six of the eight are produced here; the other two
+("standalone" figures) are produced directly by `scripts/run_single_qubit.py`
+and `scripts/run_cz_pulse_plot.py` -- see FIGURE_PROVENANCE.md for the
+authoritative figure-to-data map instead of re-deriving it by reading the code.
 
-Outputs -> reports/showcase_0612/figs/
+What each figure needs (inputs) and what comes out (outputs) is documented on
+each `fig_*` function below. At a high level: this script reads reconstructed
+spectra (`specs.npz`) from the no-SPAM run and from the four SPAM-protocol run
+folders, the gate-optimization outputs (`plotting_data_cz_v2*.npz`,
+`optimization_data_all_M*.npz`, `margin_band_*.npz`), the pre-harvested design
+ladder (`design_numbers.npz`, built by `scripts/harvest_design_numbers.py`),
+the storage-protocol panel (`storage_panel.npz`, built by
+`scripts/showcase_storage_panel.py`), and the analytic noise-model functions
+in `qns2q.noise.spectra` directly (for the "ground truth" dashed curves) --
+and writes one PDF per `fig_*` function to `SHOWCASE_FIGS_DIR` (see below).
+Nothing in the rest of the package imports this file; it is a leaf script run
+directly from the command line (`python scripts/report_showcase_figs.py`).
+
+Historical note on the styling (kept only because a reader may find the tag
+in old commit messages): this reuses the same look -- `setup_pub_rcparams
+('compact')`, Okabe-Ito colorblind-safe palette, dashed-black analytic-truth
+curves, top-center figure legends, grid alpha 0.25 -- as an earlier "2026-06-11
+report" script, `report_lorenza_figs.py`, which was deleted in the `CLEANUP-0616`
+repo cleanup (see CLAUDE.md) once this showcase-specific version superseded it.
+Must be run with `QNS2Q_REGIME=showcase` (enforced by an assert in `__main__`)
+so that `qns2q.noise.spectra` exports the showcase noise landscape rather than
+the `bland`/`featured` regimes used elsewhere in development.
+
+Outputs -> reports/showcase_0612/figs/ by default, but in practice always
+overridden via `SHOWCASE_FIGS_DIR` (see CLAUDE.md / FIGURE_PROVENANCE.md,
+which use `reports/showcase_0613/figs/`) so a new report revision doesn't
+clobber an older one that a figure may still point at:
   fig_model_spectra.pdf       six showcase spectra, comb teeth, DC points,
                               trap-line family + coupler resonance, NT window
   fig_spam_comparison.pdf     3x3 SPAM-arm reconstructions vs truth
   fig_gates.pdf               2x2: infidelity vs Tg + NT-margin band (CZ, idle)
   fig_design_experiments.pdf  the ablation ladder + SPAM-arm designs
+  fig_recon_capture.pdf       single-arm reconstruction vs truth (blind 256k run)
+  fig_storage.pdf             Bell-pair (entanglement) storage infidelity panel
 """
 import os
 import sys
 
+# This script lives in scripts/, not inside the installed src/qns2q package,
+# so Python would not find `qns2q` on its own; this line manually adds
+# ../src to the import search path (sys.path) before any `qns2q...` import
+# below can succeed. This is what lets every scripts/*.py be run directly
+# ("python scripts/foo.py") from the repo root without a pip install step.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 
 import matplotlib
-matplotlib.use('Agg')
+matplotlib.use('Agg')  # non-interactive backend: render straight to PDF, no display needed (safe on a headless cluster/CI)
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -27,6 +71,9 @@ from qns2q.noise.spectra import (S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12,
                                  line_priors_per_channel)
 from qns2q.paths import current_regime, project_root
 
+# Okabe-Ito colorblind-safe palette, reused consistently across every panel so
+# a given color always means the same experimental condition (e.g. C_REF is
+# always "no SPAM / reference / NT-optimized" in every figure in this file).
 C_REF = '#0072B2'   # blue (reference / NT)
 C_RAW = '#999999'   # grey (raw / FID)
 C_MIT = '#D55E00'   # vermillion (mitigated / CDD)
@@ -36,27 +83,61 @@ C_BLD = '#CC79A7'   # magenta (line-blind smooth fit)
 ROOT = project_root()
 # Output dir overridable so a new showcase revision writes to its own folder
 # (e.g. SHOWCASE_FIGS_DIR=reports/showcase_0613/figs) without clobbering 0612.
+# Part of this script's env-var contract (see CLAUDE.md / FIGURE_PROVENANCE.md):
+# always set this explicitly when regenerating the paper's figures.
 OUT = os.path.join(ROOT, os.environ.get("SHOWCASE_FIGS_DIR",
                                         "reports/showcase_0612/figs"))
 os.makedirs(OUT, exist_ok=True)
 
-# Capture-grade arm (2026-06-12 evening: measurable-floor landscape, 128k
-# shots / M=16 sweeps). The earlier 64k/v1-landscape outputs keep their tags.
+# Capture-grade arm: the run folder with enough shots/repetitions (128k shots,
+# M=16 CPMG repetitions swept) that the reconstructed spectra sit clearly above
+# the shot-noise floor everywhere the paper needs them to (as opposed to an
+# earlier, noisier "v1-landscape" run whose outputs are kept under different
+# filename tags so they aren't silently mixed with this one).
 # Gate-data folder overridable (e.g. SHOWCASE_RUN_GATES=DraftRun_NoSPAM_showcase_cap_backup0612
 # to render figures from a backed-up run without disturbing the live folder).
+# Second half of this script's env-var contract (with SHOWCASE_FIGS_DIR above);
+# see CLAUDE.md / FIGURE_PROVENANCE.md for the canonical value used for the paper.
 RUN_GATES = os.path.join(ROOT, os.environ.get("SHOWCASE_RUN_GATES",
                                               "DraftRun_NoSPAM_showcase_cap"))
+# "_cap" ("capture-grade") is baked into every filename this script reads out of
+# RUN_GATES below (e.g. plotting_data_cz_v2_cap.npz). It is a naming CONTRACT
+# shared with scripts/harvest_design_numbers.py and scripts/run_carrier_battery_0616.sh
+# -- do not change it without updating those other two scripts to match, or the
+# files this script expects to find simply won't exist under the new name.
 GATE_TAG = "_cap"
 SPAM_FMT = os.path.join(ROOT, "DraftRun_SPAM_showcase_{arm}")
 
-T2_FID = 3500.0       # showcase T2* (tau units; chi(T2*) = 1 by calibration)
-NT_WINDOW = (0.258, 0.312)   # between the 4w0 line's +3sig and the top -3sig
+T2_FID = 3500.0       # showcase T2* (tau units; chi(T2*) = 1 by calibration).
+                      # T2* is the free-induction-decay coherence time of the
+                      # noise model itself, used below only to draw a vertical
+                      # reference line on the infidelity-vs-gate-time plots.
+NT_WINDOW = (0.258, 0.312)   # between the 4w0 line's +3sig and the top -3sig:
+                             # a frequency band with no noise lines in it, i.e.
+                             # a "quiet" spectral window a noise-tailored (NT)
+                             # pulse sequence can be designed to exploit.
 JMAX_TAU = 0.05       # max Ising coupling J_max*tau (cz.CZOptConfig.Jmax);
-                      # sets the CZ floor T_G >= pi/(4 J_max) ~ 16 tau
+                      # sets the CZ floor T_G >= pi/(4 J_max) ~ 16 tau -- the
+                      # shortest possible CZ gate time given the hardware's max
+                      # coupling strength, annotated on the CZ panel below.
 
 
 def fig_model_spectra():
-    w = np.linspace(1e-3, np.pi / 4, 4000)
+    """Panel 1/6: the six showcase noise-model spectra themselves (no QNS data
+    involved -- this plots the *analytic* model functions from
+    qns2q.noise.spectra directly), annotated with the noise-line locations and
+    the quiet window a noise-tailored pulse exploits.
+
+    Reads: nothing from disk -- calls the showcase-regime S_11/S_22/S_1212/
+    S_1_2/S_1_12/S_2_12 spectral functions and line_priors_per_channel()
+    directly (both defined in qns2q.noise.spectra; the showcase regime is
+    selected at import time by QNS2Q_REGIME, asserted in __main__ below).
+    Writes: fig_model_spectra.pdf.
+    """
+    w = np.linspace(1e-3, np.pi / 4, 4000)   # fine grid for the smooth analytic curve
+    # wk: the actual discrete frequencies (harmonics of a period-160tau comb) that
+    # a QNS comb experiment samples -- overlaid as points on top of the smooth
+    # curve so the reader can see which frequencies are directly measured.
     wk = 2 * np.pi * np.arange(1, 21) / 160.0
     panels = [(r"$S_{1,1}$ (qubit 1)", S_11, 'self'),
               (r"$S_{2,2}$ (qubit 2)", S_22, 'self'),
@@ -64,6 +145,10 @@ def fig_model_spectra():
               (r"$S_{1,2}$", S_1_2, 'cross'),
               (r"$S_{1,12}$", S_1_12, 'cross'),
               (r"$S_{2,12}$", S_2_12, 'cross')]
+    # line_priors_per_channel(): the known center frequencies of each noise
+    # "line" (defect/two-level-fluctuator resonance) built into the showcase
+    # model, per channel -- used only to draw the vertical marker lines below,
+    # not for any reconstruction.
     pri = line_priors_per_channel()
     fig, axs = plt.subplots(2, 3, figsize=(9.6, 5.0), sharex=True)
     for ax, (title, fn, kind) in zip(axs.ravel(), panels):
@@ -125,6 +210,12 @@ def fig_model_spectra():
     plt.close(fig)
 
 
+# The four SPAM ("state preparation and measurement" error) handling protocols
+# from CLAUDE.md's SPAM pipeline section -- 'reference' is the no-SPAM-error
+# control arm, 'raw' applies no error mitigation at all, 'mitigated' and
+# 'robust' are the two mitigation strategies under test. Each maps to one
+# `DraftRun_SPAM_showcase_<arm>/` run folder (see SPAM_FMT above) and gets a
+# fixed color/marker so it reads the same way in every panel of this file.
 ARM_STYLE = {
     'reference': dict(color=C_REF, marker='o', label='no SPAM (reference)'),
     'raw':       dict(color=C_RAW, marker='v', label='SPAM, unmitigated'),
@@ -134,6 +225,10 @@ ARM_STYLE = {
 
 
 def _sig_parts(err):
+    """Split a reconstruction-error array into (real-part error bar, imaginary-
+    part error bar) magnitudes, so the same call works whether `err` is complex
+    (cross-spectra, which have both parts) or real (self-spectra, where both
+    "parts" are just the one error bar)."""
     err = np.asarray(err)
     if np.iscomplexobj(err):
         return np.abs(np.real(err)), np.abs(np.imag(err))
@@ -141,11 +236,21 @@ def _sig_parts(err):
 
 
 def fig_spam_comparison():
+    """Panel 3/6: overlay all four SPAM-protocol reconstructions (each its own
+    marker/color, per ARM_STYLE) against the analytic ground truth, one 3x3
+    grid of spectra (self-spectra top row, cross-spectra real/imag below).
+
+    Reads: DraftRun_SPAM_showcase_{reference,raw,mitigated,robust}/specs.npz
+    (whichever exist on disk -- an arm is silently skipped if its folder/file
+    is missing) plus the analytic truth via
+    qns2q.characterize.systematics.analytic_spectra(). Writes: fig_spam_comparison.pdf.
+    """
     from qns2q.characterize.systematics import analytic_spectra
 
     # robust included when present: its self-spectra carry the C_l,12=0 leakage
-    # bias and its S_1,12/S_2,12 are NaN (not reconstructible) -- the panels show
-    # both directly.
+    # bias and its S_1,12/S_2,12 are NaN (not reconstructible -- the SPAM-robust
+    # protocol simply cannot estimate those two cross-spectra, per CLAUDE.md) --
+    # the panels show both effects directly rather than hiding them.
     arms = {a: np.load(SPAM_FMT.format(arm=a) + "/specs.npz", allow_pickle=True)
             for a in ('reference', 'raw', 'mitigated', 'robust')
             if os.path.exists(SPAM_FMT.format(arm=a) + "/specs.npz")}
@@ -202,9 +307,15 @@ def fig_spam_comparison():
 
 
 def fig_recon_capture():
-    """Single-arm capture overlay: the reconstruction (with bars) tracking all
-    six spectra of the engineered landscape -- the 'QNS actually captures the
-    spectrum' figure."""
+    """Panel 2/6: single-arm capture overlay: the reconstruction (with error
+    bars) tracking all six spectra of the engineered landscape -- the 'QNS
+    actually captures the spectrum' figure (no-SPAM run, all six channels,
+    unlike fig_spam_comparison which is SPAM-arm-focused).
+
+    Reads: <RUN_GATES>/specs.npz (the no-SPAM showcase reconstruction) plus
+    the analytic truth via qns2q.characterize.systematics.analytic_spectra().
+    Writes: fig_recon_capture.pdf.
+    """
     from qns2q.characterize.systematics import analytic_spectra
 
     d = np.load(os.path.join(RUN_GATES, "specs.npz"), allow_pickle=True)
@@ -258,7 +369,19 @@ def fig_recon_capture():
 
 def _margin_quantiles(*npzs):
     """Merge one or more margin-band files (e.g. the cap + cap_short CZ runs)
-    into a single sorted (Tg, lo, med, hi) quantile table."""
+    into a single sorted (Tg, lo, med, hi) quantile table.
+
+    A "margin" here is the ratio (best known/CDD-sequence infidelity) /
+    (best noise-tailored, NT, sequence infidelity) at a fixed gate time Tg --
+    >1 means the NT-optimized pulse genuinely beats the best sequence found
+    without using the reconstructed spectra. Each margin_band_*.npz file
+    (written upstream by scripts/run_margin_band.py, not this script) stores
+    many Monte Carlo samples of that ratio per gate time, drawn by propagating
+    the reconstruction's statistical+systematic error bars through to the
+    predicted infidelity; `lo`/`med`/`hi` are the 2.5/50/97.5 percentiles of
+    those samples, i.e. a 95% confidence band on the margin, not on the raw
+    infidelity itself.
+    """
     tgs, lo, med, hi = [], [], [], []
     for npz in npzs:
         if npz is None:
@@ -272,6 +395,18 @@ def _margin_quantiles(*npzs):
 
 
 def _idle_best_over_M():
+    """For the idle (identity/dynamical-decoupling) gate, the same total gate
+    time Tg can be built from different numbers of CPMG repetitions M (e.g.
+    M=1 long block vs M=4 shorter blocks concatenated); the optimizer in
+    control/idle.py sweeps M independently. This helper collapses that sweep
+    down to, for every gate time actually run at some M, the BEST (lowest)
+    infidelity achieved at ANY M -- 'known' (best fixed/reference sequence)
+    and 'opt' (best noise-tailored sequence) -- so the gates figure below can
+    show a single "best over M" curve per Tg instead of one curve per M.
+
+    Reads: <RUN_GATES>/optimization_data_all_M<GATE_TAG>.npz.
+    Returns: dict of Tg / fid (no-pulse baseline) / known / opt arrays.
+    """
     d = np.load(os.path.join(RUN_GATES, f"optimization_data_all_M{GATE_TAG}.npz"),
                 allow_pickle=True)
     Ms = [int(m) for m in d['M_values']]
@@ -298,12 +433,32 @@ def _idle_best_over_M():
 
 
 def fig_gates():
+    """Panel 4/6: the headline gate-performance figure -- 2x2 grid, entangling
+    (CZ) gate on top row, idle (dynamical-decoupling) gate on bottom row (only
+    if idle data is present). Left column: true infidelity vs total gate time
+    Tg for three cases -- free induction ('FID', no pulses at all), the best
+    *known* fixed sequence family (CPMG/CDD -- concatenated dynamical
+    decoupling, a standard sequence NOT informed by the reconstructed
+    spectrum), and the best noise-tailored ('NT') sequence found by the
+    optimizer using the reconstructed spectra. Right column: the resulting
+    "NT margin" (best-CDD / best-NT infidelity ratio) with its reconstruction-
+    uncertainty confidence band from _margin_quantiles.
+
+    Reads: <RUN_GATES>/plotting_data/plotting_data_cz_v2<GATE_TAG>[_short].npz,
+    <RUN_GATES>/margin_band_{cz,id}<GATE_TAG>[_short].npz,
+    <RUN_GATES>/optimization_data_all_M<GATE_TAG>.npz (idle row, if present).
+    Writes: fig_gates.pdf.
+    """
     def _load_cz(tag):
         return np.load(os.path.join(RUN_GATES, "plotting_data",
                                     f"plotting_data_cz_v2{tag}.npz"),
                        allow_pickle=True)
 
     pd_parts = [_load_cz(GATE_TAG)]
+    # The optional "_short" file is a supplementary CZ sweep at additional,
+    # typically shorter, gate times (e.g. filling in near the J_max-limited
+    # floor) computed in a separate optimizer run; when present it is
+    # concatenated onto the main sweep below rather than replacing it.
     short_path = os.path.join(RUN_GATES, "plotting_data",
                               f"plotting_data_cz_v2{GATE_TAG}_short.npz")
     if os.path.exists(short_path):
@@ -384,10 +539,23 @@ def fig_gates():
 
 
 def _arms_bars(ax, arms, title, ylabel=r"$1-F_\mathrm{pro}$ at $T_G=320\tau$"):
-    # The SPAM story in one panel: the DESIGN is SPAM-invariant (best-NT TRUE
-    # infidelity, dark bars, sits on the dashed line for every arm) while the
-    # CERTIFICATION is not (best-NT PREDICTED on each arm's own reconstruction,
-    # light bars: raw over-certifies, mitigation/robust recover the truth).
+    """Draw one 'SPAM-arm design' bar panel: for each SPAM protocol arm, a
+    dark bar (the gate design's TRUE infidelity, measured against the
+    analytic model) next to a lighter bar (that same gate's infidelity as
+    PREDICTED from the arm's own -- possibly SPAM-biased -- reconstruction),
+    with the percentage gap between the two annotated above each light bar.
+
+    `arms` maps arm name -> a 3-element array/tuple whose index [1] is the
+    true infidelity and [2] is the predicted/certified infidelity (index [0],
+    unused here, is a third quantity harvest_design_numbers.py also stores).
+
+    The SPAM story in one panel: the DESIGN is SPAM-invariant (best-NT TRUE
+    infidelity, dark bars, sits on the dashed line for every arm, since the
+    physical gate performance cannot depend on how you estimated the noise)
+    while the CERTIFICATION is not (best-NT PREDICTED on each arm's own
+    reconstruction, light bars: raw over-certifies -- i.e. claims a better
+    gate than it actually built -- while mitigation/robust recover the truth).
+    """
     order = [a for a in ('reference', 'mitigated', 'robust', 'raw') if a in arms]
     pretty = {'reference': 'reference\n(SPAM-free recon.)',
               'mitigated': 'SPAM-mitigated\nrecon.',
@@ -419,6 +587,17 @@ def _arms_bars(ax, arms, title, ylabel=r"$1-F_\mathrm{pro}$ at $T_G=320\tau$"):
     ax.grid(True, alpha=0.25, axis='y')
 
 
+# The "knowledge ladder": four increasingly-complete sets of reconstructed
+# spectra that a gate could be (re-)optimized against, from "only the two
+# single-qubit self-spectra" up to "the full six-spectrum model" -- this shows
+# how much the gate design improves as more of the noise environment is
+# characterized. The string keys ('rung_c', 'diag3', 'robust4', 'full') are a
+# NAMING CONTRACT: they must match, verbatim, both the '<prefix>_<key>[_<Tg>]'
+# fields harvest_design_numbers.py writes into design_numbers.npz (read below
+# in fig_design/_ladder_grouped) and the run-folder suffixes
+# (`_diag3`, `_robust4`) that scripts/run_carrier_battery_0616.sh produces
+# upstream -- do not rename any of the four keys without updating both of
+# those other scripts.
 LADDER_LABELS = [
     ('rung_c', "1Q only (2):\n$S_{1,1},S_{2,2}$", C_ROB),
     ('diag3', "selfs (3):\n$+\\,S_{12,12}$", C_BLD),
@@ -428,7 +607,14 @@ LADDER_LABELS = [
 
 
 def _ladder_grouped(ax, dn, prefix, tgs, title):
-    """06/11-format knowledge ladder: light/dark bar pairs = two gate times."""
+    """Draw one knowledge-ladder bar panel: one bar group per LADDER_LABELS
+    rung, x-axis = how much of the reconstructed spectrum the optimizer was
+    allowed to see, y-axis = the resulting gate's TRUE infidelity (log scale)
+    -- reads `dn[f'{prefix}_{rung_key}[_{int(tg)}]']` for each rung. If two
+    gate times `tgs` are given (used for the idle-gate panel, which is
+    compared at two different total gate times), each rung gets a pair of
+    bars (lighter = first Tg, darker = second) side by side instead of one.
+    """
     x = np.arange(len(LADDER_LABELS))
     width = 0.34 if len(tgs) == 2 else 0.62
     all_vals = []
@@ -455,9 +641,22 @@ def _ladder_grouped(ax, dn, prefix, tgs, title):
 
 
 def fig_design():
-    """The 06/11-format 2x2: knowledge ladder (left) and SPAM-arm designs
-    (right), entangling gate top row, idle bottom row. Data from
-    harvest_design_numbers.py."""
+    """Panel 5/6: the "what does the gate design actually need to know about
+    the noise" figure -- 2x2 grid, entangling (CZ) gate top row, idle gate
+    bottom row. Left column: the knowledge ladder (see LADDER_LABELS /
+    _ladder_grouped) -- how gate infidelity improves as the optimizer is given
+    more of the reconstructed spectrum. Right column: the SPAM-arm comparison
+    (see _arms_bars) -- how SPAM errors bias the CERTIFIED infidelity even
+    though the underlying DESIGN stays SPAM-invariant. (Style/layout inherited
+    from the same earlier "2026-06-11" report generator mentioned in this
+    file's module docstring; this is functionally its own showcase-regime
+    figure now.)
+
+    Reads: <RUN_GATES>/design_numbers.npz, which is produced offline (not by
+    this script) by scripts/harvest_design_numbers.py -- see that script /
+    FIGURE_PROVENANCE.md if the numbers here need to be re-derived from the
+    underlying optimization runs. Writes: fig_design_experiments.pdf.
+    """
     dn = np.load(os.path.join(RUN_GATES, "design_numbers.npz"))
     fig, axs = plt.subplots(2, 2, figsize=(9.6, 6.8))
     _ladder_grouped(axs[0, 0], dn, 'cz_ladder', [320.0],
@@ -482,11 +681,24 @@ def fig_design():
 
 
 def fig_storage():
-    """Entanglement-storage panel: holding Phi+ through the idle. The
-    aligned (y2=+y1) and opposed (y2=-y1) implementations of the SAME CPMG
-    train are indistinguishable to single-qubit QNS and in average fidelity;
-    the measured Re S_1_2 > 0 makes the opposed train protect Phi+. Data:
-    storage_panel.npz."""
+    """Panel 6/6: entanglement-storage panel -- holding one of the two
+    "even-parity" Bell pairs, Phi+ = (|00>+|11>)/sqrt(2) or
+    Psi+ = (|01>+|10>)/sqrt(2), alive through an idling period Tg, and asking
+    how well different pulse-timing choices protect it.
+
+    The physics point: `aligned` (y2=+y1) and `opposed` (y2=-y1) are two ways
+    to apply the SAME per-qubit CPMG decoupling train to both qubits, just
+    with the second qubit's pulses either in phase or antiphase with the
+    first's. Measuring either qubit alone (single-qubit QNS), or even the
+    average two-qubit gate fidelity, cannot tell these two choices apart --
+    but because the two qubits' noise is CORRELATED (a nonzero real part of
+    the cross-spectrum Re S_1_2), the two choices protect the TWO Bell states
+    differently: only two-qubit QNS (which measures Re S_1_2) can predict, in
+    advance, that the opposed train is the one that protects Phi+.
+
+    Reads: <RUN_GATES>/storage_panel.npz, produced offline (not by this
+    script) by scripts/showcase_storage_panel.py. Writes: fig_storage.pdf.
+    """
     d = np.load(os.path.join(RUN_GATES, "storage_panel.npz"))
     tg = np.asarray(d['Tg'], dtype=float)
     fig, ax = plt.subplots(1, 1, figsize=(5.6, 3.6))
@@ -517,9 +729,21 @@ def fig_storage():
     plt.close(fig)
 
 
+# `if __name__ == "__main__":` is the standard Python idiom for "only run this
+# block when the file is executed directly (`python report_showcase_figs.py`),
+# not when some other file merely imports names from it" -- harmless here
+# since nothing else imports this file, but it is the pattern that lets a
+# script double as an importable module.
 if __name__ == "__main__":
+    # Fail fast rather than silently plotting the wrong noise model: this
+    # entire file assumes the showcase-regime spectra/run folders (see the
+    # module docstring), so refuse to run under bland/featured.
     assert current_regime() == "showcase", "run with QNS2Q_REGIME=showcase"
     setup_pub_rcparams('compact')
+    # Optional CLI arg selects a single figure to (re)build (e.g.
+    # `python report_showcase_figs.py gates`) instead of the full set --
+    # convenient when only one panel changed and the others are slow/unneeded
+    # to regenerate. Defaults to 'all'.
     which = sys.argv[1] if len(sys.argv) > 1 else 'all'
     if which in ('all', 'spectra'):
         fig_model_spectra()
@@ -528,6 +752,9 @@ if __name__ == "__main__":
         fig_recon_capture()
         print("fig_recon_capture done")
     if which in ('all', 'spam'):
+        # The SPAM-arm run folders are the most likely to be a scratch/backup
+        # copy that isn't present in every checkout (see FIGURE_PROVENANCE.md);
+        # skip gracefully rather than aborting the whole figure batch.
         try:
             fig_spam_comparison()
             print("fig_spam_comparison done")

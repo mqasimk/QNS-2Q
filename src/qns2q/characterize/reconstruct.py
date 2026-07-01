@@ -1,9 +1,49 @@
 """
-This script reconstructs and plots spectra from pre-calculated observables.
+Stage 2 of the QNS pipeline ("characterize" arm): turn the raw correlator
+observables measured in Stage 1 into the six power spectral densities (PSDs)
+of the two-qubit dephasing noise, complete with error bars, and save/plot them.
 
-It defines a configuration class to load parameters, a reconstructor class to manage
-the reconstruction process, and a main execution block to run the analysis for a
-specified data folder.
+Physics picture. A two-qubit QNS experiment does NOT measure a noise spectrum
+directly -- it measures qubit/coupler *coherence decays* (expectation values
+like C_12_0_MT_1) under a family of control-pulse sequences (CPMG/CDD combs,
+Ramsey/FID). Each such observable is a linear functional of the underlying
+noise PSD, weighted by that sequence's filter function. This module solves the
+resulting linear inverse problem -- "given these decay curves, what spectrum
+produced them?" -- at a discrete comb of harmonic frequencies (via
+``characterize/inversion.py``) plus one extra DC (omega=0) point fit from a
+separate multi-time Ramsey-slope sweep. It then folds in the deterministic
+reconstruction bias inherent to that inversion (via
+``characterize/systematics.py``, "the comb-inversion systematic") so the
+quoted error bars are statistical+systematic, not just statistical.
+
+Pipeline position. This is the second of two stages in the "characterize" arm
+(the other arm is "control": ``control/cz.py`` / ``control/idle.py``, which
+optimize gates against the spectra this module produces):
+
+    characterize/experiments.py (Stage 1: simulate QNS shots)
+            -> results.npz, params.npz  (per-run-folder; see qns2q.paths)
+            -> THIS MODULE (Stage 2: invert observables -> spectra)
+            -> specs.npz
+            -> control/cz.py, control/idle.py (Stage 3: gate optimization)
+
+Inputs (read from a run folder resolved by ``qns2q.paths.run_folder()``, e.g.
+``DraftRun_NoSPAM_<regime>/``): ``results.npz`` (the measured observables and
+their statistical errors) and ``params.npz`` (the experiment configuration:
+pulse-comb timings, repetition count, noise-model stamp, etc.).
+
+Outputs (written back into the same run folder): ``specs.npz`` (the six
+reconstructed spectra on the frequency comb, each with statistical, systematic,
+and combined error arrays -- consumed by ``control/cz.py``/``control/idle.py``
+and by ``scripts/report_showcase_figs.py``) plus two publication-quality PDF
+figures under ``<data_folder>/figures/reconstruction/``.
+
+Callers: ``scripts/run_reconstruct.py`` and ``scripts/run_capture_arm.py`` run
+this module's ``main()`` for the NoSPAM pipeline; ``scripts/run_spam_reconstruct.py``
+runs it for each SPAM-protocol arm; ``scripts/report_showcase_figs.py`` imports
+``setup_pub_rcparams`` from here to keep every paper figure's matplotlib style
+consistent. See ``qns2q/characterize/inversion.py`` (the linear-algebra
+inversion + DC fitting) and ``qns2q/characterize/systematics.py`` (the bias
+model) for the machinery this file orchestrates.
 """
 
 import matplotlib
@@ -30,7 +70,14 @@ from qns2q.noise.spectra import S_11, S_22, S_1_2, S_1212, S_1_12, S_2_12
 from qns2q.paths import run_folder, project_root
 
 
-# Maps systematics-module spectrum keys <-> reconstructed-spectra / error dict keys.
+# The same six spectra get three different short-name spellings across the
+# codebase: the terse 'S11'/'S22'/... keys used by characterize/systematics.py,
+# the '_k'-suffixed keys used internally below (self.reconstructed_spectra),
+# and the plain 'S11'/'S22'/... keys written to specs.npz (see
+# save_reconstructed_spectra). These three dicts are the lookup tables that
+# translate between the systematics-module spelling and this file's internal
+# spelling in both directions, so the same physical spectrum can be looked up
+# by whichever name a given piece of code below already has in hand.
 _SYS_TO_SPEC = {'S11': 'S_11_k', 'S22': 'S_22_k', 'S1212': 'S_12_12_k',
                 'S12': 'S_1_2_k', 'S112': 'S_1_12_k', 'S212': 'S_2_12_k'}
 _SYS_TO_ERR = {'S11': 'S_11_err', 'S22': 'S_22_err', 'S1212': 'S_12_12_err',
@@ -40,7 +87,15 @@ _SPEC_TO_SYS = {v: k for k, v in _SYS_TO_SPEC.items()}
 
 def _quad_combine(stat, sys):
     """Quadrature-combine statistical and systematic error arrays, per component for
-    complex (cross-spectra) arrays: sqrt(Re_stat^2+Re_sys^2) + i sqrt(Im_stat^2+Im_sys^2)."""
+    complex (cross-spectra) arrays: sqrt(Re_stat^2+Re_sys^2) + i sqrt(Im_stat^2+Im_sys^2).
+
+    Statistical error (shot noise from a finite number of experiment repeats)
+    and systematic error (the deterministic comb-inversion bias computed in
+    ``add_systematic_errors``/``unfold_comb_bias`` below) come from unrelated
+    mechanisms, so the standard error-propagation rule for independent sources
+    applies: combined = sqrt(stat^2 + sys^2), taken separately on the real and
+    imaginary parts for the complex-valued cross-spectra.
+    """
     if np.iscomplexobj(stat) or np.iscomplexobj(sys):
         return (np.sqrt(np.real(stat) ** 2 + np.real(sys) ** 2)
                 + 1j * np.sqrt(np.imag(stat) ** 2 + np.imag(sys) ** 2))
@@ -48,6 +103,8 @@ def _quad_combine(stat, sys):
 
 
 # --- Publication figure constants ---
+# Sizes (inches) and colors shared by plot_all_spectra/plot_cross_spectra below,
+# so every reconstruction figure in the paper uses one consistent look.
 
 FIG_WIDTH = 7.0    # Two-column width (inches)
 FIG_HEIGHT = 4.5   # 2-row panel height (legacy, kept for reference)
@@ -55,6 +112,9 @@ FIG_HEIGHT_1ROW = 2.5  # Single-row panel height
 FIG_HEIGHT_3ROW = 7.0  # Three-row panel height
 FIG_HEIGHT_3x2 = 5.5  # Three-row, two-column panel height
 
+# Okabe-Ito colorblind-safe palette (standard choice for physics figures);
+# used consistently for "reconstructed" (vermillion) vs "theory" (also
+# vermillion, dashed) vs the imaginary part of a cross-spectrum (blue).
 COLORS = {
     "blue": "#0072B2",
     "vermillion": "#D55E00",
@@ -79,6 +139,13 @@ RECONSTRUCTION_SUBDIR = os.path.join(FIGURES_SUBDIR, "reconstruction")
 def _set_asinh_scale(ax, scale_y, ylim_data=None):
     """asinh y-scale with a data-driven linear width, ignoring non-finite entries
     (e.g. spectra not accessible under the SPAM-robust protocol).
+
+    Why asinh and not a plain log scale: these spectra span many decades in
+    magnitude (self-spectra) but the cross-spectra also cross zero and can go
+    negative, which a log axis cannot display at all. ``asinh(y/scale)``
+    behaves like a log scale far from zero (so the huge dynamic range is still
+    compressed nicely) but is linear near zero, so small/negative points stay
+    visible instead of being dropped or throwing a domain error.
 
     The linear width is the median |finite nonzero| of ``scale_y``. For the
     SPAM-arm figures pass the (arm-independent) theory curve so the asinh warp
@@ -155,6 +222,14 @@ def _sibling_spam_envelopes(data_folder):
 def setup_pub_rcparams(font_scale='compact'):
     """Configure matplotlib rcParams for publication-quality figures.
 
+    This is a *global* matplotlib style switch (it mutates ``plt.rcParams`` in
+    place, so it affects every figure drawn afterward in the same process) --
+    call it once before drawing, not per-axes. It is called both by this
+    module's own plotting methods below and, imported directly, by
+    ``scripts/report_showcase_figs.py``, so that every reconstruction-style
+    panel across the whole paper (not just the ones made in this file) shares
+    the same fonts/line widths/tick style.
+
     Parameters
     ----------
     font_scale : str
@@ -186,6 +261,15 @@ def setup_pub_rcparams(font_scale='compact'):
     plt.rcParams.update(base)
 
 
+# A `@dataclass` auto-writes the __init__ from the type-annotated attributes
+# below, so you construct this with SpectraReconConfig(data_folder=...) and the
+# rest fill in from defaults / __post_init__. `field(init=False)` marks an
+# attribute that is NOT a constructor argument -- it has no default value here
+# and is instead populated by __post_init__ (below) after construction. Unlike
+# a typical plain data container, __post_init__ here does real file I/O (it
+# loads params.npz from disk), so simply *constructing* a SpectraReconConfig
+# already reads a file and can raise FileNotFoundError/KeyError -- it is not a
+# no-op the way building a plain dataclass usually is.
 @dataclass
 class SpectraReconConfig:
     """Configuration and parameters for spectra reconstruction.
@@ -222,7 +306,11 @@ class SpectraReconConfig:
     # aliasing-dominated S_1_12/S_2_12 high harmonics -- which no blind
     # extrapolation reaches ([w_max, 2 w_max] is unsampled) -- keep the full comb
     # bias in their bars. Correct coverage (max pull ~2 sigma across all six
-    # spectra) AND the lower cross-spectra rel-dev (V10-QNS-BARFIX-0624).
+    # spectra) AND the lower cross-spectra rel-dev (V10-QNS-BARFIX-0624: the
+    # 2026-06-24 fix described in the two comment blocks above/below -- this
+    # tag is a self-reference to that fix, not an external doc, kept here so
+    # the change is easy to find again by searching the git history/paper
+    # notes for the same string).
     # NB: the earlier default quoted the fixed-point ITERATION INCREMENT as the
     # residual, which under-covered the uncorrected out-of-band bias ~10x ->
     # spurious 4-sigma teeth. The exact-minus-applied residual fixed that.
@@ -234,26 +322,40 @@ class SpectraReconConfig:
     # fraction covers the fitted line-height/tail-exponent error; 0.5 was
     # validated against ground truth -- reference-arm pulls ~1.
     unfold_residual_frac: float = 0.5
-    params: Dict[str, Any] = field(init=False)
-    t_vec: np.ndarray = field(init=False)
-    w_grain: int = field(init=False)
-    wmax: float = field(init=False)
-    truncate: int = field(init=False)
-    gamma: float = field(init=False)
-    gamma_12: float = field(init=False)
-    c_times: np.ndarray = field(init=False)
-    M: int = field(init=False)
-    T: float = field(init=False)
+    # Everything below is loaded FROM params.npz by __post_init__, not passed
+    # in by the caller -- these mirror the exact experiment configuration
+    # Stage 1 (characterize/experiments.py) used, so the inversion math here
+    # matches the filter functions that actually produced the data:
+    params: Dict[str, Any] = field(init=False)  # the raw params.npz archive (all fields, for provenance stamps etc.)
+    t_vec: np.ndarray = field(init=False)  # Stage-1 time-domain integration grid (0 .. M*T); re-used by the systematics forward model
+    w_grain: int = field(init=False)  # number of points in the continuous frequency grid used for plotting/synthesis (not the harmonic comb itself)
+    wmax: float = field(init=False)  # half-bandwidth (max angular frequency, tau-units) of that continuous grid
+    truncate: int = field(init=False)  # number of comb harmonics to reconstruct (== len(c_times))
+    gamma: float = field(init=False)  # single-qubit dephasing decay rate the Stage-1 experiment was configured with (validated here, not otherwise used in the inversion below)
+    gamma_12: float = field(init=False)  # qubit-qubit (Ising/ZZ) cross-decay rate, same role as gamma
+    c_times: np.ndarray = field(init=False)  # control (probe pulse) timing parameter, one entry per harmonic reconstructed
+    M: int = field(init=False)  # number of pulse-sequence repetitions per experiment shot (the comb's harmonic spacing is set by T, its height by M)
+    T: float = field(init=False)  # total duration (tau-units) of one pulse-sequence repetition; comb harmonics sit at 2*pi*(k+1)/T
 
     def __post_init__(self):
-        """Load parameters from the data folder after initialization."""
+        """Load parameters from the data folder after initialization.
+
+        This is the dataclass "constructor does I/O" pattern flagged in the
+        class comment above: building a SpectraReconConfig actually opens and
+        reads params.npz right now, and fails fast (raises) if Stage 1 hasn't
+        been run yet or wrote something malformed.
+        """
         path = os.path.join(project_root(), self.data_folder)
         if not os.path.isdir(path):
             raise FileNotFoundError(f"Data folder not found at: {path}")
 
         params_path = os.path.join(path, "params.npz")
-        self.params = np.load(params_path)
+        self.params = np.load(params_path)  # np.load on an .npz returns a lazy dict-like archive, not the arrays themselves
 
+        # Table-driven validation: rather than one hand-written check per
+        # field, loop over (name, expected type) and apply the same
+        # presence/None/type checks to each -- keeps the nine checks below in
+        # sync and in one place instead of nine near-duplicated blocks.
         required_params = {
             't_vec': np.ndarray,
             'w_grain': int,
@@ -321,17 +423,29 @@ class SpectraReconConfig:
 
 
 class SpectraReconstructor:
-    """Handles the reconstruction of spectra from observables."""
+    """Orchestrates one full Stage-2 run: load observables -> invert to spectra
+    -> (optionally) bias-correct and add systematic error bars -> plot -> save.
+
+    One instance is built per run folder (see ``SpectraReconConfig``) and its
+    methods are meant to be called in the order ``run()`` calls them (loosely:
+    ``load_observables`` -> ``reconstruct`` -> ``unfold_comb_bias`` ->
+    ``add_systematic_errors`` -> the two ``plot_*`` methods ->
+    ``save_reconstructed_spectra``); most of them mutate ``self`` (e.g.
+    ``self.reconstructed_spectra``) rather than returning values, so later
+    methods depend on earlier ones having already run. Use ``run()`` unless you
+    specifically need to intervene between stages.
+    """
 
     def __init__(self, config: SpectraReconConfig):
         """Initializes the reconstructor with a given configuration."""
         self.config = config
         self.observables: Dict[str, np.ndarray] = {}
         self.reconstructed_spectra: Dict[str, np.ndarray] = {}
-        self.wk: np.ndarray = np.array([])
+        self.wk: np.ndarray = np.array([])  # frequency comb (angular, tau-units) the reconstructed spectra live on; wk[0]=0 is the DC point
 
     def load_observables(self):
-        """Loads the observables array from the data folder."""
+        """Loads the Stage-1 observables (results.npz: the measured coherence-decay
+        correlators, e.g. C_12_0_MT_1, and their statistical errors) from the data folder."""
         path = os.path.join(project_root(), self.config.data_folder, "results.npz")
         self.observables = np.load(path)
 
@@ -346,18 +460,36 @@ class SpectraReconstructor:
         return (float(c.synth_wmax or c.wmax), int(c.w_grain), bool(c.midpoint))
 
     def reconstruct(self):
-        """Reconstructs the spectra from the loaded observables."""
+        """Reconstructs the six spectra at the comb harmonics + DC from the
+        loaded Stage-1 observables.
+
+        This is the core Stage-2 step: for each of the six spectra, look up
+        the handful of measured correlators (e.g. C_12_0_MT_1/2 for S_11) that
+        its filter functions couple to, hand them to the matching
+        ``characterize.inversion.recon_S_*`` function (which builds and solves
+        the linear system relating "observable at each probe-pulse timing" to
+        "spectrum at each comb harmonic"), and stitch the harmonic result
+        together with a separately-fit DC (omega=0) point. Populates
+        ``self.reconstructed_spectra``/``self.reconstructed_spectra_err`` and
+        ``self.wk`` (the frequency grid those spectra live on, with wk[0]=0).
+        """
         c = self.config
         obs = self.observables
-        
+
         # Check if error data is available
         has_errors = any(k.endswith('_err') for k in obs.keys())
 
-        # SPAM-robust runs store the M-swept harmonic observables under
-        # {key}_Mrep{m}; the SPAM-free coefficient is the slope of the linear
-        # M-regression evaluated at the reference repetition c.M (the intercept
-        # absorbs the SPAM term). C_12_12 keys are stored plainly (exactly
-        # SPAM-free, no regression needed).
+        # Under the SPAM-robust protocol, a single harmonic observable can't be
+        # made SPAM-free by itself; instead the experiment repeats each probe
+        # sequence at several different repetition counts m ("M-sweep") and
+        # stores each rep's result under a distinct key {key}_Mrep{m}. Plotting
+        # the observable vs m and extrapolating (linear regression) to what it
+        # would be with NO SPAM contribution isolates the physical (SPAM-free)
+        # coefficient as the fitted slope evaluated at the reference repetition
+        # count c.M -- the fitted intercept is where the SPAM-induced offset
+        # gets absorbed instead of contaminating the spectrum. C_12_12 keys
+        # already have an exactly SPAM-free estimator on their own, so they
+        # skip this and are read directly (no regression needed).
         robust = getattr(c, 'spam_protocol', 'none') == 'robust'
         msweep = [int(m) for m in getattr(c, 'm_sweep_robust', [])]
 
@@ -376,7 +508,11 @@ class SpectraReconstructor:
         # Reconstruct spectra at comb harmonics wk = 2*pi*(k+1)/T
         wk_harmonics = np.array([2 * np.pi * (n + 1) / c.T for n in range(c.truncate)])
 
-        # Helper to unpack result
+        # Helper to unpack result: each recon_S_* function takes a LIST of
+        # observable arrays (one per probe-pulse timing) and, if errors were
+        # supplied for every one of them, returns (spectrum, error); with no
+        # errors it returns just the spectrum, so a same-shaped zero array
+        # stands in for "error unavailable" to keep downstream code uniform.
         def call_recon(func, keys, **kwargs):
             vals, errs = zip(*(get_coef(k) for k in keys))
             errs = None if any(e is None for e in errs) else [np.asarray(e) for e in errs]
@@ -416,7 +552,17 @@ class SpectraReconstructor:
                 print(f"    [diag] {name}: spectral weight above comb cutoff "
                       f"omega_kmax = {100*frac:.2f}% (truncation bias)")
 
-        # Reconstruct DC (w=0) values from the multi-time FID decay sweep.
+        # Reconstruct DC (w=0) values from the multi-time FID decay sweep. (FID =
+        # "free induction decay", the bare Ramsey experiment with no decoupling
+        # pulses; CPMG/CDD3 below name specific refocusing-pulse sequences --
+        # CPMG = Carr-Purcell-Meiboom-Gill, CDD3 = 3rd-order concatenated
+        # dynamical decoupling. Combining two of them into one observable name
+        # like C_1_0_FIDCDD3 means "qubit 1, no coupling correction, FID then
+        # CDD3 halves of the sequence".) The comb-harmonic inversion above
+        # cannot see omega=0 (it only samples the harmonics 2*pi*k/T), so the
+        # single DC point is measured separately from how coherence decays
+        # over a SWEEP of increasing wait times -- its initial slope is
+        # proportional to S(0).
         # Each recon_*_dc fits S(0) from the slope of C(t) over the adaptively-selected
         # measurable+linear window (inversion._ramsey_fit_dc); returns (val, err,
         # reliable). reliable=False flags quasi-static / sub-comb-cusp noise whose DC is
@@ -525,25 +671,45 @@ class SpectraReconstructor:
         }
 
     def unfold_comb_bias(self):
-        """Self-consistent comb-bias correction (unfolding).
+        """Self-consistent comb-bias correction ("unfolding" the markers).
 
         The comb-delta inversion carries a deterministic bias (truncation +
-        finite-M tooth width + neighbor leakage). ``forward_model_systematic``
-        computes that bias exactly for ANY spectra; feeding it the
-        RECONSTRUCTED spectra (``selfconsistent_spectra`` -- de-lined
-        piecewise-linear background + Gaussian lines at the experimentally-
-        known nuclear-difference centers + fitted power-law tails; no truth
-        knowledge) predicts the bias of this very reconstruction, which is
-        then subtracted. One refinement iteration follows; the quoted
-        systematic becomes the iteration increment |b2 - b1| (the fixed-point
-        convergence scale) instead of the full bias.
+        finite-M tooth width + neighbor leakage) -- i.e. even with zero shot
+        noise, this inversion algorithm alone would not return exactly the
+        true spectrum. ``forward_model_systematic`` computes that bias exactly
+        for ANY input spectra; feeding it the RECONSTRUCTED spectra
+        (``selfconsistent_spectra`` -- de-lined piecewise-linear background +
+        Gaussian lines at the experimentally-known nuclear-difference centers
+        + fitted power-law tails; no ground-truth knowledge) predicts the bias
+        of THIS OWN reconstruction, which is then subtracted from the plotted
+        markers (``self.reconstructed_spectra``). One refinement iteration
+        follows (bias computed again from the once-corrected spectrum) so the
+        subtraction is self-consistent rather than a single noisy estimate.
+
+        NOTE what is actually quoted as the residual systematic error bar is
+        NOT computed here: this method only performs and stores the
+        correction (``self._applied_bias``, ``self._applied_bias_sigma``,
+        both DC+harmonics). The honest post-correction error bar --
+        "exact forward-model bias of the truth minus what this method
+        actually subtracted", in quadrature with the correction's own
+        statistical scatter -- is computed afterward in
+        ``add_systematic_errors`` (see that method's docstring; this replaced
+        an earlier, less accurate choice that quoted only the fixed-point
+        iteration increment |b2-b1|, which under-covered the bias left over
+        in channels the correction cannot fully reach -- V10-QNS-BARFIX-0624).
         """
         from qns2q.noise.spectra import line_priors_per_channel
         c = self.config
         # Per-channel prior form: identical to the legacy (centers, sigma) on
         # the anchored classes; under the showcase regime it adds the coupler
         # line on S1212 (which the piecewise-linear background would otherwise
-        # miss -- the UNFOLD-RESIDUAL lesson, applied to the new channel).
+        # miss). This repeats a lesson learned earlier (tagged UNFOLD-RESIDUAL
+        # in characterize/systematics.py, where it was first diagnosed): if a
+        # narrow spectral line is fit only implicitly by a smooth background
+        # model, the self-consistent bias correction under-corrects right at
+        # the line and leaves a spuriously large "residual" there -- so any
+        # new sharp feature (like this coupler line) needs its own explicit
+        # entry in ``lines`` rather than being left to the smooth background.
         lines = line_priors_per_channel()
         inv_opts = dict(inversion_method=c.inversion_method, reg_lambda=c.reg_lambda,
                         enforce_nonneg=c.enforce_nonneg)
@@ -576,6 +742,12 @@ class SpectraReconstructor:
                 out[sk] = full
             return out
 
+        # Two-step fixed-point iteration, not a single correction: b1 is the
+        # bias predicted from the AS-MEASURED (still-biased) spectrum; recon1
+        # is that spectrum with b1 subtracted (a better, but not perfect,
+        # estimate of the truth); b2 is the bias predicted from recon1 -- a
+        # more accurate bias estimate because it is evaluated closer to the
+        # true spectrum. b2 (not b1) is what actually gets subtracted below.
         b1 = bias_of(raw0)
         recon1 = {sk: raw0[sk] - b1[sk] for sk in raw0}
         b2 = bias_of(recon1)
@@ -606,6 +778,18 @@ class SpectraReconstructor:
             corrected = raw0[sk] - b2[sk]
             corrected[nan_mask[sk]] = np.nan
             self.reconstructed_spectra[rk] = corrected
+            # A cheap, ground-truth-free estimate of what bias is LEFT after
+            # subtracting b2: |b2-b1| (how much the correction changed on its
+            # last iteration -- large means it hasn't converged, so trust it
+            # less) plus a fixed conservative fraction of b2 itself (standard
+            # unfolding practice: never claim to have removed 100% of a bias
+            # estimated from noisy data) plus the correction's own
+            # statistical scatter, in quadrature. This is what
+            # add_systematic_errors falls back to for the DC point (which has
+            # no exact ground-truth comparison available); for the harmonics,
+            # in the simulation, add_systematic_errors instead uses the exact
+            # forward-model bias of the known true spectrum minus what was
+            # actually subtracted, which is the more accurate of the two.
             db = b2[sk] - b1[sk]
             sb = sigma_b[sk]
             frac = c.unfold_residual_frac
@@ -668,6 +852,12 @@ class SpectraReconstructor:
                                    + 1j*np.sqrt(np.imag(diff)**2 + np.imag(sb)**2))
                     else:
                         sys[sk] = np.sqrt(diff**2 + sb**2)
+                # DC point: there is no analogous "exact true-model bias" to
+                # compare against here (dc_fit_systematic uses the Ramsey-slope
+                # sweep, a different estimator from the harmonic comb), so the
+                # DC bar reuses the self-consistent residual estimate already
+                # computed in unfold_comb_bias's [0]-th (DC) entry rather than
+                # the truth-vs-applied comparison used for the harmonics above.
                 dc_bias = {sk: float(np.real(self._unfold_residual[sk][0]))
                            for sk in _SYS_TO_SPEC}
             else:
@@ -789,6 +979,13 @@ class SpectraReconstructor:
                 yerr = ERRORBAR_SIGMA * err_dict[err_key]
 
             own = self.reconstructed_spectra[s_key]
+            # dc_ok/i0 pattern (repeated for every panel below): dc_reliable
+            # flags whether the w=0 point was an actual fit or just a
+            # placeholder/bound (see reconstruct() above). When it's not
+            # reliable, i0=1 skips index 0 (the DC point) for the SOLID
+            # markers/axis-limit data, and a second, hollow-marker errorbar
+            # call just below draws that one flagged point separately so its
+            # inflated bar is visibly distinct and does not stretch the axes.
             dc_ok = getattr(self, 'dc_reliable', {}).get(_SPEC_TO_SYS[s_key], True)
             i0 = 0 if dc_ok else 1
             ax.errorbar(self.wk[i0:] / xunits, own[i0:],
@@ -1028,14 +1225,31 @@ class SpectraReconstructor:
         plt.close(fig)
 
     def save_reconstructed_spectra(self):
-        """Saves the reconstructed spectra (including DC at w=0) to a .npz file."""
+        """Saves the reconstructed spectra (including DC at w=0) to specs.npz --
+        the hand-off file to Stage 3 (``control/cz.py``, ``control/idle.py``)
+        and to the figure scripts.
+
+        On-disk schema (all arrays indexed like ``self.wk``, DC at index 0):
+        ``wk`` (the frequency comb), ``S11``/``S22``/``S1212``/``S12``/``S112``/
+        ``S212`` (the six spectra; complex for the three cross-spectra), each
+        with matching ``*_err`` (statistical only), ``*_sys`` (systematic bias
+        estimate), ``*_errtot`` (statistical+systematic in quadrature -- what
+        the figures actually plot) and ``*_dc_ok`` (bool: was the w=0 point an
+        actual fit or just a placeholder), plus the scalar ``spam_protocol``
+        and ``model_version`` metadata below.
+        """
         # Save specs.npz at the data folder root (consumed by downstream scripts)
         path = os.path.join(project_root(), self.config.data_folder, "specs.npz")
         save_dict = dict(
             wk=self.wk,
             spam_protocol=getattr(self.config, 'spam_protocol', 'none'),
-            # OPT-PROVENANCE: propagate the model version the run was recorded
-            # under (params.npz stamp; 'unknown' for pre-stamp folders).
+            # OPT-PROVENANCE: stamp which noise-model version (see
+            # noise/spectra.py's MODEL_VERSION) generated the data this
+            # reconstruction came from, so a downstream gate-optimization run
+            # that loads specs.npz from a folder built under an OLD/DIFFERENT
+            # noise model can detect the mismatch and warn instead of silently
+            # optimizing against stale physics ('unknown' for run folders
+            # predating this stamp).
             model_version=(str(self.config.params['model_version'])
                            if 'model_version' in self.config.params
                            else 'unknown'),
@@ -1080,7 +1294,12 @@ class SpectraReconstructor:
         np.savez(path, **save_dict)
 
     def run(self):
-        """Runs the full reconstruction pipeline."""
+        """Runs the full reconstruction pipeline end to end, in the order the
+        later stages depend on: load the Stage-1 data, invert it to spectra,
+        (optionally) self-consistently remove the comb-inversion bias, add
+        error bars, draw both figures, and write specs.npz. This is the one
+        method external callers (``main`` below) actually need to call.
+        """
         self.load_observables()
         self.reconstruct()
         if self.config.compute_systematic and self.config.unfold_bias:
@@ -1098,7 +1317,11 @@ class SpectraReconstructor:
 
 
 def main(data_folder=None):
-    """Main function to run the spectra reconstruction.
+    """Main function to run the spectra reconstruction. This is this module's
+    public entry point -- it is what ``scripts/run_capture_arm.py``,
+    ``scripts/run_spam_reconstruct.py``, and this file's own ``__main__``
+    block below all actually call; do not change its name or the
+    ``data_folder`` parameter (other files import and call it by name).
 
     Parameters
     ----------
@@ -1106,6 +1329,11 @@ def main(data_folder=None):
         Run folder to reconstruct (relative to the project root). Defaults to the
         active regime's canonical NoSPAM folder; the SPAM pipeline scripts pass
         their protocol-suffixed folders here.
+
+    Note: errors are caught and printed here rather than raised, so a failed
+    reconstruction (e.g. a missing run folder) prints a message and returns
+    normally instead of crashing a caller that runs this as one step of a
+    longer pipeline script.
     """
     # --- User Configuration ---
     data_folder = run_folder() if data_folder is None else data_folder
@@ -1122,6 +1350,10 @@ def main(data_folder=None):
 
 
 if __name__ == "__main__":
+    # Command-line entry point: `python -m qns2q.characterize.reconstruct
+    # --folder <run_folder>` (also reachable via scripts/run_reconstruct.py,
+    # which just re-execs this __main__ block). --folder is the only CLI flag
+    # and is part of the documented interface (see CLAUDE.md) -- keep its name.
     import argparse
     ap = argparse.ArgumentParser(
         description="Reconstruct two-qubit noise spectra (incl. the cross-spectra "

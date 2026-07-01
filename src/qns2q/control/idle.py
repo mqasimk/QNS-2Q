@@ -1,13 +1,66 @@
 """
 Pulse Sequence Optimization for Two-Qubit Idling Gates (v4).
 
-This script implements an optimization pipeline for dynamical decoupling sequences
-to minimize infidelity in a two-qubit system. It supports:
-1. Loading spectral noise data.
-2. Constructing libraries of known pulse sequences (CDD, mqCDD).
-3. Evaluating sequence performance using overlap integrals calculated in the time domain.
-4. Optimizing random pulse sequences using JAX-based gradient descent.
-5. Efficiently handling repeated sequences via time-folding strategies or frequency comb approximations.
+**Physics role / pipeline position.** This is Stage 3b of the QNS-2Q pipeline
+(see repo-root CLAUDE.md), on the "control" arm: given the noise power spectral
+densities already reconstructed by the "characterize" arm (Stage 1
+``characterize/experiments.py`` -> Stage 2 ``characterize/reconstruct.py``),
+it designs pulse sequences that hold the two-qubit + bath-qubit register idle
+(the "identity gate" / quantum-memory operation, as opposed to an entangling
+operation) for a target duration ``Tg`` while suppressing the dephasing that
+the environment noise would otherwise accumulate. Physically this is
+dynamical decoupling (DD): interleave pi-pulses so that the qubits'
+sensitivity to (mostly slow, 1/f-like) Z-axis dephasing noise keeps flipping
+sign and the accumulated phase partially cancels. Its sibling module,
+``control/cz.py``, runs the same overlap-integral infidelity machinery for
+the two-qubit CZ entangling gate instead -- read that file's docstring for
+the CZ-specific parts; here the target operation is "do nothing" rather than
+an entangling unitary, so the fidelity formula and pulse-library construction
+differ from cz.py even though the surrounding optimization scaffolding is
+close to identical.
+
+Concretely this script:
+1. Loads reconstructed (or, with ``--simulated``, ground-truth analytic)
+   spectral noise data via ``Config``.
+2. Constructs libraries of known pulse sequences (CDD, mqCDD) as a baseline.
+3. Evaluates sequence performance using overlap integrals of the pulse
+   sequence's "switching function" against the noise autocorrelation,
+   computed either exactly in the time domain or via a frequency-comb
+   shortcut (see ``use_comb_approximation``).
+4. Optimizes free ("NT" = noise-tailored, i.e. not from a textbook family)
+   pulse-timing sequences using JAX-based gradients feeding SciPy's SLSQP.
+5. Efficiently handles M-fold repeated sequences via time-domain folding
+   (``prepare_time_domain_overlap`` / ``evaluate_overlap_folded``) or the
+   frequency-comb approximation (``evaluate_overlap_comb``), and sweeps M
+   (number of base-sequence repetitions within Tg) when run as ``__main__``.
+
+**Inputs.** ``Config`` (below) loads ``specs.npz`` + ``params.npz`` (Stage 2
+output) or ``simulated_spectra.npz`` (the analytic ground truth written by
+``python -m qns2q.noise.spectra``) from a run folder -- by default the active
+regime's NoSPAM folder (``qns2q.paths.run_folder()``), or a SPAM arm via
+``--protocol``. It also imports the analytic spectral functions directly from
+``qns2q.noise.spectra`` to build the "ideal" ground-truth benchmark spectra
+(``Config.SMat_ideal``) regardless of what characterization could actually
+measure, plus helpers from ``qns2q.control.tails`` (extrapolating reconstructed
+spectra beyond the QNS comb's last resolvable tooth) and
+``qns2q.control.padding`` (see the note at ``pad_targets`` import, below).
+
+**Outputs.** Per-M summary files ``infs_known_id_M<M>*.npz`` /
+``infs_opt_id_M*.npz``, a combined ``plotting_data/plotting_data_id_v4*.npz``,
+and (only when the whole M-sweep in ``__main__`` completes)
+``optimization_data_all_M*.npz`` -- all written under the run folder. These
+feed the manuscript's gate-comparison figure (``scripts/report_showcase_figs.py``,
+see FIGURE_PROVENANCE.md) and are also read directly (as a Python module, not
+just its saved files) by ``scripts/harvest_design_numbers.py`` and
+``scripts/showcase_storage_panel.py``, which import this file as
+``from qns2q.control import idle as idmod`` and call ``idmod.Config``,
+``idmod.calculate_infidelity``, ``idmod.calculate_idling_fidelity``,
+``idmod.prepare_time_domain_overlap``, ``idmod.evaluate_overlap_folded`` and
+``idmod.make_tk12`` -- those six names are this module's protected external
+surface; do not change their names or call signatures.
+
+Run from the repo root as ``PYTHONPATH=src python -m qns2q.control.idle``
+(see CLAUDE.md "Running the Pipeline", Stage 3b).
 
 Author: [Q]
 Date: [01/18/2026]
@@ -21,8 +74,19 @@ import traceback
 import jax
 import jax.numpy as jnp
 import jax.scipy.integrate
+# JAX defaults to 32-bit floats; the noise spectra span many orders of
+# magnitude and the optimizer differentiates through them, so 64-bit
+# precision is required everywhere in this pipeline (silently losing it would
+# show up as noisy/wrong gradients, not a crash).
 jax.config.update("jax_enable_x64", True)
-# OPT-SPEEDUPS (a): persistent XLA compilation cache (see cz.py).
+# OPT-SPEEDUPS (a): persistent XLA compilation cache (see cz.py for the fuller
+# writeup). JAX normally has to re-compile (JIT: "just-in-time"-compile a
+# Python function to fast device code) every function the first time it sees
+# a given input shape, in every fresh process -- expensive (~1 s) and paid
+# again on every rerun. Caching the compiled programs to disk under
+# .jax_cache/ lets a rerun at the same array shapes just deserialize
+# (~0.1 s) instead of recompiling; it is purely a wall-clock optimization and
+# never changes what gets computed.
 from qns2q.paths import project_root as _project_root
 jax.config.update("jax_compilation_cache_dir",
                   os.path.join(_project_root(), ".jax_cache"))
@@ -43,7 +107,14 @@ from qns2q.paths import run_folder, project_root
 # optimization data so every figure carries its provenance.
 RANDOM_SEED = 20260608
 
-# OPT-SPEEDUPS (d): SLSQP convergence knobs (see cz.py for rationale).
+# OPT-SPEEDUPS (d): SLSQP (Sequential Least Squares Programming, scipy's
+# constrained gradient optimizer used below) convergence knobs. Tighter values
+# (tol=1e-10, maxiter=1000) over-converge an objective built from spectra that
+# already carry 5-20% reconstruction uncertainty -- squeezing extra digits out
+# of noisy inputs, at real wall-clock cost, since each iteration is a ~2 ms
+# device call dispatched from Python/SciPy. These looser knobs were checked to
+# reproduce the pre-change (2026-06-11) winning sequences and infidelities
+# (see cz.py, which shares this rationale).
 SLSQP_TOL = 1e-7
 SLSQP_MAXITER = 300
 
@@ -60,26 +131,61 @@ _OVERLAP_SETUP_CACHE = {}
 
 class Config:
     """
-    Configuration and data management for pulse sequence optimization.
+    Configuration and data management for idling/DD pulse-sequence optimization.
+
+    NOTE FOR READERS OF THIS CODEBASE: unlike every other pipeline-stage config
+    in this repo (``CZOptConfig`` in ``control/cz.py``, ``QNSExperimentConfig``,
+    ``SpectraReconConfig``, ...), this one is a plain Python class with a hand
+    -written ``__init__``, NOT a ``@dataclass``. There is no functional
+    difference that matters here -- both patterns just group named parameters
+    with defaults -- but it means the parameter list/defaults live in the
+    ``__init__`` signature below rather than in dataclass field declarations,
+    and it does not get the free ``__repr__``/``field(default_factory=...)``
+    conveniences a ``@dataclass`` would. This is a historical inconsistency,
+    not a deliberate design choice -- if you are looking for where "M" or
+    "max_pulses" defaults are set, look at the ``__init__`` signature, not a
+    class body full of ``field(...)`` declarations.
+
+    Constructing a ``Config`` does real disk I/O and can fail fast: like the
+    dataclass configs elsewhere in this repo, ``__init__`` eagerly loads the
+    upstream ``.npz`` files (``specs.npz``/``params.npz`` or
+    ``simulated_spectra.npz``) for the given run folder and immediately builds
+    the derived spectral matrices below, so a missing/incompatible prior stage
+    is caught at construction time rather than deep inside an optimization
+    loop.
 
     This class handles the loading of reconstructed spectral data, physical system
     parameters, and the configuration of the optimization engine. It constructs
-    the interpolated spectral matrices (S-matrix) used for infidelity calculations.
+    the interpolated spectral matrices (S-matrix) used for infidelity calculations:
+    ``SMat`` is the model built from what the (possibly SPAM-limited, possibly
+    finite-sample) characterization actually measured -- what the blind
+    optimizer searches against -- while ``SMat_ideal`` is always built straight
+    from the analytic noise model of ``qns2q.noise.spectra``, i.e. the "ground
+    truth" used only to SCORE a chosen sequence's true infidelity, never to
+    pick it (keeping the optimizer blind to information a real experiment
+    would not have).
 
     Parameters
     ----------
     fname : str, optional
-        Data folder name with results from Stage 1 & 2. Defaults to the active regime's run folder (run_paths.run_folder()).
+        Data folder name with results from Stage 1 & 2. Defaults to the active regime's run folder (qns2q.paths.run_folder()).
     include_cross_spectra : bool, optional
         Whether to include cross-correlated noise terms ($S_{12}, S_{1,12}$, etc.). Default is True.
     Tg : float, optional
-        Target gate time in seconds.
+        Target gate (idle/hold) time, in units of tau (the minimum pulse
+        separation; see repo CLAUDE.md "Units: tau = 1") -- NOT seconds,
+        despite historically being documented that way here.
     tau_divisor : int, optional
         Divisor of the QNS time $T$ to determine the minimum pulse interval $\tau$. Default is 160.
     M : int, optional
-        Number of sequence repetitions (blocks). Default is 1.
+        Number of sequence repetitions (blocks) tiling the gate time Tg (each
+        block has duration T_seq = Tg / M); the ``__main__`` sweep below tries
+        M = 1, 2, 4, ..., 128 and keeps whichever gives the lowest true
+        infidelity. Default is 1.
     max_pulses : int, optional
-        Maximum allowed pulses across all repetitions. Default is 100.
+        Maximum allowed pulses across all repetitions (0 = uncapped, limited
+        only by the minimum pulse separation; see the UNCAP-0611 comment
+        below). Default is 100.
     num_random_trials : int, optional
         Number of random sequence initializations for optimization. Default is 10.
     use_known_as_seed : bool, optional
@@ -90,12 +196,45 @@ class Config:
         Filename for saving optimized sequence results.
     plot_filename : str, optional
         Filename for the infidelity vs gate time plot.
+    reps_known, reps_opt : list of int, optional
+        Legacy/unused parameters (kept only so old call sites do not break;
+        see the "Legacy/Unused" comment where they are stored in __init__).
     use_simulated : bool, optional
         If True, load simulated target spectra instead of reconstructed ones. Default is False.
     gate_time_factors : list of int, optional
         Powers of 2 to scale the gate time relative to $T_{qns}$.
+    spectral_model : {'interp', 'selfconsistent'}, optional
+        How the characterized ``SMat`` is built from the reconstructed comb:
+        'interp' linearly interpolates through the measured teeth (+ tail
+        extrapolation past the last one); 'selfconsistent' instead uses the
+        line/tail/head-aware model from
+        ``characterize.systematics.selfconsistent_spectra`` (OPT-SPECTRAL-MODEL,
+        see ``_build_interpolated_spectra`` below). Default 'interp'.
+    max_dim : int, optional
+        SLSQP tractability guard: when > 0, clip any single noise-tailored
+        (NT) search trial to at most this many optimization variables
+        (n1 + n2 pulse-timing parameters combined); 0 = no guard. See
+        UNCAP-0611 below.
+    min_sep_factor : float, optional
+        Minimum pulse separation as a multiple of tau (a finite-control-
+        bandwidth scenario: > 1.0 models pi-pulses that are not
+        instantaneous); 1.0 = legacy/idealized instantaneous pulses. Default
+        1.0.
+    char_self_only : bool, optional
+        Ablation switch: if True, build the characterized model from the two
+        single-qubit self-spectra only (drop S1212 and every cross-spectrum,
+        as a 1-qubit-only QNS campaign would have to), while ``SMat_ideal``
+        still keeps the full truth -- this prices what the two-qubit part of
+        the reconstruction is worth. Default False.
+    informed_counts : bool, optional
+        If True, add a few pulse-count candidates chosen by looking at where
+        the characterized self-spectra are quietest (rather than relying
+        purely on random sampling) to the NT search's trial list. Default
+        False.
+    plot_data_name : str, optional
+        Filename for the consolidated per-M plotting-data npz.
     """
-    def __init__(self, 
+    def __init__(self,
                  fname=None,
                  include_cross_spectra=True,
                  Tg=2240.0,   # tau units (= 4*14us at the legacy tau=25ns anchor)
@@ -120,7 +259,10 @@ class Config:
                  ):
 
         """
-        Initialize configuration.
+        Initialize configuration. See the class docstring above for what each
+        parameter means; this constructor does real file I/O (loads the
+        upstream .npz files and builds the spectral matrices) rather than
+        just storing values.
         """
         # Paths
         if fname is None:
@@ -156,13 +298,21 @@ class Config:
         self.use_simulated = use_simulated
         # 'interp' = linear interpolation through the comb teeth (+ tails);
         # 'selfconsistent' = the unfold model's line/tail/head-aware spectra
-        # (OPT-SPECTRAL-MODEL).
+        # (OPT-SPECTRAL-MODEL: see _build_interpolated_spectra below for what
+        # that alternate model actually does).
         self.spectral_model = spectral_model
 
         # OPT-PROVENANCE: spectra generated under a different noise model than
         # the current one make the ideal benchmark (SMat_ideal, built from the
         # CURRENT model) a mixed-model comparison -- the trap behind
-        # CA-REPRO-NUMBERS.
+        # CA-REPRO-NUMBERS. Concretely: if specs.npz was produced by an older
+        # version of qns2q.noise.spectra (e.g. before a calibration constant
+        # changed), comparing its "characterized" infidelity against an
+        # "ideal" benchmark built from TODAY's analytic model silently mixes
+        # two different noise models -- the reported gap would reflect a
+        # model change, not reconstruction quality. The version stamps are
+        # compared below and a mismatch prints a loud warning rather than
+        # failing silently.
         mv = None
         for src_ in (self.specs, self.params):
             if 'model_version' in src_:
@@ -191,7 +341,12 @@ class Config:
         # Control-bandwidth scenario (SHOWCASE-0612): minimum pulse separation
         # in units of tau, applied symmetrically to the library, the NT search
         # and the inits. 1.0 = legacy (separation = tau). The time-domain
-        # overlap resolution stays keyed to tau.
+        # overlap resolution stays keyed to tau. Physically, min_sep_factor > 1
+        # models the fact that a real pi-pulse takes finite time to apply (it
+        # is not an instantaneous kick), so two pulses cannot be scheduled
+        # arbitrarily close together; raising this value shrinks how many
+        # pulses can fit in a given hold time, which is the whole point of
+        # this "reduced control bandwidth" scenario.
         if min_sep_factor < 1.0:
             raise ValueError("min_sep_factor < 1: the minimum separation "
                              "cannot undercut the time unit tau")
@@ -202,8 +357,17 @@ class Config:
                   f"{min_sep_factor:g} tau")
         # Ablation rung (c) (SHOWCASE-0612): characterized model from the
         # single-qubit spectra alone; the ideal benchmark keeps full truth.
+        # This asks "how much would the gate design suffer if the experiment
+        # had only ever run single-qubit QNS, and never learned the two-qubit
+        # ZZ spectrum or any cross-correlation?" -- one rung of the paper's
+        # "knowledge ladder" of what characterization buys you.
         self.char_self_only = char_self_only
-        # Spectrum-informed pulse-count candidates (SHOWCASE-0612; see cz.py).
+        # Spectrum-informed pulse-count candidates (SHOWCASE-0612; see cz.py
+        # for the fuller rationale): besides trying random pulse counts, also
+        # deliberately try a few pulse counts whose fundamental frequency
+        # lands in a quiet part of the CHARACTERIZED spectrum -- a cheap,
+        # physically-motivated way to make sure the random search does not
+        # miss an obviously-good window purely by bad luck.
         self.informed_counts = informed_counts
 
         self.M = M
@@ -216,7 +380,14 @@ class Config:
         # SLSQP tractability guard (UNCAP-0611): when > 0, clip the random
         # NT search so a single trial never exceeds max_dim optimization
         # variables (n1 + n2). Clipped blocks are announced in the log --
-        # never a silent cap.
+        # never a silent cap. Why this exists: max_pulses=0 above intentionally
+        # removes the historical pulse-count cap so the search is limited only
+        # by physics (the minimum pulse separation), but SLSQP's per-iteration
+        # cost grows with the number of free variables (n1 + n2); at very
+        # short T_seq / long M this "uncapped" count can get large enough that
+        # a single optimization restart becomes impractically slow. max_dim
+        # gives a way to bound that cost again without silently reintroducing
+        # a hidden pulse-count limit -- any clip is printed.
         self.max_dim = max_dim
         self.plot_data_name = plot_data_name
         self.num_random_trials = num_random_trials
@@ -271,12 +442,15 @@ class Config:
 
         The w=0 point comes from the data grid whenever it carries a DC sample
         (reconstructed specs.npz: the noise-aware slope-fit / double-echo DC
-        experiments land there, OPT-DC-ORACLE). Only a DC-less grid falls back
-        to inserting the analytic S(0) -- simulated_spectra.npz, where the file
-        IS the analytic model evaluated at the teeth, or a legacy specs.npz
-        (warned at load: regenerate Stage 2). The distinction is first-order
-        here: for M > 10 the comb evaluator's term_dc reads SMat[..., 0]
-        directly."""
+        experiments land there, OPT-DC-ORACLE -- i.e. this is a real measured
+        point, not an "oracle" value smuggled in from the analytic ground
+        truth; the tag records that this WAS a place a bug could sneak the
+        true answer in unnoticed, and confirms it doesn't). Only a DC-less
+        grid falls back to inserting the analytic S(0) -- simulated_spectra.npz,
+        where the file IS the analytic model evaluated at the teeth, or a
+        legacy specs.npz (warned at load: regenerate Stage 2). The
+        distinction is first-order here: for M > 10 the comb evaluator's
+        term_dc reads SMat[..., 0] directly."""
         # 4x4 Matrix: Indices 0, 1, 2, 3 correspond to 0, 1, 2, 12
         SMat = jnp.zeros((4, 4, self.w.size), dtype=jnp.complex128)
         w0 = jnp.array([0.0])
@@ -298,7 +472,13 @@ class Config:
             # aware model the unfold bias correction uses (characterize.
             # systematics.selfconsistent_spectra). See cz.py for the full
             # rationale; the blind protocol is preserved (data + experimental
-            # priors only).
+            # priors only). Plainly: instead of just drawing a straight line
+            # between the reconstructed comb teeth ('interp'), this rebuilds
+            # each spectrum using the same physically-motivated line-shape
+            # model (peak positions/widths from experiment, heights fit to
+            # the data) that the reconstruction's own bias-correction step
+            # uses -- it only ever uses information a real experiment could
+            # have, so the blind (no-look-at-truth) comparison stays valid.
             from qns2q.characterize.systematics import selfconsistent_spectra
             from qns2q.noise.spectra import line_priors
             sc_recon = {k: np.nan_to_num(np.asarray(self.specs[k]))
@@ -342,9 +522,13 @@ class Config:
         # (robust: all-NaN S112/S212) is dropped from this CHARACTERIZED model
         # with a notice -- the blind objective then assumes zero there -- while
         # _build_ideal_spectra keeps the full truth, so the ideal benchmark
-        # prices what losing the channel costs (OPT-ROBUST-NAN). By contrast,
-        # include_cross_spectra=False removes the channels from BOTH models
-        # (the gate-v style counterfactual world).
+        # prices what losing the channel costs (OPT-ROBUST-NAN: e.g. the
+        # SPAM-robust protocol cannot reconstruct the two 3-body cross-spectra
+        # at all -- this is the code path that decides what to do about the
+        # resulting gap in the input data, namely "pretend it's zero for the
+        # optimizer, but still judge the result against the true nonzero
+        # value"). By contrast, include_cross_spectra=False removes the
+        # channels from BOTH models (the gate-v style counterfactual world).
         if self.include_cross_spectra:
             def cross(key, dc_func):
                 data = np.asarray(self.specs[key])
@@ -370,7 +554,16 @@ class Config:
         return SMat
 
     def _build_ideal_spectra(self):
-        """Constructs the matrix of ideal analytical spectra."""
+        """Constructs the matrix of ideal analytical spectra.
+
+        Unlike ``_build_interpolated_spectra`` (which is built from what the
+        characterization measured/reconstructed, and can be missing channels
+        or subject to reconstruction noise), this always evaluates the
+        analytic noise model of ``qns2q.noise.spectra`` directly on the dense
+        ``w_ideal`` grid -- the ground truth used only to score a chosen
+        sequence's TRUE infidelity (``calculate_infidelity(..., use_ideal=True)``),
+        never to select it.
+        """
         SMat_ideal = jnp.zeros((4, 4, self.w_ideal.size), dtype=jnp.complex128)
         
         # Diagonal elements
@@ -410,9 +603,31 @@ class Config:
 # ==============================================================================
 # Sequence Generation Utilities
 # ==============================================================================
+# A "pulse sequence" throughout this file means the sorted list of times at
+# which a pi-pulse is applied to one qubit during one base block of duration
+# T, ALWAYS written including both boundary points: [0, t1, t2, ..., tn, T].
+# The physical picture: each pi-pulse flips the sign of that qubit's
+# instantaneous sensitivity to Z-axis dephasing noise ("the switching
+# function" y(t) = (-1)^(number of pulses so far)); a well-chosen sequence
+# makes y(t) oscillate fast enough that the noise's slow (small-w) power
+# averages to a small net phase over the block. Two equivalent
+# representations are used and converted between with
+# ``pulse_times_to_delays``/``delays_to_pulse_times``: the absolute times
+# above, and the "delays" between consecutive pulses (which is what the
+# SLSQP optimizer actually varies, since the OPTIMIZATION variables need to
+# be an unconstrained-looking vector of intervals rather than a sorted list
+# of absolute times).
 
 def remove_consecutive_duplicates(input_list):
-    """Removes consecutive duplicate elements from a list."""
+    """Removes consecutive duplicate elements from a list.
+
+    Used to clean up the CDD/mqCDD recursive construction below: nested CDD
+    trees generate the same boundary time twice where two sub-sequences
+    meet (e.g. the midpoint of one CDD block is also the start of the next),
+    and two coincident pi-pulses are physically the identity (they cancel),
+    so both copies are simply dropped rather than kept as a redundant
+    "do-nothing" pair.
+    """
     output_list = []
     i = 0
     while i < len(input_list):
@@ -424,14 +639,25 @@ def remove_consecutive_duplicates(input_list):
     return output_list
 
 def cdd(t0, T, n):
-    """Recursive generation of CDD sequence."""
+    """Recursive generation of a CDD_n (Concatenated Dynamical Decoupling,
+    order n) sequence: bisect the interval [t0, t0+T] with a pulse at its
+    midpoint, then recursively apply the same construction to each half at
+    one lower order. This is the standard textbook DD family used as a
+    baseline against the numerically optimized ("NT") sequences searched for
+    elsewhere in this file; higher n cancels higher orders of the noise
+    spectrum's low-frequency (quasi-static) content at the cost of more
+    pulses. Returns interior pulse times only (no explicit 0/T boundary
+    points) -- ``cddn`` below adds those.
+    """
     if n == 1:
         return [t0, t0 + T*0.5]
     else:
         return [t0] + cdd(t0, T*0.5, n-1) + [t0 + T*0.5] + cdd(t0 + T*0.5, T*0.5, n-1)
 
 def cddn(t0, T, n):
-    """Generates CDD_n sequence with boundary points."""
+    """Generates the order-n CDD sequence WITH boundary points included,
+    i.e. in the [0, t1, ..., tn, T]-style representation used throughout
+    this file (see the module-section note above ``remove_consecutive_duplicates``)."""
     out = remove_consecutive_duplicates(cdd(t0, T, n))
     if out[0] == 0.:
         return out + [T]
@@ -439,22 +665,37 @@ def cddn(t0, T, n):
         return [0.] + out + [T]
 
 def mqCDD(T, n, m):
-    """Generates multi-qubit CDD sequence."""
+    """Generates a "multi-qubit CDD" pair: a CDD_n sequence for one qubit,
+    with a CDD_m sequence nested independently inside each of its intervals
+    for the other qubit. Physically this lets the two qubits decouple at
+    different orders/rates while still sharing the same overall block
+    period T -- a richer known-sequence-library entry than running the same
+    CDD order on both qubits. Returns [seq_qubit1, seq_qubit2], each in the
+    boundary-inclusive [0, ..., T] representation.
+    """
     # Do not remove duplicates yet to preserve interval structure for nesting
     tk1 = cdd(0., T, n)
     tk2 = []
     for i in range(len(tk1)-1):
         tk2 += cdd(tk1[i], tk1[i+1]-tk1[i], m)
     tk2 += cdd(tk1[-1], T-tk1[-1], m)
-    
+
     tk1 = remove_consecutive_duplicates(tk1)
     tk2 = remove_consecutive_duplicates(tk2)
 
     if tk1[0] != 0.: tk1 = [0.] + tk1
     if tk2[0] != 0.: tk2 = [0.] + tk2
-    
+
     return [tk1 + [T], tk2 + [T]]
 
+# @jax.jit below (first use in this file): marks a function for XLA
+# just-in-time compilation to fast device code the first time it is called
+# with a given input shape/dtype, then reuses the compiled version on later
+# calls with matching shapes -- a plain speed optimization, not a change in
+# what the function computes. It does mean the function body must be
+# "traceable" (pure array math, no data-dependent Python control flow on
+# traced values), which is why e.g. ``pulse_times_to_delays`` below branches
+# on ``len(tk_arr)`` (a static Python length) rather than on array VALUES.
 @jax.jit
 def pulse_times_to_delays(tk):
     """
@@ -463,7 +704,7 @@ def pulse_times_to_delays(tk):
     Output: [t1, t2-t1, ..., tn-tn-1]
     """
     tk_arr = jnp.array(tk)
-    if len(tk_arr) <= 2: 
+    if len(tk_arr) <= 2:
         return jnp.array([])
     diffs = jnp.diff(tk_arr)
     return diffs[:-1]
@@ -483,10 +724,19 @@ def delays_to_pulse_times(delays, T):
     return jnp.concatenate([jnp.array([0.]), times])
 
 def get_random_delays(n, T, tau):
-    """Generates random delay intervals summing to < T with minimum separation tau."""
+    """Generates random delay intervals summing to < T with minimum separation tau.
+
+    NOTE: as of this pass, this function has no callers anywhere in the repo
+    (``optimize_random_sequences`` below seeds its random trials with
+    ``get_equidistant_delays`` instead, then lets SLSQP move the pulses).
+    ``control/cz.py`` defines and uses its own identical-purpose
+    ``get_random_delays``. Left in place rather than removed since deleting
+    it is outside the scope of a documentation pass -- flagged here, and in
+    this task's report, for a maintainer to decide whether to prune it.
+    """
     if n <= 0:
         return jnp.array([])
-    
+
     slack = T - (n + 1) * tau
     if slack > 0:
         r = np.random.rand(int(n) + 1)
@@ -497,7 +747,11 @@ def get_random_delays(n, T, tau):
         return jnp.ones(n) * T / (n + 1)
 
 def get_equidistant_delays(n, T):
-    """Generates equidistant delay intervals."""
+    """Generates equidistant (evenly spaced) delay intervals -- the starting
+    point handed to SLSQP for each "random" (n1, n2) trial in
+    ``optimize_random_sequences`` below (only the pulse COUNT is randomized;
+    the initial guess for the timing itself is a uniform train, which SLSQP
+    then moves via gradient descent)."""
     if n <= 0:
         return jnp.array([])
     return jnp.ones(int(n)) * T / (n + 1)
@@ -507,6 +761,11 @@ def make_tk12(tk1, tk2):
     """
     Combines two pulse sequences into a single sequence for the 12 interaction.
     Assumes inputs are [0, t1..., T] and [0, t2..., T].
+
+    Physically: the two-qubit ZZ coupling term is only refocused by a pulse
+    on EITHER qubit (a single-qubit pi-pulse still flips the sign of Z1*Z2),
+    so the "12" (Ising/ZZ) channel's effective switching function toggles at
+    the union of both qubits' pulse times, merged and sorted here.
     """
     int1 = tk1[1:-1]
     int2 = tk2[1:-1]
@@ -516,8 +775,24 @@ def make_tk12(tk1, tk2):
 
 def construct_pulse_library(T_seq, tau_min, max_pulses=50):
     """
-    Constructs a library of known pulse sequences (CDD permutations and mqCDD).
-    
+    Constructs a library of known pulse sequences (CDD permutations and mqCDD)
+    to idle for one base block of duration T_seq: this is the "textbook DD"
+    baseline that ``evaluate_known_sequences`` scores and that the free
+    ("NT") search in ``optimize_random_sequences`` is trying to beat.
+
+    Parameters
+    ----------
+    T_seq : float
+        Duration of one base sequence block, in units of tau.
+    tau_min : float
+        Minimum allowed spacing between consecutive pulses (``config.min_sep``
+        upstream) -- CDD/mqCDD orders are grown until the next order would
+        violate this, i.e. sequence generation stops at whatever depth is
+        still physically realizable, not at a fixed pulse count.
+    max_pulses : int, optional
+        Per-qubit pulse-count cap applied when pruning the generated library
+        (default 50).
+
     Returns:
         pLib_delays: List of (d1, d2) delay tuples.
         pLib_descriptions: List of strings describing each sequence.
@@ -591,30 +866,51 @@ def construct_pulse_library(T_seq, tau_min, max_pulses=50):
 # Core Calculation Functions (JAX-Compatible)
 # ==============================================================================
 
+# @functools.partial(jax.jit, static_argnames=[...]) below (first use here):
+# same JIT compilation as plain @jax.jit, but some arguments (named in
+# static_argnames) are Python ints/values used to control array SHAPES or
+# Python-level control flow (e.g. M, n_base_steps here) rather than being
+# traced as array data. JAX needs those pinned at trace time (a change in
+# their value triggers a fresh compile, e.g. once per distinct M in the
+# outer M-sweep) precisely because shapes must be static for compilation --
+# they cannot themselves be ordinary runtime array arguments.
 @functools.partial(jax.jit, static_argnames=['M', 'n_base_steps'])
 def precompute_R_folded(R_shifted, lags_R, M, T_base, dt, n_base_steps):
     """
     Precomputes the folded noise autocorrelation R_folded(u) on the domain of C_1(u).
     R_folded(u) = sum_{p=-(M-1)}^{M-1} (M - |p|) * R(u + p*T_base)
+
+    Physical picture: repeating a base pulse block M times means the noise
+    correlation function R (the inverse Fourier transform of the spectrum,
+    computed once per (SMat, tau, T_seq, M) by ``prepare_time_domain_overlap``
+    and cached there) gets sampled at every pairwise combination of the M
+    repeats' time origins, which is exactly this triangular-weighted sum of
+    shifted copies of R. Precomputing it here means the per-restart
+    optimization cost (``evaluate_overlap_folded`` below) does not have to
+    redo this fold on every SLSQP iteration.
     """
     # Lags for C1 (base sequence correlation)
     # y has length n_base_steps. C1 has length 2*n_base_steps - 1.
     lags_C = (jnp.arange(2 * n_base_steps - 1) - (n_base_steps - 1)) * dt
-    
+
     p_vals = jnp.arange(-(M - 1), M)
     weights = jnp.float64(M) - jnp.abs(p_vals)
-    
+
     # R is complex
     R_real = jnp.real(R_shifted)
     R_imag = jnp.imag(R_shifted)
-    
+
     def get_folded_component(R_comp):
         def interp_slice(p, w):
             shifted_lags = lags_C + p * T_base
             # Interpolate R at shifted lags
             return w * jnp.interp(shifted_lags, lags_R, R_comp, left=0., right=0.)
-        
-        # vmap over p to compute all slices
+
+        # jax.vmap ("vectorizing map") below: runs interp_slice once per
+        # value of p_vals/weights, all at once as a single batched/vectorized
+        # device operation, instead of writing a Python for-loop over p that
+        # JAX would have to unroll. Same result as the loop, just faster and
+        # more memory-efficient on GPU/TPU.
         slices = jax.vmap(interp_slice)(p_vals, weights)
         # Sum over p
         return jnp.sum(slices, axis=0)
@@ -629,6 +925,17 @@ def evaluate_overlap_folded(pulse_times_a, pulse_times_b, R_folded, dt, n_base_s
     """
     Calculates the overlap integral using the folded noise autocorrelation.
     I = integral C_1(u) * R_folded(u) du
+
+    This is the exact (no frequency-comb shortcut) time-domain evaluator: it
+    samples each pulse sequence's switching function y(t) on a fine time
+    grid, cross-correlates the two (giving C_1(u), the filter-function-like
+    overlap of the two switching functions at time lag u), and integrates
+    that against the precomputed folded noise autocorrelation R_folded from
+    ``precompute_R_folded``/``prepare_time_domain_overlap``. The resulting
+    scalar I_{a,b} is one entry of the 4x4 overlap-integral matrix that
+    ``calculate_idling_fidelity`` turns into a fidelity. Called externally
+    (as ``idmod.evaluate_overlap_folded``) by ``scripts/showcase_storage_panel.py``,
+    so its call signature is part of this module's protected surface.
     """
     # Construct y on [0, T_base]
     t_grid = jnp.arange(n_base_steps) * dt
@@ -659,6 +966,12 @@ def get_spectral_amplitudes_jax(pulse_times, omega):
     """
     Computes A(omega) = sum (-1)^j (exp(i w t_{j+1}) - exp(i w t_j)).
     Returns vector of size len(omega).
+
+    This is the (dimensionless) filter-function amplitude of one pulse
+    sequence's switching function y(t), evaluated at the frequency-comb
+    harmonics omega -- the building block ``evaluate_overlap_comb`` (below)
+    combines pairwise to approximate the overlap integral without doing an
+    explicit time-domain correlation.
     """
     # pulse_times: [0, t1, ..., T]
     # omega: [w1, ..., wK]
@@ -687,6 +1000,15 @@ def evaluate_overlap_comb(pulse_times_a, pulse_times_b, S_packed, omega_k, T_seq
     Calculates overlap integral using frequency comb approximation.
     S_packed: [S(0), S(w1), ..., S(wK)]
     omega_k: [w1, ..., wK]
+
+    Alternative to ``evaluate_overlap_folded``: instead of correlating the
+    two switching functions in the time domain, this treats an M-fold
+    repeated sequence as sampling the noise spectrum only at its own
+    harmonic "comb" frequencies (multiples of 2*pi/T_seq), which is a valid
+    approximation when the comb tooth spacing is fine compared to any
+    spectral feature the noise has (see ``use_comb_approximation`` for when
+    that holds and why it is only ever used on the search side, never for
+    the published/"ideal" infidelity numbers).
     """
     # 1. DC Component
     # y(0) = sum (-1)^j (t_{j+1} - t_j)
@@ -747,12 +1069,31 @@ def prepare_time_domain_overlap(SMat, w_grid, tau, T_seq, M):
     resolution, mirrors spectrum for Hermitian symmetry, IFFTs to obtain R(τ),
     and folds the correlation across M repetitions.
 
+    Physically: the noise spectrum S(w) (input) and its time-domain
+    autocorrelation R(u) (what the overlap integral in
+    ``evaluate_overlap_folded`` actually needs) are a Fourier-transform pair;
+    this function does that S(w) -> R(u) conversion numerically (via FFT) on
+    a fine enough time grid (dt <= tau/4, so that features on the pulse-timing
+    scale tau are resolved) and then pre-folds R across the M repeated base
+    blocks (see ``precompute_R_folded``) so the expensive part is done once
+    per (spectrum, tau, T_seq, M) setup rather than once per SLSQP iteration
+    or per candidate sequence. Results are memoized in the module-level
+    ``_OVERLAP_SETUP_CACHE`` dict (a plain manual cache, not
+    ``functools.lru_cache``, because the key needs custom handling -- see
+    where ``_OVERLAP_SETUP_CACHE`` is defined above) since this setup only
+    depends on the spectrum/grid/(tau, T_seq, M), never on the pulse sequence
+    itself. Called externally (as ``idmod.prepare_time_domain_overlap``) by
+    ``scripts/showcase_storage_panel.py``, so its call signature is part of
+    this module's protected surface.
+
     Returns
     -------
     RMat_data : jnp.ndarray, shape (4, 4, 2*n_base_steps-1)
         Folded noise correlation matrix on the base-sequence lag grid.
     dt : float
-        Time-domain grid spacing (seconds).
+        Time-domain grid spacing, in units of tau (NOT seconds, despite the
+        historical SI-era phrasing this file otherwise uses -- see repo
+        CLAUDE.md "Units: tau = 1").
     n_base_steps : int
         Number of time steps spanning one base sequence period T_seq.
     """
@@ -774,7 +1115,11 @@ def prepare_time_domain_overlap(SMat, w_grid, tau, T_seq, M):
 
     SMat_padded = jnp.pad(SMat, ((0, 0), (0, 0), (0, pad_factor * N)))
 
-    # Mirror for Hermitian symmetry: S(-ω) = S*(ω)
+    # Mirror for Hermitian symmetry: S(-ω) = S*(ω). A physical (real-valued
+    # in the time domain) noise process has a spectrum that is Hermitian in
+    # this sense; since only S(w>=0) is stored/reconstructed, the negative-
+    # frequency half is reconstructed here from that symmetry before the
+    # inverse FFT, rather than being separately measured.
     SMat_sym = jnp.concatenate(
         [SMat_padded, jnp.conj(jnp.flip(SMat_padded[..., 1:-1], axis=-1))],
         axis=-1,
@@ -786,6 +1131,10 @@ def prepare_time_domain_overlap(SMat, w_grid, tau, T_seq, M):
           f"tau/4={tau/4:.4f} tau")
 
     lags_R = (jnp.arange(N_sym) - N_sym // 2) * dt
+    # jnp.fft.ifft: inverse Fast Fourier Transform, i.e. numerically convert
+    # the frequency-domain S(w) samples into the time-domain autocorrelation
+    # R(u) samples (fftshift below just reorders the FFT's native
+    # zero-frequency-first layout into a plain ascending-lag array).
     RMat_vals = jnp.fft.ifft(SMat_sym, axis=-1)
     RMat_scaled = RMat_vals / dt
     RMat_shifted = jnp.fft.fftshift(RMat_scaled, axes=-1)
@@ -833,7 +1182,13 @@ def calculate_idling_fidelity(I_matrix):
 
     F_total = 0.0
 
-    # Iterate over all 16 Pauli operators P_k = P1 \otimes P2
+    # Iterate over all 16 Pauli operators P_k = P1 \otimes P2. These are
+    # plain Python for-loops over range(4) (a static Python int, not a traced
+    # JAX array), so under @jax.jit they get UNROLLED into 16 copies of the
+    # loop body at compile time -- fine here since 16 is small and fixed;
+    # this is different from ``jax.vmap`` (used elsewhere in this file),
+    # which is the idiom to reach for when the loop trip count would be
+    # large or itself traced.
     for p1 in range(4):
         for p2 in range(4):
             # Determine commutation of P_k with Z_1, Z_2, Z_12
@@ -882,14 +1237,26 @@ def calculate_idling_fidelity(I_matrix):
 def use_comb_approximation(M, T_seq):
     """Whether the frequency-comb overlap approximation is valid at (M, T_seq).
 
+    In plain terms: the comb approximation (``evaluate_overlap_comb``) treats
+    the noise spectrum as if it only mattered at a discrete set of harmonic
+    frequencies; that is a good approximation when the spectrum is smooth on
+    the scale of the spacing between those harmonics, but a bad one near a
+    sharp spectral line (the featured/showcase noise model's nuclear-
+    difference lines) if the M-fold-repeated sequence's frequency comb is
+    coarser than the line width -- the comb can then land its samples on the
+    wrong side of a peak and mis-weight it substantially.
+
     The comb samples S at delta teeth; the TRUE M-fold filter tooth has width
     ~ 2pi/(M*T_seq). When that width is comparable to the nuclear-line width
     sigma the comb mis-weights the lines: 8-14% infidelity error at
     Tg = 320 tau / M = 16, 3-7% at Tg = 640, up to 3.2% at Tg = 1280; every
     point passing 2pi/Tg < sigma/8 measures <= 1.7% (OPT-COMB-M16 diagnostic
-    + boundary sweep, scripts/diag_comb_vs_folded.py). Smooth (bland) spectra
-    keep the legacy speed cutoff M > 10. Note the published-number path
-    (calculate_infidelity with use_ideal=True) is always folded regardless."""
+    + boundary sweep; this was quantified with a since-removed one-off
+    diagnostic script, scripts/diag_comb_vs_folded.py -- the numeric
+    thresholds it produced are recorded here since the script itself no
+    longer exists after CLEANUP-0616). Smooth (bland) spectra keep the legacy
+    speed cutoff M > 10. Note the published-number path (calculate_infidelity
+    with use_ideal=True) is always folded regardless."""
     if M <= 10:
         return False
     pri = line_priors()
@@ -904,7 +1271,9 @@ def use_comb_approximation(M, T_seq):
 # ==============================================================================
 
 def _pack_comb(SMat, w_grid, omega_k):
-    """[S(0), S(w_k)] packed per channel for evaluate_overlap_comb."""
+    """Interpolate the dense SMat onto the comb harmonics omega_k and prepend
+    S(0): returns [S(0), S(w_k)] packed per channel, the exact input format
+    ``evaluate_overlap_comb`` expects for its DC + AC-harmonics split."""
     S_flat = SMat.reshape(-1, SMat.shape[-1])
 
     def interp_row(fp):
@@ -916,6 +1285,9 @@ def _pack_comb(SMat, w_grid, omega_k):
 
 
 def _delays_to_pts(delays_params, n_pulses1, T_seq):
+    """Split the flat SLSQP optimization vector (qubit-1 delays followed by
+    qubit-2 delays) back into the four pulse-time sequences the overlap
+    evaluators need: [identity, qubit1, qubit2, combined ZZ channel]."""
     delays1 = delays_params[:n_pulses1]
     delays2 = delays_params[n_pulses1:]
     pt1 = delays_to_pulse_times(delays1, T_seq)
@@ -928,12 +1300,21 @@ def _delays_to_pts(delays_params, n_pulses1, T_seq):
 
 
 def _cost_folded(delays_params, RMat_data, dt, T_seq, n_pulses1, n_base_steps):
-    """Idling cost (1 - F/16) on the folded evaluator. Every input is a
-    runtime ARGUMENT (OPT-SPEEDUPS (b)): the value_and_grad wrappers below
-    are stable module-level objects, so restarts and (Tg, M) blocks reuse
-    compiled programs per (shape, static) instead of recompiling per fresh
-    closure, and the HLO is spectrum-value-independent (persistent cache
-    works across runs/repeats)."""
+    """Idling cost (1 - F/16) on the folded evaluator: builds the 4x4 overlap
+    matrix (over the {identity, qubit1, qubit2, ZZ} channels, see
+    ``_delays_to_pts``) and converts it to an infidelity via
+    ``calculate_idling_fidelity``. This is the scalar function SLSQP
+    minimizes; ``cost_vag_folded`` below wraps it to also return the
+    gradient. Every input is a runtime ARGUMENT rather than a value baked
+    into a Python closure (OPT-SPEEDUPS (b)): concretely, if the spectrum
+    arrays were captured as closure constants instead, JAX would treat every
+    new spectrum (a new run, a new restart with re-seeded config, etc.) as a
+    brand-new function needing its own fresh compile; passing them as
+    ordinary arguments instead means the value_and_grad wrappers below are
+    stable, reusable, module-level objects -- restarts and (Tg, M) blocks
+    share compiled programs keyed only on (shape, static args), and the
+    persistent compilation cache (OPT-SPEEDUPS (a), see the imports at the
+    top of the file) can hit across separate process runs too."""
     pts = _delays_to_pts(delays_params, n_pulses1, T_seq)
     I_mat = jnp.array([[evaluate_overlap_folded(pts[i], pts[j], RMat_data[i, j],
                                                 dt, n_base_steps)
@@ -950,13 +1331,25 @@ def _cost_comb(delays_params, S_packed, omega_k, T_seq, n_pulses1, M):
     return 1.0 - calculate_idling_fidelity(I_mat) / 16.0
 
 
+# jax.value_and_grad(f): returns a new function that evaluates BOTH f(x) and
+# its gradient d f/dx in one pass (via automatic differentiation), which is
+# exactly what a gradient-based optimizer (SLSQP with jac=True, used below)
+# needs; wrapping that again in jax.jit compiles the value+gradient
+# computation together. Defined once at module load (not inside a function)
+# so it is that single stable, reusable, compiled object referred to above.
 cost_vag_folded = jax.jit(jax.value_and_grad(_cost_folded),
                           static_argnames=('n_pulses1', 'n_base_steps'))
 cost_vag_comb = jax.jit(jax.value_and_grad(_cost_comb),
                         static_argnames=('n_pulses1', 'M'))
 
 def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
-    """Optimizes random sequences for a given repetition count M."""
+    """Optimizes random (and optionally seeded) noise-tailored (NT) pulse
+    sequences for a given repetition count M: for each (n1, n2) pulse-count
+    pair in ``n_pulses_list`` (plus one seeded restart from ``seed_seq`` when
+    given), runs SLSQP from an equidistant-pulse starting guess and keeps
+    whichever restart reaches the lowest infidelity. Returns
+    ``(best_seq, best_inf)`` -- ``best_seq`` is a (pt1, pt2) pair of absolute
+    pulse times, or None if every trial was infeasible/failed."""
     T_seq = config.Tg / M
     best_inf = 1.0
     best_seq = None
@@ -992,6 +1385,12 @@ def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
     opt_targets = pad_targets(all_ns)
 
     def run_single_optimization(n1, n2, initial_params, label):
+        # `nonlocal` lets this inner function update the ENCLOSING function's
+        # best_inf/best_seq variables directly (rather than returning a value
+        # that the caller has to merge in), which is convenient here since
+        # run_single_optimization is called many times below (once per seed/
+        # random restart) purely for its side effect of possibly improving
+        # the running best.
         nonlocal best_inf, best_seq
 
         # Bounds (min_sep = tau unless the control-bandwidth scenario raises it)
@@ -1010,7 +1409,13 @@ def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
             g = np.asarray(g)
             return float(v), np.concatenate([g[:n1], g[n1p:n1p + n2]])
 
-        # Linear constraints
+        # Linear constraints: scipy.optimize.LinearConstraint(A, lb, ub)
+        # enforces lb <= A @ x <= ub. Here A picks out "sum of qubit-1
+        # delays" (row 0) and "sum of qubit-2 delays" (row 1), and the upper
+        # bound caps each sum at T_seq - min_sep -- physically, the delays
+        # for one qubit must leave room for at least one more min_sep-sized
+        # gap before hitting the end of the block (the -inf lower bound means
+        # this is a one-sided/"at most" constraint, not an equality).
         A = np.zeros((2, n1 + n2))
         A[0, :n1] = 1
         A[1, n1:] = 1
@@ -1018,6 +1423,11 @@ def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
                                                       T_seq - config.min_sep)
 
         try:
+            # jac=True tells SciPy that fun_wrapper itself returns
+            # (value, gradient) together (as produced by jax.value_and_grad
+            # above) instead of SciPy having to estimate the gradient by
+            # finite differences -- this is both much faster and more
+            # accurate for a many-parameter, JAX-differentiable objective.
             res = scipy.optimize.minimize(fun_wrapper, np.asarray(initial_params), method='SLSQP',
                                           bounds=bounds, constraints=linear_cons, jac=True,
                                           tol=SLSQP_TOL,
@@ -1064,7 +1474,12 @@ def optimize_random_sequences(config, M, n_pulses_list, seed_seq=None):
     return best_seq, best_inf
 
 def evaluate_known_sequences(config, M, pLib):
-    """Evaluates all sequences in the library."""
+    """Evaluates every (d1, d2) delay-pair sequence in the known-sequence
+    library ``pLib`` (built by ``construct_pulse_library``) against the
+    CHARACTERIZED spectra and returns the best one: ``(best_seq, best_inf,
+    best_idx)``, where ``best_seq`` is a (pt1, pt2) pair of absolute pulse
+    times and ``best_idx`` indexes back into ``pLib`` (and its parallel
+    description list from ``construct_pulse_library``)."""
     T_seq = config.Tg / M
     best_inf = 1.0
     best_seq = None
@@ -1135,6 +1550,34 @@ def evaluate_known_sequences(config, M, pLib):
     return best_seq, best_inf, best_idx
 
 def calculate_infidelity(seq, config, M, T_seq, use_ideal=False):
+    """Scores a chosen (pt1, pt2) idling sequence's infidelity 1 - F/16, given
+    an already-decided ``config`` and repetition count M.
+
+    Parameters
+    ----------
+    seq : tuple of (jnp.ndarray, jnp.ndarray) or None
+        (pt1, pt2) absolute pulse times for qubit 1 and qubit 2 (each in the
+        boundary-inclusive [0, ..., T_seq] representation); None (no valid
+        sequence was found upstream) short-circuits to infidelity 1.0.
+    config : Config
+        Supplies the characterized (``SMat``) and ideal/ground-truth
+        (``SMat_ideal``) spectral matrices, plus tau.
+    M : int
+        Number of repetitions of this base block.
+    T_seq : float
+        Duration of one base block, in units of tau.
+    use_ideal : bool, optional
+        If False (default), scores against the CHARACTERIZED spectra
+        ``config.SMat`` -- what the optimizer itself sees. If True, scores
+        against the analytic ground truth ``config.SMat_ideal`` instead --
+        this is the "true infidelity" reported in the paper's figures/tables
+        for a blind winner, i.e. what the sequence would actually achieve in
+        the real (fully characterized in the limit) noise environment.
+
+    Called externally (as ``idmod.calculate_infidelity``) by
+    ``scripts/harvest_design_numbers.py``, so its call signature is part of
+    this module's protected surface.
+    """
     if seq is None: return 1.0
 
     SMat = config.SMat_ideal if use_ideal else config.SMat
@@ -1184,7 +1627,23 @@ def calculate_infidelity(seq, config, M, T_seq, use_ideal=False):
 
 def run_optimization_pipeline(config):
     """
-    Runs the full optimization pipeline based on the provided configuration.
+    Runs the full optimization pipeline for a SINGLE fixed repetition count
+    (``config.M``), scanning over ``config.gate_time_factors`` (a range of
+    total hold times Tg). At each gate time it: (1) scores the "no pulse at
+    all" baseline, (2) evaluates the known-sequence library
+    (``construct_pulse_library`` + ``evaluate_known_sequences``), and (3)
+    runs the free/NT search (``optimize_random_sequences``) -- all against
+    the CHARACTERIZED spectra, then rescored against the IDEAL/ground-truth
+    spectra for the numbers actually recorded/plotted. Saves per-gate-time
+    curves plus the single best-over-gate-time known and NT sequences to
+    ``.npz`` files under the run folder (see the save_dict / np.savez calls
+    below), and returns a dict of the same curves/sequences for the
+    ``__main__`` M-sweep below to aggregate across M.
+
+    This function is called once per M value by the ``__main__`` block; it
+    does NOT itself loop over M (compare ``optimization_data_all_M*.npz``,
+    which the caller builds by calling this once per M and combining the
+    results).
     """
     # Drop cached folded-correlation setups from a previous M so the cache stays
     # bounded (it is keyed on this per-M config's spectrum arrays).
@@ -1354,7 +1813,11 @@ def run_optimization_pipeline(config):
 
     # Note: min_gate_time (= pi/(4*Jmax)) is a CZ entangling-gate bound and is
     # not meaningful for the idling gate, so it is intentionally not saved here
-    # (MINGATE-METADATA).
+    # (MINGATE-METADATA: cz.py's saved plotting_data DOES carry a
+    # min_gate_time field, since a CZ gate has a minimum physical duration
+    # set by the coupling strength Jmax; there is no such lower bound for
+    # simply idling, so a reader diffing the two saved-file schemas should
+    # not expect this key to appear here).
     save_dict = {
         'taxis': np.array(xaxis_known),
         'infs_known': np.array(yaxis_known),
@@ -1373,10 +1836,15 @@ def run_optimization_pipeline(config):
         'gate_type': 'id',
         # OPT-PROVENANCE: noise-model version the input spectra were generated
         # under (the viz overlays warn when it differs from the current model).
+        # Saved so a later reader/plot script can tell, just from this file,
+        # whether it is safe to compare against today's analytic model.
         'model_version': config.model_version,
         'spectral_model': config.spectral_model,
         # UNCAP-0611 provenance: the caps this run searched under
         # (max_pulses=10**9 = separation-limited; max_dim=0 = no guard).
+        # Recorded so a reader of the saved npz can tell whether a given
+        # infidelity curve came from an uncapped search or a capped one,
+        # without having to know which CLI flags were used to produce it.
         'max_pulses': int(config.max_pulses),
         'max_dim': int(config.max_dim),
     }
@@ -1411,6 +1879,10 @@ def run_optimization_pipeline(config):
     print(f"{'Sequence':<25} | {best_known_label_overall:<25} | {best_opt_label_overall:<25}")
     print("=" * 80)
 
+    # NOTE: this message is stale -- plot_optimization.py no longer exists in
+    # this repo (the actual figure generator is scripts/report_showcase_figs.py,
+    # see FIGURE_PROVENANCE.md); left as printed since it is informational
+    # only and does not affect any saved data.
     print(f"\nTo generate plots, run:\n  python plot_optimization.py --data-dir {config.path} --gate-type id")
 
     # Return data for aggregate plotting
@@ -1423,13 +1895,25 @@ def run_optimization_pipeline(config):
         'sequences_opt': sequences_opt
     }
 
+# `if __name__ == "__main__":` below is the standard Python idiom for "only
+# run this block when the file is EXECUTED directly (e.g. `python -m
+# qns2q.control.idle`), not when it is merely IMPORTED as a module" -- this
+# is why scripts/harvest_design_numbers.py and scripts/showcase_storage_panel.py
+# can safely `from qns2q.control import idle as idmod` to reuse this file's
+# functions/classes without triggering a full, expensive optimization run as
+# a side effect of the import. Everything below (argparse CLI, the M-sweep
+# loop) is this module's command-line entry point, not part of its
+# importable API.
 if __name__ == "__main__":
     import argparse
 
     # Defaults match the manuscript: the idling M-sweep runs on the SPAM-free
     # reconstructed spectra (specs.npz) of the active regime's NoSPAM folder.
-    # --protocol points at a SPAM arm instead (OPT-ARM-PLUMBING); --simulated
-    # optimizes on the ground-truth file.
+    # --protocol points at a SPAM arm instead (OPT-ARM-PLUMBING: the CLI
+    # plumbing that maps a --protocol name to the corresponding SPAM-arm run
+    # folder via qns2q.paths.run_folder(spam=True, protocol=...), mirrored
+    # from cz.py so both optimizers accept the same SPAM-arm selection
+    # flags); --simulated optimizes on the ground-truth file.
     parser = argparse.ArgumentParser(description="Idling-gate (DD) optimization M-sweep")
     src = parser.add_mutually_exclusive_group()
     src.add_argument('--folder', help="run-folder name under the repo root "
@@ -1486,12 +1970,17 @@ if __name__ == "__main__":
 
     try:
         # Pin the RNG so the random pulse-count selection and delay seeding are
-        # reproducible across the whole M sweep (SEED-OPT). Seeded once here so
-        # each M draws from a distinct but reproducible stream.
+        # reproducible across the whole M sweep (SEED-OPT: without this,
+        # np.random draws from whatever state Python's global RNG happens to
+        # be in, so the "random" pulse counts tried -- and hence which NT
+        # sequence wins -- would differ from run to run, making the
+        # published infidelity numbers and winning-sequence labels
+        # irreproducible). Seeded once here so each M draws from a distinct
+        # but reproducible stream.
         np.random.seed(RANDOM_SEED)
         print(f"[seed={RANDOM_SEED}]")
 
-        # Iterate through M values: 1, 2, 4, ..., 512
+        # Iterate through M values: 1, 2, 4, ..., 128 (2**i for i in 0..7)
         M_values = [2**i for i in range(8)] # Adjust range as needed
         results_by_M = {}
         
@@ -1565,7 +2054,12 @@ if __name__ == "__main__":
         print("="*60)
         
         if last_config:
-            # Save all data generated in the optimization
+            # Save all data generated in the optimization: unlike the
+            # per-M plotting_data npz saved inside run_optimization_pipeline
+            # (which gets overwritten by each new M since its filename does
+            # not depend on m), this file below aggregates EVERY M's curves
+            # and winning sequences into one place, with each M's arrays
+            # prefixed "M{m}_" below.
             save_all_path = os.path.join(last_config.path, f"optimization_data_all_M{sfx}.npz")
             data_to_save = {}
             data_to_save['M_values'] = np.array(M_values)
@@ -1588,6 +2082,13 @@ if __name__ == "__main__":
                 if seq is None: return None
                 return (np.array(seq[0]), np.array(seq[1]))
 
+            # dtype=object below: a plain np.array() requires every element
+            # to have the same shape; these per-gate-time sequence lists mix
+            # None (no sequence found at that gate time) with (pt1, pt2)
+            # pairs of DIFFERENT lengths (different pulse counts), so numpy
+            # is told to store them as a 1-D array of arbitrary Python
+            # objects instead of trying to stack them into a single
+            # rectangular numeric array.
             for m, res in results_by_M.items():
                 prefix = f"M{m}_"
                 data_to_save[prefix + 'gate_times'] = np.array(res['gate_times'])
@@ -1611,6 +2112,10 @@ if __name__ == "__main__":
             np.savez(save_all_path, **data_to_save)
             print(f"Saved all optimization data to {save_all_path}")
 
+            # NOTE: as above, plot_optimization.py no longer exists in this
+            # repo; this message is stale and does not affect saved data
+            # (see scripts/report_showcase_figs.py / FIGURE_PROVENANCE.md for
+            # the actual figure-generation entry point).
             print(f"\nTo generate plots, run:")
             print(f"  python plot_optimization.py --data-dir {last_config.path} --gate-type id --all-m")
         

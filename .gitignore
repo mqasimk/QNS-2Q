@@ -28,6 +28,8 @@ DraftRun_*/plotting_data/*
 # Python
 __pycache__/
 *.pyc
+*.egg-info/
+build/
 
 # Persistent XLA compilation cache (OPT-SPEEDUPS)
 .jax_cache/

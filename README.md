@@ -19,7 +19,9 @@ This codebase accompanies the paper *"Noise-tailored two-qubit gates"* and imple
 
 ## Installation
 
-**Requirements:** Python 3.11+
+**Requirements:** Python 3.12 (see `pyproject.toml`/`requirements.txt` for the exact
+third-party versions this repo is validated against -- they are pinned exactly,
+not with `>=`, because this repo's job is to reproduce a specific paper's numbers).
 
 ```bash
 # Clone the repository
@@ -30,11 +32,18 @@ cd QNS-2Q
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies (either works; they declare the same pinned versions)
+pip install -r requirements.txt        # matches every command in this README/CLAUDE.md as-is
+# or:
+pip install -e .                       # also makes `import qns2q` work without PYTHONPATH=src
+pip install -e ".[gpu]"                # same, plus the CUDA 12 JAX plugin
 ```
 
-> **Note:** JAX 64-bit mode (`jax_enable_x64`) is enabled in every script for numerical precision. Ensure your JAX installation supports this configuration. For GPU acceleration, install the appropriate `jaxlib` variant for your CUDA version.
+> **Note:** JAX 64-bit mode (`jax_enable_x64`) is enabled in every script for numerical precision. Ensure your JAX installation supports this configuration. For GPU acceleration without the `pip install -e ".[gpu]"` above, install the matching `jax[cuda12]` version by hand (see `requirements.txt`).
+
+See `DEPENDENCY_MAP.md` for the Python import graph (which module depends on
+which, and the "attribute contract" edges a plain grep for imports would miss)
+-- useful the first time you're deciding where to even start reading this codebase.
 
 ---
 
@@ -52,7 +61,8 @@ QNS-2Q/
 ├── CLAUDE.md                          # authoritative developer / agent guide
 ├── FIGURE_PROVENANCE.md              # per-figure -> (run folder, data, script, command) map
 ├── NOISE_MODEL_SPEC.md              # provenance of the hardcoded noise-model constants
-├── requirements.txt
+├── DEPENDENCY_MAP.md                 # Python import graph: which module depends on which
+├── pyproject.toml, requirements.txt  # pinned dependencies (same versions, either installs)
 ├── src/qns2q/                        # the package (import path: qns2q.*; run from repo root)
 │   ├── paths.py                      # regime selection (QNS2Q_REGIME) + canonical run-folder paths
 │   ├── noise/spectra.py             # noise PSD model; regimes: bland | featured | showcase
@@ -72,6 +82,7 @@ QNS-2Q/
 │   │   └── tails.py, padding.py     # spectral-tail model + pulse-sequence padding
 │   └── viz/cz_pulse_plot.py        # CZ pulse-sequence figure (showcase_pulse_sequences.pdf)
 ├── scripts/                         # per-stage entry points, all run from the repo root
+│   ├── generate_paper_figures.py    # ONE command for all 8 paper figures (wraps the rest)
 │   ├── run_capture_arm.py  run_spam_experiments.py  run_spam_reconstruct.py  run_reconstruct.py
 │   ├── run_margin_band.py  run_margin_band_idle.py  harvest_design_numbers.py
 │   ├── run_cz_pulse_plot.py  run_single_qubit.py  calibrate_showcase.py
@@ -192,7 +203,17 @@ PYTHONPATH=src python -m qns2q.control.idle
 
 **The paper's figures (showcase regime)** are produced by `report_showcase_figs.py` (the
 six showcase panels) plus two standalone figures; `FIGURE_PROVENANCE.md` is the
-authoritative figure->data->command map. In brief:
+authoritative figure->data->command map. The one-command wrapper:
+
+```bash
+python scripts/generate_paper_figures.py               # assemble all 8 from committed data (minutes)
+python scripts/generate_paper_figures.py --full-regen   # also re-derive every run folder first (hours, GPU)
+python scripts/generate_paper_figures.py --dry-run       # preview the commands without running them
+```
+
+is equivalent to running the individual commands below by hand (do this instead if you
+only want to regenerate one figure, or if you want to see/copy the exact underlying
+command):
 
 ```bash
 export QNS2Q_REGIME=showcase

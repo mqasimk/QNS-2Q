@@ -1,6 +1,12 @@
-"""Entry point: run from the repo root. Regime via QNS2Q_REGIME.
+"""Draws the showcase_pulse_sequences.pdf paper figure: the best-known (CDD/library)
+CZ pulse sequence vs. the best noise-tailored (NT) one it was optimized against,
+for visual comparison. Run from the repo root; regime via QNS2Q_REGIME.
 
-Executes qns2q.viz.cz_pulse_plot's top-level (__main__) routine.
+This file is a thin shim: it just hands argv to qns2q.viz.cz_pulse_plot's own
+__main__ block via runpy, so all the real argument parsing (--folder/--tag) and
+plotting logic lives there, not here.
+
+    PYTHONPATH=src python scripts/run_cz_pulse_plot.py --folder DraftRun_NoSPAM_showcase_cap --tag _cap
 """
 import os, sys, runpy
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))

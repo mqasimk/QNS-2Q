@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qns2q"
+version = "0.1.0"
+description = "Two-qubit Quantum Noise Spectroscopy (QNS): experiment simulation, spectral reconstruction, and noise-tailored gate optimization."
+requires-python = ">=3.12"
+# Exact pins, matching requirements.txt -- update both together. This repo
+# reproduces a specific paper's numbers, so an unpinned dependency upgrade is
+# a real risk (a silent shift in floating-point results), not just a
+# convenience trade-off.
+dependencies = [
+    "numpy==2.4.0",
+    "scipy==1.16.1",
+    "matplotlib==3.10.5",
+    "jax==0.7.0",
+    "jaxlib==0.7.0",
+    "qutip==5.2.0",
+    "qutip-qip==0.4.1",
+    "joblib==1.5.1",
+    "pytest==9.0.3",
+]
+
+[project.optional-dependencies]
+# GPU acceleration (recommended -- see requirements.txt for why):
+#   pip install -e ".[gpu]"
+gpu = ["jax[cuda12]==0.7.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# `pip install -e .` (optionally `-e ".[gpu]"`) makes `import qns2q` work from
+# anywhere, as an alternative to the `PYTHONPATH=src` prefix used throughout
+# CLAUDE.md/README.md/FIGURE_PROVENANCE.md. Both work; the docs keep using
+# PYTHONPATH=src because it needs no install step, matching the "clone and go"
+# instructions this repo has always used.

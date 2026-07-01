@@ -32,6 +32,36 @@ systematic, appropriate for the simulation figures) or a self-consistent model b
 from the reconstructed comb (``selfconsistent_spectra``; the estimate available without
 knowing the answer). The kernel definitions mirror ``inversion.py`` one-to-one; the
 test-suite guards against drift.
+
+Where this file sits in the pipeline
+-------------------------------------
+This module belongs to the **characterize/** arm (QNS -> spectral reconstruction),
+specifically Stage 2 (see the repo-root ``CLAUDE.md`` "Running the Pipeline" section).
+It does not run any Monte Carlo itself -- every function here is a closed-form
+(deterministic) calculation that reuses the exact same pulse-sequence machinery
+(``model.trajectories.make_y``) and reconstruction kernels (``characterize.inversion``)
+as the real experiment/reconstruction, just fed an analytic or self-consistent spectrum
+instead of noisy simulated data. That is what makes the result a "systematic": a bias
+that is there even with infinite shots, coming purely from how the reconstruction
+algorithm approximates the true (continuous-frequency) forward map with a finite comb
+of harmonics.
+
+Inputs: a ``spectra`` dict of six callables ``S(w) -> array`` (one of ``analytic_spectra()``
+or ``selfconsistent_spectra(...)``), plus the same timing/config numbers
+(``c_times``, ``M``, ``T``, ``t_vec``, ``w_grain``, ``wmax``) the actual QNS run used.
+Outputs: per-spectrum bias dictionaries (real arrays for the three self-spectra
+S11/S22/S1212, complex Re+iIm arrays for the three cross-spectra S12/S112/S212).
+
+Called by ``characterize/reconstruct.py`` (``SpectraReconstructor.add_systematic_errors``,
+which folds the bias into the published error bars, and ``.unfold_comb_bias``, which
+subtracts a self-consistent estimate of the bias from the published spectral points --
+"unfolding"). ``selfconsistent_spectra`` is also imported directly by the control-side
+optimizers (``control/cz.py``, ``control/idle.py``) as one of the `--spectral-model`
+choices, and ``analytic_spectra`` is imported by ``scripts/report_showcase_figs.py`` for
+ground-truth overlay curves in the paper's figures. This file in turn imports from
+``model.trajectories`` (pulse toggles) and, lazily inside functions, from
+``characterize.inversion`` (the actual reconstruction formulas it must mirror exactly)
+and ``control.tails`` (shared power-law tail fitting).
 """
 
 import numpy as np
@@ -45,6 +75,13 @@ from qns2q.model.trajectories import make_y
 # --- which pulses / filter indices feed each reconstruction (mirror inversion.py) ---
 # kind: 'self_diff' -> U = (M/T)(|F_a|^2 - |F_b|^2);  'self_sq' -> U = (2M/T)|F_a|^2;
 #       'cross'     -> Re channel U1 = (2M/T) F_a(+w) F_b(-w); Im channel U2 = Im(U1-form).
+# This dict is the "recipe book" used by comb_inversion_systematic (below): for each of
+# the six spectra it says which pulse pair(s) and which toggle-matrix index (a, b) build
+# the measurement kernel U(w), so the systematic is computed with the SAME formula the
+# real reconstruction in inversion.py uses. If inversion.py's kernel for a spectrum ever
+# changes, this entry must change with it -- tests/test_systematics.py's machine-precision
+# self-check (feeding the comb-sum observable back through the same U) is the tripwire
+# that catches a silent mismatch.
 SPEC_KERNELS = {
     'S11':   dict(kind='self_diff', pulse=['CPMG', 'CDD3'], a=0, b=1),
     'S22':   dict(kind='self_diff', pulse=['CPMG', 'CDD3'], a=0, b=1),
@@ -56,7 +93,23 @@ SPEC_KERNELS = {
 
 
 def _ff_grid(toggle, tb_j, wgrid, sign, chunk=4000):
-    """int exp(i*sign*w*t) toggle(t) dt over a w array, on the GPU, chunked for memory."""
+    """Filter function ``F(w) = int exp(i*sign*w*t) toggle(t) dt``, evaluated at every
+    frequency in ``wgrid`` at once.
+
+    ``toggle(t)`` is the +/-1 (or 0/+-1 for the Ising channel) square-wave "toggling
+    frame" function of a pulse sequence (e.g. ``y[0, 0]`` from ``model.trajectories.make_y``);
+    its Fourier-type overlap with a probe tone ``exp(i*sign*w*t)`` is exactly the filter
+    function that appears in the QNS overlap-integral formula ``chi(t) = (1/2pi) int dw
+    S(w) |F(w,t)|^2``. Every systematic below is built from these filter functions
+    evaluated on either the harmonic comb (``wgrid = wk``) or a fine continuum
+    (``wgrid = wfine``), so this is the one routine that has to be both correct and fast.
+
+    ``wgrid`` can be tens of thousands of points, and ``jnp.exp(...)`` below builds a
+    full (len(wgrid) x len(tb_j)) complex array -- doing that in one shot can blow past
+    GPU memory, so ``chunk`` splits ``wgrid`` into batches (same batching idea as
+    ``trajectories.solver_prop``'s shot-slicing): each batch is a self-contained JAX
+    computation, so this loop never needs the whole outer product resident at once.
+    """
     y_j = jnp.asarray(np.asarray(toggle))
     out = []
     for s in range(0, len(wgrid), chunk):
@@ -69,6 +122,15 @@ def _ff_grid(toggle, tb_j, wgrid, sign, chunk=4000):
 def comb_inversion_systematic(spectra, c_times, M, T, n_wfine=80001, n_tb=8000,
                               wmax_factor=8.0, return_selfcheck=False):
     """Deterministic per-harmonic comb-inversion systematic for all six spectra.
+
+    Note: this is the simpler "single-period" approximation of the bias (a single
+    pulse-period filter integrated over a continuum). It is superseded in the live
+    pipeline by ``forward_model_systematic`` further down this file, which instead
+    uses the exact multi-period (finite-M) filter and is what
+    ``characterize/reconstruct.py`` actually calls. This function is kept -- and
+    covered by ``tests/test_systematics.py`` -- as the simpler reference calculation
+    the more accurate one is checked against, and because it is fast enough for quick
+    sanity checks.
 
     Parameters
     ----------
@@ -99,9 +161,26 @@ def comb_inversion_systematic(spectra, c_times, M, T, n_wfine=80001, n_tb=8000,
     def ys(pulse):
         return [make_y(tb, pulse, ctime=c_times[i], m=1) for i in range(n)]
 
+    # `do_self`/`do_cross` below are *closures*: nested functions that read the
+    # variables of the enclosing `comb_inversion_systematic` call (n, wk, wfine, tb_j,
+    # T2pi, ...) and write their per-spectrum result straight into the enclosing `sys`/
+    # `chk` dicts rather than returning it. This is just a way to avoid passing the same
+    # half-dozen grids as arguments to every helper; it is standard Python, not
+    # something specific to the physics.
     sys, chk = {}, {}
 
     def do_self(key):
+        """Fill sys[key]/chk[key] for one of the three self-spectra (S11, S22, S1212).
+
+        Builds the measurement kernel U(w) (SPEC_KERNELS[key]) on both the harmonic
+        comb wk and the fine continuum wfine, forms the EXACT continuum observable
+        Cf = (T/2pi) int U(w) S(w) dw, and inverts it with the harmonic-only kernel
+        matrix U(wk) -- exactly what the real reconstruction does with noisy data. The
+        gap between that inverted answer and the true S(wk) (sys[key]) is the pure
+        comb-inversion systematic. Cc/chk[key] repeats the same inversion but with the
+        comb-SUM (not the continuum integral) as the observable, which must return
+        S(wk) to machine precision -- a self-consistency check on the kernel algebra.
+        """
         spec = SPEC_KERNELS[key]
         Sk = np.real(np.asarray(spectra[key](wk)))
         Sf = np.real(np.asarray(spectra[key](wfine)))
@@ -125,6 +204,14 @@ def comb_inversion_systematic(spectra, c_times, M, T, n_wfine=80001, n_tb=8000,
         chk[key] = float(np.max(np.abs(np.linalg.solve(U, Cc) - Sk)))
 
     def do_cross(key):
+        """Fill sys[key]/chk[key] for one of the three cross-spectra (S12, S112, S212).
+
+        Same idea as ``do_self``, but the real and imaginary parts of a cross-spectrum
+        are reconstructed from two DIFFERENT pulse pairs (spec['re'] vs spec['im']), so
+        this builds two independent kernel matrices/observables (U1/C1* for Re, U2/C2*
+        for Im) and inverts them separately before recombining into the complex bias
+        ``sys[key] = re_sys + 1j*im_sys``.
+        """
         spec = SPEC_KERNELS[key]
         Sk = np.asarray(spectra[key](wk)); Sf = np.asarray(spectra[key](wfine))
         (p_re, are, bre) = spec['re']; (p_im, aim, bim) = spec['im']
@@ -162,6 +249,12 @@ def dc_systematic(spectra, M, T, dc_cts=None, n_tb_per_period=2000,
     # wmax_*_factor are ordinary-frequency integration cutoffs in tau units
     # (cycles per tau): 5.0 and 1.5 = the legacy 200 MHz and 60 MHz at tau = 25 ns.
     """Deterministic bias of the w=0 (DC) reconstruction point, per spectrum.
+
+    Note: like ``comb_inversion_systematic`` above, this is a simplified reference
+    calculation (a single fixed DC cycle time / short-time tail model) superseded in
+    the live pipeline by ``dc_fit_systematic`` further down, which mirrors the actual
+    multi-time slope-fit estimator used by ``characterize/inversion.py``. Kept for the
+    test suite and quick checks.
 
     The DC points come from a separate Ramsey-slope estimator, not the comb, so they
     carry their own (deterministic, n_shots-independent) bias:
@@ -225,10 +318,18 @@ def dc_systematic(spectra, M, T, dc_cts=None, n_tb_per_period=2000,
 # ==============================================================================
 #
 # ``comb_inversion_systematic`` above approximates the forward map with a
-# SINGLE-PERIOD filter and a continuous integral. That under-quotes the bias on
-# the antisymmetric cross channels (the ['CDD3','CPMG'] imaginary channels), whose
-# off-tooth/grating weight the single-period kernel misses -- e.g. for S_1_2 the
-# true comb-inversion bias on Im is ~25%, but the single-period proxy reports ~half.
+# SINGLE-PERIOD filter and a continuous integral -- i.e. it evaluates the filter
+# function of just one repetition of the pulse (period T) instead of the actual
+# M-times-repeated sequence the experiment runs, and treats frequency as continuous
+# instead of the discrete tones the noise is actually synthesized on. That under-quotes
+# the bias on the antisymmetric cross channels (the ['CDD3','CPMG'] imaginary
+# channels): repeating a pulse M times turns its single-period filter into a comb of
+# very narrow "diffraction-grating" peaks with extra weight in between the main teeth
+# (the "off-tooth/grating weight"), and the single-period proxy simply has no way to
+# see that extra weight -- e.g. for S_1_2 the true comb-inversion bias on Im is ~25%,
+# but the single-period proxy reports ~half that (this under-quoting is exactly what
+# caused the ~39-sigma bias in the reconstructed imaginary part of S_1_2 that this
+# module was built to catch and correct).
 #
 # This block computes the GENUINE forward observable. ``trajectories.make_propagator``
 # is exact pure dephasing (diagonal H, phase by trapezoid), so every measured
@@ -236,9 +337,13 @@ def dc_systematic(spectra, M, T, dc_cts=None, n_tb_per_period=2000,
 #
 #     Cov(Phi_a, Phi_b),   Phi_a = \int_0^{MT} y_a(t) b_a(t) dt,
 #
-# evaluated with the FULL M-rep toggles over the DISCRETE noise-synthesis grid --
+# evaluated with the FULL M-rep toggles (the actual M-times-repeated pulse toggle
+# function, not the single-period stand-in) over the DISCRETE noise-synthesis grid --
 # i.e. the very quantity the simulator averages. The d(+/-) / a(+/-) extraction
-# combinations reduce to (validated against the simulated data to within shot noise):
+# combinations (the particular sums/differences of raw measured signals that
+# ``characterize/experiments.py`` and ``characterize/inversion.py`` use to isolate each
+# spectrum from the raw correlators) reduce to (validated against the simulated data
+# to within shot noise):
 #
 #     C_12_0  = 0.5 (Var Phi_1 + Var Phi_2)     (selfs; qubit-qubit cross + Ising cancel)
 #     C_12_12 =      Cov(Phi_1, Phi_2)          (qubit-qubit cross)
@@ -252,6 +357,13 @@ def dc_systematic(spectra, M, T, dc_cts=None, n_tb_per_period=2000,
 # legacy sqrt(S_a S_b) e^{-i w dgamma} rule for the old shared-draw model).
 
 # observable name -> (kind, [pulse_q1, pulse_q2], l)   -- mirrors experiments.py
+# This is the "recipe book" for forward_observables()/forward_model_systematic() below:
+# for every named harmonic observable that the real experiment measures (same names as
+# characterize/experiments.py), it records which pulse each qubit runs and which
+# covariance combination ('kind', see the C_12_0/C_12_12/C_a_0/C_a_b formulas just
+# above) that observable computes. `l` picks out which single qubit (1 or 2) a
+# per-qubit ('Ca0'/'Cab') observable belongs to; it is unused (None) for the two-qubit
+# ('C120'/'C1212') observables.
 _FWD_OBS = {
     'C_12_0_MT_1':  ('C120',  ['CPMG', 'CPMG'],      None),
     'C_12_0_MT_2':  ('C120',  ['CDD3', 'CPMG'],      None),
@@ -267,6 +379,9 @@ _FWD_OBS = {
     'C_2_1_MT_2':   ('Cab',   ['CDD1-1/4', 'CPMG'],  2),
 }
 
+# Which entry of the toggle-matrix `y` (from model.trajectories.make_y) carries each
+# channel's toggle function: qubit 1 -> y[0,0], qubit 2 -> y[1,1], the Ising/ZZ channel
+# -> y[2,2] (which is literally the elementwise product y[0,0]*y[1,1]).
 _CH_TOGGLE = {1: (0, 0), 2: (1, 1), 12: (2, 2)}
 
 
@@ -279,6 +394,13 @@ def forward_observables(spectra, c_times, M, T, t_vec, w_grain, wmax,
     ``spectra`` (an ``analytic_spectra`` dict), computed with the full M-rep toggles
     on the experiment's time grid ``t_vec`` and summed over the discrete synthesis
     grid -- identical to what ``trajectories.solver_prop`` averages.
+
+    Implementation note: for each pulse-timing value ``c_times[i]`` the inner loop
+    below builds two small caches, ``y_cache`` (the toggle-matrix ``make_y`` result for
+    a given pulse pair) and ``G_cache`` (its filter function ``ff_grid`` on the
+    synthesis-tone grid ``wj``, per channel). Several of the twelve named observables
+    in ``_FWD_OBS`` reuse the same pulse pair/channel, so caching avoids recomputing an
+    identical (and not-cheap) filter-function integral more than once per ``c_times[i]``.
     """
     c_times = np.asarray(c_times)
     n = len(c_times)
@@ -354,6 +476,10 @@ def forward_model_systematic(spectra, c_times, M, T, t_vec,
     opts = dict(inv_opts or {})
     opts['diagnostics'] = False        # never spam diagnostics from inside the systematic
     C = forward_observables(spectra, c_times, M, T, t_vec, w_grain, wmax)
+    # `kw` collects the keyword arguments every `recon_*` function below expects
+    # (c_times/m/T plus whatever inversion options the caller passed in `inv_opts`,
+    # e.g. inversion_method/reg_lambda); `**kw` then splats that dict into each call
+    # so this doesn't have to spell the same keyword list out six times.
     kw = dict(c_times=np.asarray(c_times), m=M, T=T, **opts)
 
     rec = {
@@ -384,15 +510,25 @@ _ECHO_DC_FILTER_CACHE = {}
 def _world_w_grid(half_band, w_grain, midpoint):
     """(tones, weight) of the noise-synthesis frequency grid.
 
+    The simulated noise is not a continuous-frequency process: ``model.trajectories``
+    builds it as a finite sum of sinusoids at a fixed, discrete set of frequencies
+    ("tones"). Any systematic-bias calculation that wants to reproduce what the
+    simulator actually does (as opposed to what an idealized continuous experiment
+    would do) must sum over those SAME tones, not integrate over a fine continuous
+    frequency axis -- the two are different "worlds" and give different answers. This
+    helper reproduces that tone grid exactly.
+
     Mirrors ``model.trajectories.make_noise_mat`` exactly: 2*w_grain tones over
     (0, 2*half_band), each carrying spectral weight dw = half_band/w_grain;
     midpoint grids exclude the w = 0 tone, legacy endpoint grids include it.
     A mirror integrating the simulated world must quadrature S over THESE tones
     (Riemann sum) -- a fine continuous trapezoid is a *different* world: its
     first grid point truncates the (0, w_min) DC cusp whose FID weight grows as
-    S(0) t^2 w_min, and its band extends beyond where the world has any power
-    (UNFOLD-RESIDUAL, diagnosed 2026-06-11: -0.033 missing at the last sweep
-    time = the entire +2.5 sigma self-DC excess the unfold could not remove).
+    S(0) t^2 w_min, and its band extends beyond where the world has any power. Using
+    the wrong (continuous) grid here was exactly the bug diagnosed as UNFOLD-RESIDUAL
+    (2026-06-11): -0.033 missing at the last sweep time = the entire +2.5 sigma
+    self-DC excess the unfold could not remove, because the mirror was quietly
+    describing a different noise world than the one actually simulated.
     """
     size_w = int(2 * w_grain)
     if midpoint:
@@ -403,7 +539,13 @@ def _world_w_grid(half_band, w_grain, midpoint):
 
 
 def _fid_f2(w, t):
-    """FID filter |F(w, t)|^2 = sin^2(wt/2)/(w/2)^2, with the w = 0 limit t^2."""
+    """FID filter |F(w, t)|^2 = sin^2(wt/2)/(w/2)^2, with the w = 0 limit t^2.
+
+    FID ("free induction decay") is the trivial pulse sequence with no refocusing
+    pulses at all -- just wait a time t and measure. It is the pulse used for the DC
+    (w=0) sweep because, unlike the CPMG/CDD pulse trains used for the harmonic comb
+    points, it does not null out the low-frequency response the DC point needs to see.
+    """
     wsafe = np.where(w == 0.0, 1.0, w)
     F2 = np.sin(wsafe[None, :] * t[:, None] / 2) ** 2 / (wsafe[None, :] / 2) ** 2
     return np.where(w[None, :] == 0.0, t[:, None] ** 2, F2)
@@ -445,6 +587,14 @@ def dc_fit_systematic(spectra, t_sweep, n_w=400001, wmax=12.5, s1212_echo_ct=Non
     # wmax is an angular-frequency integration cutoff in tau units (rad/tau):
     # 12.5 = the legacy 5e8 rad/s at tau = 25 ns.
     """Deterministic bias of the multi-time DC slope fit, per spectrum.
+
+    Physical picture: the w=0 (DC) point of each spectrum cannot come from the
+    harmonic comb (the comb only samples w_k = 2*pi*k/T for k >= 1), so it is
+    estimated separately by measuring a plain FID decay curve at several wait times
+    and fitting its short-time slope (``characterize.inversion._ramsey_fit_dc``).
+    That slope-fit estimator has its own deterministic bias, which this function
+    computes exactly given the analytic spectra, playing the same role for the DC
+    point that ``forward_model_systematic`` plays for the harmonic points.
 
     Mirrors ``inversion._ramsey_fit_dc``: builds the EXACT forward FID-decay curves
     C(t_k) over the sweep for the analytic spectra, runs them through the same DC
@@ -605,7 +755,14 @@ def dc_fit_systematic(spectra, t_sweep, n_w=400001, wmax=12.5, s1212_echo_ct=Non
 
 
 def analytic_spectra():
-    """Ground-truth spectrum callables S(w) for the active regime (exact systematic)."""
+    """Ground-truth spectrum callables S(w) for the active regime (exact systematic).
+
+    Used whenever the "true" noise model is available -- i.e. in simulation, where
+    ``noise/spectra.py`` defines the model that actually generated the data. Contrast
+    with ``selfconsistent_spectra`` below, which builds an S(w) model purely from a
+    RECONSTRUCTED (already-noisy) comb, for use in a real experiment where the ground
+    truth is, by definition, unknown.
+    """
     from qns2q.noise.spectra import S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12
     return {
         'S11':   lambda w: np.asarray(S_11(jnp.asarray(w))),
@@ -625,6 +782,11 @@ def _sym_gauss(w, w0, sig):
 
 def _fit_comb_lines(wk_full, vals, centers, sigma):
     """Nonnegative LSQ heights of Gaussian lines (known centers/widths) on comb teeth.
+
+    "NNLS" = nonnegative least squares (``scipy.optimize.nnls``): an ordinary
+    least-squares fit with the extra constraint that every fitted amplitude/height
+    must be >= 0, which is the right physical constraint here (a spectral line adds
+    power, it cannot subtract it).
 
     Teeth within 3*sigma of a center carry the line's excess over the local smooth
     background (interpolated through the remaining teeth); NNLS soaks exactly that
@@ -697,9 +859,11 @@ def selfconsistent_spectra(wk_full, recon, lines=None):
       cannot represent sub-tooth-width lines, and the missed leakage was the
       dominant post-unfold residual (UNFOLD-RESIDUAL, diagnosed 2026-06-11);
     * high band: power-law tail above the last tooth, fitted per real/imag component
-      to the top de-lined teeth (``control.tails.fit_powerlaw_tail``, same physics as
-      the gate-side GATE-TAILS extension); components with no one-signed resolved
-      tail keep the legacy linear taper to zero over (wmax, 2*wmax);
+      to the top de-lined teeth (``control.tails.fit_powerlaw_tail`` -- the same
+      power-law-tail fitting the gate optimizers in ``control/`` use to extend a
+      reconstructed spectrum past its last measured tooth for their own overlap
+      integrals); components with no one-signed resolved tail keep the legacy linear
+      taper to zero over (wmax, 2*wmax);
     * low band (self spectra): saturated power-law head below the first tooth
       (``_fit_powerlaw_head``), replacing the linear DC->tooth-1 bridge whose chord
       over-weighted the band the DC slope-fit mirror integrates.
@@ -725,6 +889,12 @@ def selfconsistent_spectra(wk_full, recon, lines=None):
             h = _fit_comb_lines(wk_full, recon[key], centers, sigmas)
             line_fits[key] = (centers, sigmas, h)
 
+    # `make(key)` builds and returns one S(w) function per spectrum, fitting the line
+    # heights/tail/head once up front and then closing over those fitted numbers inside
+    # `fn` -- so each returned callable is "ready to call" on any frequency array
+    # without re-fitting anything. `extend`/`line_part`/`fn` below are all such closures,
+    # nested one call deeper for the same reason (`fn` needs `extend`'s per-component
+    # tail/head handling, `extend` needs the fitted tail, etc).
     def make(key):
         vals = recon[key]
         re = np.real(vals).astype(float); im = np.imag(vals)

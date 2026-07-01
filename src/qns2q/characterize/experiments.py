@@ -1,14 +1,50 @@
 """
-This script provides a framework for running quantum noise spectroscopy (QNS)
-experiments. It is designed to be modular and easy to configure, allowing
-users to define and run a series of experiments with different pulse sequences
-and parameters.
+Stage 1 driver of the QNS-2Q pipeline's "characterize" arm (see CLAUDE.md's
+"Data Flow" diagram): this is where the simulated two-qubit Quantum Noise
+Spectroscopy (QNS) experiment suite actually runs and its raw output is saved
+to disk. Everything downstream -- spectral reconstruction (Stage 2,
+`characterize/reconstruct.py`), gate optimization (Stage 3, `control/cz.py` /
+`control/idle.py`), and the paper's figures -- ultimately reads the two files
+this module writes: `results.npz` (measured correlation coefficients + their
+standard errors) and `params.npz` (the frozen experiment configuration that
+downstream code needs to interpret those numbers, e.g. the noise-model
+version and the SPAM protocol that produced them).
+
+Physics picture: a QNS "experiment" here means preparing a fixed two-qubit
+state, evolving it under a chosen dynamical-decoupling pulse sequence in the
+presence of synthesized classical dephasing noise (qubit 1, qubit 2, and their
+Ising ZZ coupling), and reading out a POVM expectation value repeated over
+many noise realizations ("shots"). Different pulse-sequence pairs + control
+times pick out different frequency components of the noise spectra, which is
+what makes the whole suite a spectroscopy: Stage 2 inverts these coefficients
+into power spectral densities S(omega).
+
+What this module calls into: `model/trajectories.py` (pulse sequences, noise
+trajectory synthesis, and propagators -- the actual physics solver),
+`model/observables.py` (POVM measurement statistics and the correlation-
+function builders keyed by experiment type), `characterize/spam.py` (SPAM
+calibration and the SPAM-robust estimator builders used when
+`spam_protocol='mitigated'`/`'robust'`), `noise/spectra.py` (the active
+regime's spectral model, selected at import time by `QNS2Q_REGIME`), and
+`qns2q/paths.py` (output-folder + regime resolution, so this stage is
+CWD-independent). What calls into this module: `scripts/run_capture_arm.py`
+(the plain NoSPAM arm) and `scripts/run_spam_experiments.py` (the SPAM arms:
+raw/mitigated/robust); `tests/test_spam.py` imports `QNSExperimentConfig`
+directly to check the SPAM machinery in isolation.
 
 The main components are:
-- QNSExperimentConfig: A dataclass for storing all the experiment parameters.
+- QNSExperimentConfig: A dataclass for storing all the experiment parameters
+  (pulse sequences are chosen per-experiment below, not stored on the config;
+  see `main()`'s experiment lists).
 - ExperimentRunner: A class that takes a configuration object and runs the
-  experiments.
-- A main execution block that demonstrates how to use these components.
+  experiments, optionally through a recording/replaying solver wrapper
+  (`PhaseRecorder`/`PhaseReplayer`) that lets later re-analysis skip the
+  (expensive) Monte Carlo noise synthesis.
+- `main()`: assembles the actual suite -- which correlation coefficients get
+  measured, with which pulse sequences, over which control/evolution times --
+  and drives it end to end, including the harmonic ("comb") experiments used
+  to reconstruct S(omega_k) at the truncate harmonics and the DC
+  (zero-frequency) time sweeps used to recover S(0) directly via a slope fit.
 
 Author: [Q]
 Date: [01/18/2026]
@@ -22,6 +58,10 @@ from dataclasses import dataclass, field
 import jax.numpy as jnp
 import numpy as np
 import jax
+# JAX defaults to 32-bit floats (for speed on accelerators); this line switches
+# it to 64-bit ("x64") globally, matching plain numpy precision. Every script
+# in this repo sets this at import time -- without it, small noise/SPAM
+# corrections here would be swamped by float32 rounding error.
 jax.config.update("jax_enable_x64", True)
 
 from qns2q.model.observables import (make_c_12_0_mt, make_c_12_12_mt, make_c_a_0_mt,
@@ -42,7 +82,10 @@ from qns2q.paths import run_folder, project_root
 RANDOM_SEED = 20260608
 
 # Correlation-function builders keyed by experiment type (shared by run_experiment
-# and the DC time sweep).
+# and the DC time sweep). This is a dispatch table: instead of an if/elif chain
+# picking a function by name, `_call_exp_func` below just looks up
+# `_EXP_MAP[exp_type]` and calls whatever it finds -- adding a new experiment
+# type only means adding one dict entry.
 _EXP_MAP = {
     'C_12_0': make_c_12_0_mt,
     'C_12_12': make_c_12_12_mt,
@@ -63,19 +106,65 @@ _EXP_MAP_ROBUST = {
 @dataclass
 class QNSExperimentConfig:
     """
-    Configuration for QNS experiments.
+    Configuration for the Stage 1 QNS experiment suite. Every field here is a
+    plain Python dataclass field (see the ``@dataclass`` decorator above this
+    class): declaring the class body this way auto-generates ``__init__`` from
+    the field list, so you configure a run by just constructing
+    ``QNSExperimentConfig(some_field=value, ...)`` rather than writing a custom
+    constructor. Fields whose default is a mutable object (a list, an array)
+    use ``field(default_factory=...)`` instead of a bare default -- a bare
+    mutable default would be built ONCE at class-definition time and then
+    shared (and silently mutated) across every instance, which is a classic
+    Python footgun; ``default_factory`` calls the given zero-argument function
+    fresh for each new config. After ``__init__`` runs, ``__post_init__``
+    (below) derives the arrays and SPAM bookkeeping that depend on these raw
+    fields (time grids, the confusion matrix, which SPAM protocol is active).
+    This dataclass does NOT read any files from disk in ``__post_init__`` --
+    unlike the Stage 2/3 configs, Stage 1 has no upstream run folder to load;
+    it only derives values from its own fields (plus one output-path lookup:
+    ``fname``'s default resolves the active regime's run folder from
+    ``qns2q.paths``, it does not create or read it).
 
     Attributes:
-        T: The total time for the experiment.
-        M: The number of blocks.
-        t_grain: The number of time points in each block.
-        truncate: The truncation order for the cumulant expansion.
-        w_grain: The number of frequency points.
-        spec_vec: A list of spectra to use.
-        a_sp: The SPAM error parameters.
-        c: The SPAM error parameters.
-        a1, b1, a2, b2: The measurement operators.
-        spMit: A flag for SPAM mitigation.
+        tau: The time unit (minimum pulse separation); tau = 1 by convention,
+            so all other times are in units of tau and all frequencies in
+            1/tau (see CLAUDE.md "Units: tau = 1").
+        T: The total (single-block) evolution time for one harmonic-comb
+            experiment, in units of tau.
+        M: The number of repeated blocks of length T concatenated to form the
+            full evolution (t_vec spans M*T); also the largest repetition
+            number swept by the SPAM-robust protocol's M-regression.
+        t_grain: The number of time-grid points discretizing one block of
+            length T (dt = T/t_grain sets the trajectory-integration
+            resolution, not a physical parameter).
+        truncate: The number of QNS comb harmonics reconstructed, k =
+            1..truncate at omega_k = 2*pi*k/T (sets wmax = 2*pi*truncate/T and
+            the length of c_times below) -- despite the name, this is NOT a
+            cumulant-expansion truncation order.
+        w_grain: The number of frequency bins used to synthesize the
+            classical noise trajectories (the world grid resolution passed to
+            model.trajectories.make_noise_mat_arr), independent of truncate.
+        spec_vec: Which of noise/spectra.py's spectrum functions this run's
+            world was synthesized under (S_11, S_22, S_1212 by default); kept
+            only as a human-readable record (spec_vec_names, below) since the
+            functions themselves can't be pickled into params.npz -- the
+            noise actually synthesized is whatever the active QNS2Q_REGIME
+            selects in noise/spectra.py, not this list.
+        a_sp: The TRUE injected state-preparation (SP) error, alpha_SP^z per
+            qubit (paper notation); 1.0 = no SP error. See CLAUDE.md's "SPAM
+            pipeline" section.
+        c: The TRUE injected transverse SP Bloch-vector component per qubit
+            (complex; paper's SP transverse error). Zero = no transverse SP
+            error. What is actually PREPARED is c_prep (see __post_init__
+            below), which the 'mitigated' protocol forces to zero (the phase
+            twirl removes it exactly).
+        a1, b1, a2, b2: Raw per-qubit measurement (M) error parameters (the
+            two diagonal confusion-matrix entries per qubit before
+            symmetrization); combined in __post_init__ into the paper's
+            measurement visibility alpha_M (a_m) and asymmetry delta (delta).
+        spMit: Whether SP-error mitigation (dividing by an SP-error estimate)
+            is applied; overridden by spam_protocol's resolution logic below
+            except when spam_protocol='none' (legacy oracle behavior).
         spam_protocol: How the experiments handle the injected SPAM errors:
             'none'      -- legacy oracle behavior: invert the TRUE confusion matrix
                            and (if spMit) divide by the TRUE a_sp. With the default
@@ -90,15 +179,38 @@ class QNSExperimentConfig:
             'robust'    -- SPAM-robust estimators (twisting + wringing, raw
                            readout); harmonic experiments swept over M for the
                            downstream SPAM-intercept regression.
+        n_meas: Number of projective (shot-noise) measurements per noise
+            realization; 0 = exact expectation values (only noise-ensemble
+            sampling error is quoted). A finite value additionally injects
+            multinomial readout statistics on top, mimicking a real device
+            with finite single-shot readout.
         spam_split_error: Relative error of the externally-supplied alpha_M vs
             alpha_SP^z gauge split used by the 'mitigated' protocol (khan2025);
             0 = faithful split. The measured products are always exact.
         m_sweep_robust: Repetition numbers for the robust M-regression; defaults
             to (M-4, M-2, M) when spam_protocol='robust'.
-        gamma: The decay rate.
-        gamma_12: The cross-decay rate.
-        n_shots: The number of shots for the experiment.
-        fname: The name of the folder to save the results in.
+        midpoint: Whether the noise-synthesis frequency grid uses bin
+            midpoints (True, default) rather than bin edges -- avoids
+            sampling the spurious omega=0 static tone that would otherwise
+            bias DC-sensitive (zero-frequency) observables.
+        synth_wmax: Optional override of the half-bandwidth of the synthesized
+            noise "world" (frequency span the noise trajectories are built
+            over); 0.0 = derive it from truncate/T as usual. Only needed to
+            force two different runs (e.g. a fine-grid and a high-band comb)
+            to share the exact same synthesized frequency world.
+        gamma, gamma_12: Legacy decay-rate parameters from an earlier noise
+            model. The noise actually synthesized no longer uses these (the
+            noise-model components now live entirely in noise/spectra.py, and
+            model.trajectories.make_noise_mat_arr raises if you try to pass
+            them); they are kept here, and their values still saved into
+            params.npz, only because characterize/reconstruct.py's loader
+            requires those two keys to be present in an existing params.npz
+            (a file-format compatibility contract, not a physical input).
+        n_shots: The number of independent noise realizations ("shots") each
+            expectation value is averaged over.
+        fname: The name of the folder (under the repo root) to save
+            params.npz/results.npz in; defaults to the active regime's run
+            folder (qns2q.paths.run_folder()).
         parent_dir: The parent directory to save the results in.
     """
     # Time unit: the minimum pulse separation tau (tau = 1; all times in units of
@@ -106,24 +218,27 @@ class QNSExperimentConfig:
     # noise/spectra.py). The legacy SI anchor was tau = 25 ns.
     tau: jnp.float64 = 1.0
     M: jnp.int64 = 10
-    # 1600 (2026-06-11 decision): the repeat-heavy CA-REPRO/arm workflow needs
-    # cheaper full runs; dt = T/1600 = 0.1 tau still gives 10 samples per
-    # minimum pulse separation (the old 3000 ran > 1.6 h per Stage 1). SPAM
-    # presets (run_spam_experiments --reduced/--medium/--tuned/--fine) pin
-    # their own values and are unaffected.
+    # 1600 (2026-06-11 decision): chosen to make Stage 1 cheap enough to
+    # re-run many times over -- the paper's "CA-REPRO-NUMBERS" campaign
+    # (NOISE_MODEL_SPEC.md) needed to regenerate every regime's numbers
+    # repeatedly, and the old t_grain=3000 took > 1.6 h per Stage 1 run, which
+    # made that impractical. dt = T/1600 = 0.1 tau still gives 10 integration
+    # samples per minimum pulse separation, so trajectory integration stays
+    # resolved. SPAM presets (run_spam_experiments --reduced/--medium/--tuned/
+    # --fine) pin their own values and are unaffected by this default.
     t_grain: jnp.int64 = 1600
     truncate: jnp.int64 = 20
     w_grain: jnp.int64 = 500
     spec_vec: list = field(default_factory=lambda: [S_11, S_22, S_1212])
-    a_sp: np.ndarray = field(default_factory=lambda: jnp.array([1., 1.]))
+    a_sp: np.ndarray = field(default_factory=lambda: jnp.array([1., 1.]))  # true alpha_SP^z per qubit (see docstring)
     c: np.ndarray = field(
         default_factory=lambda: np.array(
             [jnp.array(0. + 0. * 1j),
-             jnp.array(0. + 0. * 1j)]))
+             jnp.array(0. + 0. * 1j)]))  # true transverse SP Bloch component per qubit (complex; see docstring)
     a1: jnp.float64 = 1.
     b1: jnp.float64 = 1.
     a2: jnp.float64 = 1.
-    b2: jnp.float64 = 1.
+    b2: jnp.float64 = 1.  # a1,b1,a2,b2: raw per-qubit M-error params -> combined below into a_m (visibility) + delta (asymmetry)
     spMit: bool = False
     spam_protocol: str = 'none'
     # Projection (readout-sampling) noise: number of projective measurements per
@@ -147,21 +262,45 @@ class QNSExperimentConfig:
     gamma: jnp.float64 = T / 14
     gamma_12: jnp.float64 = T / 28
     # 4000 (2026-06-11 decision, with t_grain=1600): matches the medium-preset
-    # statistics; the repeat plan buys precision through repeats, not shots.
+    # statistics; the same repeat plan above buys reconstruction precision by
+    # re-running the (cheaper) suite several times rather than by raising the
+    # per-run shot count.
     n_shots: jnp.int64 = 4000
     fname: str = field(default_factory=run_folder)
     parent_dir: str = os.pardir
 
     def __post_init__(self):
+        """Derive the grids and SPAM bookkeeping the raw fields imply.
+
+        Dataclasses call this automatically right after the generated
+        ``__init__`` finishes, which is why the quantities below are
+        computed here instead of the field list above: they all depend on
+        combinations of several raw fields (e.g. the time grid needs both T
+        and t_grain), so they can't be plain per-field defaults.
+        """
+        # wmax: comb bandwidth implied by truncate/T (highest reconstructed
+        # harmonic is omega_truncate = 2*pi*truncate/T = wmax).
         self.wmax = 2 * np.pi * self.truncate / self.T
+        # t_b: the time grid for ONE block of length T; t_vec: the full
+        # M-block evolution-time grid (concatenation of M copies of t_b).
         self.t_b = jnp.linspace(0, self.T, self.t_grain)
         self.t_vec = jnp.linspace(0, self.M * self.T,
                                  self.M * jnp.size(self.t_b))
+        # Control times T/n, n=1..truncate: the harmonic-comb control times at
+        # which the pulse sequences below are evaluated, one per reconstructed
+        # frequency omega_n = 2*pi*n/T.
         self.c_times = jnp.array([self.T / n for n in range(1, self.truncate + 1)])
         # Store names of spectra functions for saving, as functions aren't picklable
         self.spec_vec_names = [f.__name__ for f in self.spec_vec]
+        # a_m: measurement visibility alpha_M per qubit (paper notation);
+        # delta: measurement asymmetry per qubit. Both derived from the raw
+        # per-outcome params (a1,b1) qubit 1 / (a2,b2) qubit 2.
         self.a_m = np.array([self.a1 + self.b1 - 1, self.a2 + self.b2 - 1])
         self.delta = np.array([self.a1 - self.b1, self.a2 - self.b2])
+        # CM: the TRUE 4x4 two-qubit readout confusion matrix, built as the
+        # Kronecker product of each qubit's 2x2 confusion matrix (row/column
+        # order: measured outcome x prepared outcome). This is the matrix an
+        # oracle estimator would invert to undo M error exactly.
         self.CM = jnp.kron(
             jnp.array([[
                 0.5 * (1 + self.a_m[0] + self.delta[0]),
@@ -220,7 +359,14 @@ class QNSExperimentConfig:
 
 class ExperimentRunner:
     """
-    Runs a series of QNS experiments based on a given configuration.
+    Drives one full QNS experiment suite for a given config: builds (or skips)
+    the shared noise-synthesis matrices, then runs each requested experiment
+    through `_call_exp_func` and accumulates its measured coefficients +
+    standard errors into `self.results`, which `save_results` later writes to
+    `results.npz`/`params.npz`. `main()` below is the only place that decides
+    WHICH experiments to run (the actual QNS coefficient/pulse-sequence
+    dictionary); this class is deliberately agnostic to that -- it just knows
+    how to run one experiment given its name/pulse-sequence/type.
     """
 
     def __init__(self, config: QNSExperimentConfig, solver=None,
@@ -245,6 +391,10 @@ class ExperimentRunner:
     def _setup_output_directory(self):
         """
         Creates the output directory if it doesn't exist.
+
+        Resolved via `qns2q.paths.project_root()` (not the process's current
+        working directory), which is why this stage can be run from anywhere
+        and still land in the same repo-relative run folder.
         """
         path = os.path.join(project_root(), self.config.fname)
         if not os.path.exists(path):
@@ -253,7 +403,13 @@ class ExperimentRunner:
 
     def _make_noise_mats(self):
         """
-        Generates the noise matrices.
+        Pre-computes the sine/cosine noise-synthesis matrices (one build,
+        shared by every experiment in this run) for the three physical
+        dephasing channels -- qubit 1, qubit 2, and their Ising (ZZ) coupling
+        -- over the full evolution-time grid. See
+        `model.trajectories.make_noise_mat_arr` for the exact array layout;
+        this is the expensive step `make_mats=False` lets a replaying runner
+        skip entirely.
         """
         return jnp.array(
             make_noise_mat_arr(
@@ -267,7 +423,12 @@ class ExperimentRunner:
     def run_experiment(self, exp_name: str, pulse_sequence: list,
                        exp_type: str, c_times=None, **kwargs):
         """
-        Runs a single experiment.
+        Runs a single experiment: measures one correlation coefficient at
+        every control time in `c_times` (default: the full harmonic comb
+        `config.c_times`, one point per reconstructed frequency omega_k),
+        averaged over `config.M` blocks and `config.n_shots` noise
+        realizations, then stores it under `exp_name`/`exp_name + '_err'` in
+        `self.results` (mean values and their standard errors, respectively).
 
         Args:
             exp_name: The name of the experiment.
@@ -277,6 +438,12 @@ class ExperimentRunner:
                 The DC characterization experiments pass a short list of fast
                 control times so they stay light.
             **kwargs: Additional arguments for the experiment function.
+                (``**kwargs`` collects any extra keyword arguments the caller
+                passes -- here, experiment-specific ones like ``state=`` or
+                ``l=`` -- into a dict and forwards them on unchanged, so this
+                method doesn't need to know every experiment type's full
+                argument list; see the experiment tables in `main()` below
+                for what actually gets passed this way.)
         """
         print(f"Running experiment: {exp_name}")
         start_time = time.time()
@@ -377,7 +544,14 @@ class ExperimentRunner:
 
     def save_results(self):
         """
-        Saves the parameters and results to .npz files.
+        Saves the parameters and results to .npz files: `params.npz` (a
+        near-verbatim dump of `self.config`'s fields, sanitized so
+        `np.savez` can serialize it) and `results.npz` (`self.results`, the
+        measured coefficients + standard errors accumulated by
+        `run_experiment`/`run_experiment_msweep`/`run_dc_sweep`). Every later
+        pipeline stage reconstructs its own config by re-loading these two
+        files (see characterize/reconstruct.py), so silently dropping or
+        renaming a field here would break that stage, not just this one.
         """
         # Create a copy of the config dict to avoid modifying the original object.
         # The 'spec_vec' attribute contains function objects, which cannot be
@@ -402,9 +576,15 @@ class ExperimentRunner:
             params_to_save['est_products'] = est.products
             params_to_save['est_cm'] = est.cm
         params_to_save['tau'] = self.config.tau
-        # OPT-PROVENANCE: stamp the noise-model version the world was
-        # synthesized under; propagated into specs.npz and the gate outputs so
-        # downstream consumers can detect mixed-model states.
+        # OPT-PROVENANCE: stamp the noise-model version (noise/spectra.py's
+        # MODEL_VERSION) that this run's noise world was synthesized under.
+        # Why this matters: noise/spectra.py's model constants get re-tuned
+        # from time to time (see CLAUDE.md's "Noise model" section), so an
+        # old results.npz/params.npz pair and the CURRENT noise/spectra.py
+        # can silently disagree about what the simulated spectra actually
+        # were. Carrying the version stamp through to specs.npz and the gate
+        # outputs lets downstream code (Stage 2/3) detect and warn on that
+        # mismatch instead of quietly mixing two different noise models.
         from qns2q.noise.spectra import MODEL_VERSION
         params_to_save['model_version'] = MODEL_VERSION
         np.savez(
@@ -431,6 +611,10 @@ class PhaseRecorder:
         self.t_lens = []
 
     def __call__(self, y_uv, noise_mats, t_vec, rho, n_shots):
+        # y_uv: the toggling-frame control matrix for the current pulse
+        # sequence (see model.trajectories.solver_prop, whose signature this
+        # matches exactly -- ExperimentRunner calls whichever solver it was
+        # given without caring which one it is).
         coeffs = solver_phase_coeffs_fast(y_uv, noise_mats, t_vec, n_shots)
         self.calls.append(np.asarray(coeffs))
         self.t_lens.append(int(np.size(t_vec)))
@@ -514,6 +698,12 @@ def main(config=None, record_to=None, replay_from=None, fast=False):
         Path to write a phase dataset (run the suite with a PhaseRecorder).
     replay_from : str, optional
         Path of a phase dataset to replay instead of synthesizing noise.
+    fast : bool, optional
+        Use the cheap filter-vector (`fast_solver`) path instead of the dense
+        `solver_prop` -- still synthesizes fresh noise (unlike replay), but
+        solves ~1000x faster. Mutually usable with `spam_protocol='robust'`,
+        which cannot replay a recorded (non-robust) phase dataset; ignored
+        if `record_to`/`replay_from` is given (those pick their own solver).
     """
     np.random.seed(RANDOM_SEED)
     print(f"Running QNS experiments [seed={RANDOM_SEED}]...")

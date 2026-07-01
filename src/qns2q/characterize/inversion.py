@@ -1,10 +1,57 @@
 """
 Spectral inversion and reconstruction algorithms.
 
-This module provides tools to reconstruct noise power spectral densities (PSDs)
-from experimental observables via least-squares inversion. It supports both
-harmonic reconstruction (at specific frequency combs) and DC (zero-frequency)
-reconstruction from FID and CPMG/CDD experiments.
+Where this sits in the pipeline
+--------------------------------
+This is the linear-algebra core of Stage 2 (spectral reconstruction), the second
+step of the "characterize" arm of the two-arm pipeline described in the repo's
+CLAUDE.md (characterize: QNS experiments -> spectral reconstruction; control: CZ/
+idle gate optimization). It does not run experiments or hold noise-model physics
+itself -- it turns already-measured correlation-function *coefficients* (the
+outputs of running QNS pulse sequences many times, at a repetition count ``M``
+and per-repetition time ``T``) into estimates of the noise power spectral density
+(PSD) matrix, at either a comb of harmonic frequencies or at zero frequency (DC).
+
+Concretely, every QNS experiment applies a control ("toggling") sequence to the
+qubits and measures a correlation function ``C`` that is a *linear functional* of
+the true spectrum ``S(w)`` (exact here because the simulated noise is Gaussian --
+see ``characterize/systematics.py`` for why the 2nd-order cumulant expansion is
+exact). Discretizing that linear functional at a set of control times gives a
+square (or overdetermined) linear system ``U @ S = C``; this module builds ``U``
+from the pulse sequences (via ``ff()``/``model.trajectories.make_y``) and solves
+for ``S`` (``solve_inverse``), propagating the observables' error bars through the
+same linear map (``propagate_linear_error``). Two families of solvers are
+provided: the harmonic ``recon_S_*`` functions (comb frequencies omega_k = 2*pi*k/T)
+and the DC ``recon_S_*_dc`` / ``_ramsey_fit_dc`` functions (zero frequency, from
+the slope of a Ramsey/FID decay curve swept over total evolution time).
+
+Callers and companions
+-----------------------
+- ``characterize/experiments.py`` runs the QNS pulse sequences and produces the
+  raw correlation coefficients (``C_12_0_MT_1`` etc.) that feed every function
+  here.
+- ``characterize/reconstruct.py`` is the sole caller of the six harmonic
+  ``recon_S_*`` functions and the six DC ``recon_S_*_dc``/``recon_S_1212_dc*``
+  functions (see its ``call_recon``/``call_recon_dc`` helpers); it assembles their
+  outputs into the ``specs.npz`` file that ``control/cz.py`` and ``control/idle.py``
+  read as the reconstructed noise spectrum for pulse optimization.
+- ``characterize/systematics.py`` independently re-derives the same kernels
+  (``ff``-style Fourier overlaps) to compute the *forward-model* bias of this
+  comb inversion analytically, without Monte Carlo; its docstring explains the
+  three sources of that bias (finite-M tooth width, comb truncation, unsampled
+  sub-comb band). Its test (``tests/test_systematics.py``) guards against the two
+  modules' kernels silently drifting apart.
+- ``characterize/spam.py`` calls ``regress_observables_over_M`` to remove a
+  SPAM-induced offset via M-scaling before handing coefficients to the
+  ``recon_S_*`` functions above.
+
+Two families of variable names recur across this file's functions and mirror the
+manuscript's notation directly (do not rename them): ``c_times`` (the swept
+control/block times, one per reconstructed harmonic), ``m``/``M`` (repetition
+count of the pulse block), ``T`` (time per repetition), ``wk`` (the harmonic comb
+``2*pi*k/T``), and ``y``/``y_uv`` (the +-1 "toggling function" control matrix from
+``make_y`` that flips sign every time a pulse fires -- see ``ff()`` below for what
+it is used for).
 """
 
 import numpy as np
@@ -30,10 +77,54 @@ from qns2q.model.trajectories import make_y
 # for analytic error propagation via ``propagate_linear_error``.  For 'nnls' the
 # map is nonlinear at active constraints, so J is the unconstrained least-squares
 # map -- error bars are then a (slightly conservative) approximation.
+#
+# Plain-language recap for readers new to numerical linear algebra: cond(U) (the
+# matrix condition number, ratio of its largest to smallest singular value) says
+# how much a small measurement error in C gets amplified when you divide it out
+# again to get S -- a large cond(U) means a noisy experiment can flip the sign of
+# a physically-required-positive self-spectrum. 'lstsq'/'tikhonov'/'nnls' exist as
+# ways to trade a little bias for a lot less noise amplification when that happens;
+# 'direct' (exact inversion of a square U) is what the published reconstructions use
+# and is kept as the default so old results reproduce exactly.
 
 def solve_inverse(U, rhs, method='direct', reg_lambda=0.0, nonneg=False,
                   diagnostics=False, label=''):
-    """Solve U @ S = rhs with a selectable backend. Returns (S, J)."""
+    """Solve the linear system U @ S = rhs for the spectral samples S.
+
+    This is the shared backend behind every ``recon_S_*`` harmonic reconstructor
+    below: they each build a kernel matrix ``U`` (from filter-function overlaps,
+    see ``ff()``) and a measured coefficient vector ``rhs``, then call this
+    function to get the spectrum samples back out. See the module-level comment
+    above this function for what each ``method`` does and when to reach for it.
+
+    Parameters
+    ----------
+    U : array_like
+        The (n, n) [or (n_obs, n) if overdetermined] kernel/measurement matrix
+        mapping true spectral samples to the noiseless coefficient.
+    rhs : array_like
+        The measured coefficient vector C (the right-hand side of U @ S = C).
+    method : {'direct', 'lstsq', 'tikhonov'}
+        Which linear-solve backend to use (ignored if ``nonneg=True``).
+    reg_lambda : float
+        Ridge/Tikhonov regularization strength (only used by ``method='tikhonov'``).
+    nonneg : bool
+        If True, solve via non-negative least squares instead of ``method``
+        (physically appropriate for self-spectra, which cannot be negative).
+    diagnostics : bool
+        If True, print U's shape, condition number, and extreme singular values
+        (a quick way to see whether a given experiment design is numerically
+        well-posed) before solving.
+    label : str
+        Human-readable tag included in the diagnostics printout (e.g. 'S_11').
+
+    Returns
+    -------
+    (S, J) : tuple of np.ndarray
+        ``S`` is the solved spectral sample vector; ``J`` is the effective linear
+        map with ``S = J @ rhs``, used by ``propagate_linear_error`` to turn
+        observable error bars into spectral error bars.
+    """
     U = np.asarray(U)
     rhs = np.asarray(rhs)
 
@@ -48,6 +139,8 @@ def solve_inverse(U, rhs, method='direct', reg_lambda=0.0, nonneg=False,
 
     if nonneg:
         # Non-negative LS for real self-spectra. Operate on the real part.
+        # (Imported here, not at module top, purely so this optional scipy
+        # dependency is only touched by code paths that actually request it.)
         from scipy.optimize import nnls
         S, _ = nnls(np.real(U), np.real(rhs))
         J = np.linalg.pinv(U)            # for (approximate) error propagation
@@ -85,6 +178,16 @@ def regress_observables_over_M(obs_by_M, M_values, m_ref):
     the reference repetition ``m_ref`` (the M used to build U in the recon_*
     functions), so it can be dropped straight into the existing reconstructors.
 
+    Plain-language version: SPAM = State Preparation And Measurement error, a
+    roughly constant offset added to every measured coefficient regardless of how
+    long the experiment runs. The true noise signal grows in proportion to the
+    number of pulse-block repetitions M, but the SPAM offset does not -- so
+    repeating the same experiment at several different M and fitting a straight
+    line C vs. M lets you throw away the (M-independent) intercept and keep only
+    the physically meaningful slope. This is the mechanism behind the
+    ``spam_protocol='robust'`` estimators in ``characterize/spam.py`` (see
+    CLAUDE.md's SPAM-pipeline section).
+
     Parameters
     ----------
     obs_by_M : dict[int, array_like]   mapping M -> observable vector (over c_times)
@@ -117,6 +220,12 @@ def truncation_bias_estimate(spec_fn, T, truncate, wmax_factor=8.0, args=()):
     The comb reconstructs S at omega_k = 2*pi*k/T, k=1..truncate; weight above
     omega_kmax = 2*pi*truncate/T is unsampled and biases the overlap integrals.
     Returns (weight_above / weight_total) using the analytic spectrum spec_fn.
+
+    This is a diagnostic-only sanity check, not part of the reconstruction itself:
+    ``characterize/reconstruct.py`` calls it (only when its ``diagnostics`` flag is
+    on) to print how much of the true spectrum's weight the harmonic comb never
+    samples at all -- a large fraction is a warning that ``truncate`` (the number
+    of harmonics kept) or ``T`` should be revisited for a given noise spectrum.
     """
     w_cut = 2 * np.pi * truncate / T
     w = np.linspace(0, wmax_factor * w_cut, 200001)
@@ -130,10 +239,21 @@ def ff(y, t, w):
     """
     Calculate the filter function (Fourier transform of the toggle function).
 
+    Physics background: a dynamical-decoupling/QNS pulse sequence can be encoded
+    as a "toggling function" y(t) that is +1 or -1 depending on which side of the
+    accumulated pulses the qubit's phase currently sits on (built by
+    ``model.trajectories.make_y``). The measured decoherence/correlation signal is
+    a linear (here exact, since the noise is Gaussian) functional of the true
+    noise spectrum S(w), weighted by |ff(y, t, w)|^2 -- this is the "filter
+    function" of the QNS/dynamical-decoupling literature. Every ``U`` matrix built
+    below is just this ``ff`` evaluated at the harmonic frequencies for a specific
+    pulse sequence, so this one function is the shared building block of every
+    kernel matrix in this module.
+
     Parameters
     ----------
     y : array_like
-        Toggle function values.
+        Toggle function values (+-1 valued; from ``make_y``).
     t : array_like
         Time vector.
     w : float
@@ -145,6 +265,14 @@ def ff(y, t, w):
         Filter function value at frequency `w`.
     """
     return np.trapezoid(np.exp(1j*w*t)*y, t)
+
+# The four f1_* helpers below are single-qubit filter-function shortcuts (they
+# call ff()/make_y() internally so callers don't have to build the time grid and
+# toggle function themselves). Only f1_fid is currently exercised by anything in
+# the repo (tests/test_spectral_inversion.py); f1_cpmg/f1_cdd1/f1_cdd3 have no
+# in-repo callers today but are kept as ready-made single-qubit reference filter
+# functions for future diagnostics (analogous to the ones systematics.py builds
+# for the two-qubit combinations actually used in reconstruction).
 
 def f1_cpmg(ct, T, w):
     """
@@ -171,6 +299,12 @@ def f1_cpmg(ct, T, w):
 def f1_fid(T, w):
     """
     Calculate the single-qubit FID filter function value.
+
+    FID ("free induction decay") means no decoupling pulses at all, so the toggle
+    function is identically +1 and this reduces to a plain Fourier transform of a
+    constant -- the simplest possible filter function, used as a baseline/sanity
+    check for the others (see the ``w=0`` test in ``tests/test_spectral_inversion.py``,
+    where it should equal exactly ``T``).
 
     Parameters
     ----------
@@ -227,6 +361,10 @@ def f1_cdd3(ct, T, w):
     complex
         Filter function value.
     """
+    # CDD3's toggling function is perfectly balanced (equal total time on each
+    # side of the phase flip) by construction, so its DC (w=0) filter-function
+    # value is exactly zero; short-circuiting here avoids doing a full numerical
+    # integration just to recover that known-exact answer.
     if w == 0:
         return 0
     y = make_y(np.linspace(0, T, 10**5), ['CDD3', 'CDD3'], ctime=ct, m=1)
@@ -237,6 +375,15 @@ def propagate_linear_error(A_inv, obs_err):
     """
     Propagates independent observation errors through linear system S = A_inv @ C.
     Sigma_S_i = sqrt( sum_j |A_inv_ij|^2 * Sigma_C_j^2 )
+
+    Plain-language version: this is the standard "propagation of errors" formula
+    for a linear transformation (here, the spectrum-from-coefficients inversion
+    ``S = A_inv @ C``) of independent, Gaussian-distributed measurement errors --
+    each output error bar is a quadrature sum (root of sum of squares) of the input
+    error bars, weighted by how much the inversion matrix amplifies each one. It
+    assumes the C_j errors are independent of each other; every ``recon_S_*``
+    function below calls this once per real/imaginary channel with ``A_inv`` set
+    to the ``J`` returned by ``solve_inverse``.
 
     Args:
         A_inv: (N, N) inverse matrix.
@@ -257,6 +404,18 @@ def propagate_linear_error(A_inv, obs_err):
 def recon_S_11(coefs, **kwargs):
     """
     Reconstruct the self-spectrum S_11 at harmonic frequencies.
+
+    Physics of the combination (general pattern -- see below for how the other
+    five ``recon_S_*`` functions in this file reuse it): ``C_12_0_MT_1`` and
+    ``C_12_0_MT_2`` are the same two-qubit Pauli-correlator combination
+    (``model.observables.c_12_0_mt_i``, computed by ``characterize/experiments.py``)
+    measured under two pulse sequences that are IDENTICAL on qubit 2 (CPMG both
+    times) and differ only on qubit 1 (CPMG vs. CDD3). Because qubit 2's
+    contribution is the same in both measurements, it cancels in the difference
+    ``C_12_0_MT_1 - C_12_0_MT_2``, leaving a quantity that depends only on qubit
+    1's noise spectrum S_11 -- the harmonic-comb analogue of how the DC estimator
+    ``recon_S_11_dc`` isolates S_11 via a decoupled partner qubit. The linear
+    system solved here is exactly that difference expressed as ``U @ S_11 = C``.
 
     Parameters
     ----------
@@ -283,9 +442,24 @@ def recon_S_11(coefs, **kwargs):
     T = kwargs['T']
     C_12_0_MT_1 = coefs[0]
     C_12_0_MT_2 = coefs[1]
+    # wk: the harmonic comb omega_k = 2*pi*k/T, k=1..len(c_times) -- one frequency
+    # sample per control time, the same comb the module docstring describes.
     wk = np.array([2*np.pi*(n+1)/T for n in range(np.size(c_times))])
+    # tb: a fine, purely-numerical time grid used only to evaluate the Fourier
+    # overlap integral (ff()) accurately -- NOT the experiment's physical control
+    # time (that's c_times/ctime, passed into make_y below).
     tb = np.linspace(0, T, 10**4)
+    # y_arr: one toggle-function matrix per control time. Passing pulse=['CPMG',
+    # 'CDD3'] is a shorthand to get BOTH single-qubit filter functions (CPMG in
+    # channel [0,0], CDD3 in channel [1,1]) out of one make_y() call -- these
+    # functions only depend on the pulse *type*, not on which physical qubit they
+    # are eventually assigned to, so the same y_arr is reused as "qubit 1 under
+    # CPMG vs. CDD3" below.
     y_arr = [make_y(tb, ['CPMG', 'CDD3'], ctime=c_times[i], m=1) for i in range(np.size(c_times))]
+    # U: the kernel/measurement matrix (see solve_inverse's docstring) such that
+    # U @ S_11 equals the noiseless version of C_12_0_MT_1 - C_12_0_MT_2 -- built
+    # here as the difference of squared filter-function magnitudes (CPMG minus
+    # CDD3) at each harmonic.
     U = np.zeros((np.size(c_times), np.size(c_times)), dtype=np.complex128)
     for i in range(np.size(c_times)):
         for j in range(np.size(c_times)):
@@ -308,6 +482,12 @@ def recon_S_11(coefs, **kwargs):
 def recon_S_22(coefs, **kwargs):
     """
     Reconstruct the self-spectrum S_22 at harmonic frequencies.
+
+    Mirror image of ``recon_S_11`` above: ``C_12_0_MT_1`` and ``C_12_0_MT_3`` are
+    identical on qubit 1 (CPMG both times) and differ only on qubit 2 (CPMG vs.
+    CDD3), so qubit 1's contribution cancels in the difference and what remains
+    depends only on S_22. See ``recon_S_11`` for the full explanation of the
+    ``wk``/``tb``/``y_arr``/``U`` variables reused identically here.
 
     Parameters
     ----------
@@ -359,6 +539,18 @@ def recon_S_1_2(coefs, **kwargs):
     """
     Reconstruct the cross-spectrum S_1_2 at harmonic frequencies.
 
+    Unlike the self-spectra above, a cross-spectrum measures CORRELATION between
+    qubit 1's and qubit 2's noise, so its kernel is built from the PRODUCT of the
+    two qubits' filter functions (``ff(qubit1) * ff(qubit2)``) rather than a
+    difference of squared magnitudes. The real and imaginary parts of a complex
+    cross-spectrum need different pulse combinations to isolate cleanly: the real
+    part comes from the symmetric CPMG-CPMG combination (``U_1``, ``C_12_12_MT_1``);
+    the imaginary part needs one qubit's sequence to be antisymmetric under time-
+    reversal (CDD3 on qubit 1, ``U_2``/``C_12_12_MT_2``) since a purely real kernel
+    cannot pick up an imaginary spectral component. (This Im channel is the one
+    with the largest forward-model/comb-truncation bias of the six spectra --
+    ``characterize/systematics.py`` quantifies and corrects it.)
+
     Parameters
     ----------
     coefs : list of array_like
@@ -377,7 +569,7 @@ def recon_S_1_2(coefs, **kwargs):
     -------
     np.ndarray or (np.ndarray, np.ndarray)
         Reconstructed complex S_1_2 spectral values at harmonics.
-        If obs_err is provided, returns (S_1_2_k, S_1_2_err). 
+        If obs_err is provided, returns (S_1_2_k, S_1_2_err).
         S_1_2_err is complex, with real part being error of real part of spectrum.
     """
     c_times = kwargs['c_times']
@@ -386,6 +578,10 @@ def recon_S_1_2(coefs, **kwargs):
     C_12_12_MT_1 = coefs[0]
     C_12_12_MT_2 = coefs[1]
     tb = np.linspace(0, T, 10**5)
+    # y1_arr/y2_arr: toggle-function matrices for the Re-channel (CPMG-CPMG) and
+    # Im-channel (CDD3-CPMG) experiments respectively -- here BOTH diagonal
+    # entries ([0,0] for qubit 1, [1,1] for qubit 2) are used, since the kernel
+    # needs the product of the two qubits' actual filter functions.
     y1_arr = np.array([make_y(tb, ['CPMG', 'CPMG'], ctime=c_times[i], m=1) for i in range(np.size(c_times))])
     y2_arr = np.array([make_y(tb, ['CDD3', 'CPMG'], ctime=c_times[i], m=1) for i in range(np.size(c_times))])
     wk = np.array([2*np.pi*(n+1)/T for n in range(np.size(c_times))])
@@ -415,6 +611,20 @@ def recon_S_1_2(coefs, **kwargs):
 def recon_S_12_12(coefs, **kwargs):
     """
     Reconstruct the Ising self-spectrum S_1212 at harmonic frequencies.
+
+    S_1212 is the PSD of the two-qubit (ZZ/Ising) coupling channel, ``y[2,2] =
+    y[0,0]*y[1,1]`` in ``make_y``'s convention -- it does not correspond to
+    either physical qubit alone. It cannot be read off a single measurement
+    because the Ising phase cancels out of the two-qubit joint coefficient
+    (``C_12_0``); instead it is recovered from the single-qubit FID-type
+    coefficients ``C_1_0_MT_1``/``C_2_0_MT_1`` (which each retain a mix of a
+    single-qubit self-term and the Ising term) minus the joint coefficient
+    ``C_12_0_MT_4`` (which retains only the two single-qubit self-terms):
+    the single-qubit self-terms cancel in the combination
+    ``C_1_0_MT_1 + C_2_0_MT_1 - C_12_0_MT_4``, leaving only S_1212. This is the
+    harmonic-comb counterpart of the DC combination documented in detail in
+    ``recon_S_1212_dc`` below (same algebraic structure, different pulse family
+    and frequency).
 
     Parameters
     ----------
@@ -466,6 +676,14 @@ def recon_S_12_12(coefs, **kwargs):
 def recon_S_1_12(coefs, **kwargs):
     """
     Reconstruct the cross-spectrum S_1_12 at harmonic frequencies.
+
+    S_1_12 is the correlation between qubit 1's individual noise and the Ising
+    (12) channel, so -- like ``recon_S_1_2`` above -- its kernel is a PRODUCT of
+    filter functions, but here between qubit 1's channel (``y[0,0]``) and the
+    Ising channel (``y[2,2] = y[0,0]*y[1,1]``, see ``make_y``) instead of between
+    the two individual qubits. As in ``recon_S_1_2``, the real part (``U1``) uses
+    a symmetric pulse combo (CPMG/FID) and the imaginary part (``U2``) needs an
+    antisymmetric one (CPMG/CDD3) to be sensitive to Im(S_1_12) at all.
 
     Parameters
     ----------
@@ -523,6 +741,11 @@ def recon_S_2_12(coefs, **kwargs):
     """
     Reconstruct the cross-spectrum S_2_12 at harmonic frequencies.
 
+    Mirror image of ``recon_S_1_12`` above, swapping the roles of qubit 1 and
+    qubit 2: correlation between qubit 2's individual noise and the Ising
+    channel, with the same symmetric/antisymmetric pulse-combo logic for the
+    real/imaginary parts.
+
     Parameters
     ----------
     coefs : list of array_like
@@ -577,6 +800,14 @@ def recon_S_2_12(coefs, **kwargs):
 
 
 # --- DC reconstruction functions from FID experiments ---
+#
+# Notation used throughout this section: Phi_1, Phi_2, Phi_12 are the random
+# accumulated dephasing PHASES of qubit 1, qubit 2, and the Ising (ZZ) channel
+# respectively, picked up during a free-induction-decay (FID, i.e. no pulses)
+# experiment of duration t. Their variances/covariances (Var Phi_1 = <Phi_1^2>,
+# etc.) grow linearly in t with slope equal to the corresponding zero-frequency
+# spectral density -- e.g. Var Phi_1(t) -> S_11(0) * t -- which is the physical
+# fact every ``recon_S_*_dc`` function below exploits via ``_ramsey_fit_dc``.
 
 def _ramsey_fit_dc(C, t, factor, obs_err=None, c_max=3.0, c_min=0.05, curv_tol=0.30,
                    selfspec=True):
@@ -588,7 +819,15 @@ def _ramsey_fit_dc(C, t, factor, obs_err=None, c_max=3.0, c_min=0.05, curv_tol=0
 
         C(t)  ->  a + (S(0)/factor) * t ,   factor = 2 (self, C=Var/2), 1 (cross, C=Cov),
 
-    so ``S(0) = factor * slope``. The legacy single-point estimator ``2<C(MT)>/(MT)``
+    so ``S(0) = factor * slope``. ("Motional narrowing" is standard NMR/dephasing-
+    noise language for the short/intermediate-time behavior where the qubit has
+    not yet sampled enough of the noise spectrum for its full lineshape to
+    matter, so the decay looks like this plain S(0)-only, linear-in-t process.
+    "Quasi-static" noise, referenced further down, is the opposite limit --
+    noise so slow that the qubit barely dephases within the experiment, so
+    ``C(t)`` grows quadratically at first ["curvature"] instead of linearly,
+    and the S(0)-from-slope trick below is not yet reliable within the measured
+    time window.) The legacy single-point estimator ``2<C(MT)>/(MT)``
     fails for strong noise because the coherence at the full record MT is fully decayed
     (C >> 1, below the shot-noise floor). Here the slope is fit over the window where
     ``C(t)`` is both MEASURABLE and LINEAR, selected ADAPTIVELY -- so the effective
@@ -751,8 +990,13 @@ def recon_S_1212_dc_echo(coefs, **kwargs):
     filter), so -- unlike recon_S_1212_dc's FID/FID combination, which extracts
     Var Phi_12 as a ~25x-smaller difference of single-qubit variances -- the
     subtraction terms are echo-small and the estimator is not statistically
-    swamped. The residual mixed-filter (CDD1xCPMG) pickup of S_1212 is a
-    deterministic systematic mirrored/corrected by the DC forward model.
+    swamped. (In plain terms: because the two experiments being subtracted share
+    an *identical* qubit-1 dephasing contribution, that large, noisy quantity
+    cancels exactly rather than being subtracted approximately -- so the
+    remaining signal is not a small difference of two large, independently-noisy
+    numbers, and the statistical error stays small.) The residual mixed-filter
+    (CDD1xCPMG) pickup of S_1212 is a deterministic systematic mirrored/corrected
+    by the DC forward model.
 
     coefs : [C_1_0_CDD1CDD1, C_1_0_CDD1CPMG] over the time sweep.
     kwargs : t_sweep, obs_err (optional).  Returns (S0, S0_err, reliable).
