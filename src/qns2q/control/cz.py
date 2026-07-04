@@ -87,6 +87,7 @@ Date: [01/18/2026]
 """
 
 import functools
+import hashlib
 import itertools
 import os
 import traceback
@@ -156,6 +157,28 @@ SLSQP_MAXITER = 300
 # verbatim (bit-identical), so this is a pure speed-up. Cleared at the start of
 # run_optimization to keep it bounded.
 _OVERLAP_SETUP_CACHE = {}
+
+
+def _array_fingerprint(arr):
+    """Content hash of an array for cache keying.
+
+    Keyed on VALUES, not object identity: two arrays holding the same bytes
+    share a key and two different arrays never collide.  ``id()`` cannot be
+    used here -- CPython recycles the id of a garbage-collected array, so a
+    caller that builds transient spectra in a loop (e.g. a gate-time sweep
+    that reconstructs ``SMat`` each iteration) can be handed a stale cached
+    result under a recycled id.  The hash is over the raw buffer plus dtype
+    and shape (a reshaped or re-typed view of the same bytes must not alias),
+    computed on a contiguous host copy so JAX arrays and NumPy arrays with the
+    same contents agree.  Cost is one ~5 MB BLAKE2b per distinct spectrum --
+    negligible against the padded FFT + vmapped fold it guards, which run only
+    a handful of times per pipeline (once per gate time / repeat count)."""
+    a = np.ascontiguousarray(np.asarray(arr))
+    h = hashlib.blake2b(digest_size=16)
+    h.update(str(a.dtype).encode())
+    h.update(str(a.shape).encode())
+    h.update(a.tobytes())
+    return h.hexdigest()
 
 
 # ==============================================================================
@@ -965,15 +988,15 @@ def prepare_time_domain_overlap(SMat, w_grid, tau, T_seq, M):
     n_base_steps : int
         Number of time steps spanning one base sequence period T_seq.
     """
-    # The cache key uses Python's id() (object identity, i.e. "is this the
-    # very same array object", not "does it hold the same values") for SMat
-    # and w_grid rather than comparing their contents. That's intentional
-    # and safe here: within one CZOptConfig, config.SMat/config.w are built
-    # once and never mutated, so re-using them always means re-using the
-    # exact same object -- but it does mean two DIFFERENT arrays that
-    # happen to hold identical values would (correctly, if wastefully) miss
-    # the cache and get recomputed rather than being treated as equal.
-    cache_key = (id(SMat), id(w_grid), float(tau), float(T_seq), int(M))
+    # The cache key hashes the CONTENTS of SMat and w_grid (see
+    # _array_fingerprint), not their id(). Within one CZOptConfig
+    # config.SMat/config.w are built once and never mutated, so the hot path
+    # still hits the cache; but keying on id() was unsafe for any caller that
+    # rebuilds spectra in a loop -- CPython recycles the id of a
+    # garbage-collected array, so a transient SMat could land on the id of a
+    # previous one and be handed that entry's stale folded matrix.
+    cache_key = (_array_fingerprint(SMat), _array_fingerprint(w_grid),
+                 float(tau), float(T_seq), int(M))
     cached = _OVERLAP_SETUP_CACHE.get(cache_key)
     if cached is not None:
         return cached

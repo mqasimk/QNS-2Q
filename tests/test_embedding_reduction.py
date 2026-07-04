@@ -241,7 +241,22 @@ def test_single_element_defect_is_polarization():
 
 
 def test_featured_model_overlaps_satisfy_identities():
-    """Identities at the real featured-model pair overlaps (live from qns2q)."""
+    """Identities at the real featured-model pair overlaps (live from qns2q).
+
+    The pair overlaps are built from the *stored* featured ground-truth spectra
+    (``DraftRun_NoSPAM_featured/simulated_spectra.npz``, ``model_version``
+    ``anchored-tarucha-20260610``), NOT from ``cfg.SMat_ideal``.  ``SMat_ideal``
+    is rebuilt from ``qns2q.noise.spectra``, whose regime is bound once at import
+    from ``QNS2Q_REGIME`` -- so under a ``showcase`` suite it silently benchmarks
+    the featured .npz against the showcase model (loud ``[idle] WARNING`` at load),
+    whose near-absent pair-spectator cross drops the ``_single_element_defect``
+    precondition below 1e-3 and reddens this drift-check for a reason unrelated to
+    App. E.5.  Feeding the .npz's own spectra makes the overlaps -- and therefore
+    every assertion -- regime-independent (identical under bland/featured/showcase)
+    and actually tests the featured overlaps this check is named for.  The stored
+    ``wk`` grid is two-sided ([-w_max, w_max]); ``prepare_time_domain_overlap``
+    expects a one-sided [0, w_max] grid it mirrors internally, so take the w>=0
+    half."""
     pytest.importorskip("jax")
     import jax
     jax.config.update("jax_enable_x64", True)
@@ -250,7 +265,22 @@ def test_featured_model_overlaps_satisfy_identities():
         from qns2q.control.idle import (Config, prepare_time_domain_overlap,
                                         evaluate_overlap_folded)
         cfg = Config(fname="DraftRun_NoSPAM_featured", use_simulated=True, M=1)
-        RMat, dt, n_base = prepare_time_domain_overlap(cfg.SMat_ideal, cfg.w_ideal,
+        sp = cfg.specs                       # the loaded simulated_spectra.npz
+        wk = np.asarray(sp["wk"])
+        pos = wk >= 0                        # one-sided half, ascending from 0
+        wk1 = jnp.asarray(wk[pos])
+
+        def _col(key):
+            return jnp.asarray(np.asarray(sp[key])[pos])
+
+        SMat = jnp.zeros((4, 4, int(pos.sum())), dtype=jnp.complex128)
+        SMat = SMat.at[1, 1].set(_col("S11"))
+        SMat = SMat.at[2, 2].set(_col("S22"))
+        SMat = SMat.at[3, 3].set(_col("S1212"))
+        for r, c, key in ((1, 2, "S12"), (1, 3, "S112"), (2, 3, "S212")):
+            SMat = SMat.at[r, c].set(_col(key))
+            SMat = SMat.at[c, r].set(jnp.conj(_col(key)))
+        RMat, dt, n_base = prepare_time_domain_overlap(SMat, wk1,
                                                        cfg.tau, 320.0, 1)
     except Exception as exc:                                    # noqa: BLE001
         pytest.skip(f"featured-model data unavailable: {type(exc).__name__}: {exc}")

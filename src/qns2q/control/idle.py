@@ -67,6 +67,7 @@ Date: [01/18/2026]
 """
 
 import functools
+import hashlib
 import itertools
 import os
 import traceback
@@ -124,6 +125,28 @@ SLSQP_MAXITER = 300
 # returned verbatim (bit-identical), so this is a pure speed-up. Cleared at the
 # start of each run_optimization_pipeline call (per M) to keep it bounded.
 _OVERLAP_SETUP_CACHE = {}
+
+
+def _array_fingerprint(arr):
+    """Content hash of an array for cache keying.
+
+    Keyed on VALUES, not object identity: two arrays holding the same bytes
+    share a key and two different arrays never collide.  ``id()`` cannot be
+    used here -- CPython recycles the id of a garbage-collected array, so a
+    caller that builds transient spectra in a loop (e.g. a gate-time sweep
+    that reconstructs ``SMat`` each iteration) can be handed a stale cached
+    result under a recycled id.  The hash is over the raw buffer plus dtype
+    and shape (a reshaped or re-typed view of the same bytes must not alias),
+    computed on a contiguous host copy so JAX arrays and NumPy arrays with the
+    same contents agree.  Cost is one ~5 MB BLAKE2b per distinct spectrum --
+    negligible against the padded FFT + vmapped fold it guards, which run only
+    a handful of times per pipeline (once per gate time / repeat count)."""
+    a = np.ascontiguousarray(np.asarray(arr))
+    h = hashlib.blake2b(digest_size=16)
+    h.update(str(a.dtype).encode())
+    h.update(str(a.shape).encode())
+    h.update(a.tobytes())
+    return h.hexdigest()
 
 # ==============================================================================
 # Configuration
@@ -1097,7 +1120,12 @@ def prepare_time_domain_overlap(SMat, w_grid, tau, T_seq, M):
     n_base_steps : int
         Number of time steps spanning one base sequence period T_seq.
     """
-    cache_key = (id(SMat), id(w_grid), float(tau), float(T_seq), int(M))
+    # Key on array CONTENTS, not id(): id() is recycled for garbage-collected
+    # arrays, so a caller building transient spectra in a loop can collide with
+    # a stale entry (see _array_fingerprint). config.SMat/config.w are stable
+    # within a pipeline, so this still hits the cache on the hot path.
+    cache_key = (_array_fingerprint(SMat), _array_fingerprint(w_grid),
+                 float(tau), float(T_seq), int(M))
     cached = _OVERLAP_SETUP_CACHE.get(cache_key)
     if cached is not None:
         return cached
