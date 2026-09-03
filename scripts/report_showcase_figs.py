@@ -229,7 +229,7 @@ def fig_model_spectra():
     for ax in axs[1]:
         ax.set_xlabel(r"$\omega\tau$")
     for ax in axs[:, 0]:
-        ax.set_ylabel(r"$S(\omega)\,/\,\tau\quad[\mathrm{dimensionless}]$")
+        ax.set_ylabel(r"$S(\omega)\,/\,\tau$")
     handles, labels = [], []
     for ax in (axs[0, 0], axs[0, 2], axs[1, 0]):
         h, l = ax.get_legend_handles_labels()
