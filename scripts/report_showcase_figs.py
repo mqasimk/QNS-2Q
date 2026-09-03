@@ -66,23 +66,87 @@ matplotlib.use('Agg')  # non-interactive backend: render straight to PDF, no dis
 import matplotlib.pyplot as plt
 import numpy as np
 
-from qns2q.characterize.reconstruct import setup_pub_rcparams, THESIS_SCALE
+from qns2q.characterize.reconstruct import setup_pub_rcparams
 
 # --- output target -------------------------------------------------------
 # QNS2Q_FIG_TARGET=thesis pre-scales type and line weights so the figures stay
-# legible after the thesis downscales them to \linewidth (see THESIS_SCALE and
-# setup_pub_rcparams' 'thesis' preset). Default 'paper' leaves the manuscript
-# figures in main_v10.tex exactly as they were.
+# legible after the thesis downscales them to \linewidth (see THESIS_FIG_SCALE
+# below and setup_pub_rcparams' 'thesis' preset). Default 'paper' leaves the
+# manuscript figures in main_v10.tex exactly as they were.
 FIG_TARGET = os.environ.get("QNS2Q_FIG_TARGET", "paper").lower()
 if FIG_TARGET not in ("paper", "thesis"):
     sys.exit(f"QNS2Q_FIG_TARGET must be 'paper' or 'thesis', got {FIG_TARGET!r}")
-FIG_SCALE = THESIS_SCALE if FIG_TARGET == "thesis" else 1.0
 RC_PRESET = "thesis" if FIG_TARGET == "thesis" else "compact"
+
+# Per-figure thesis multipliers. The right value is 1 / (page scale), where the
+# page scale is (\linewidth fraction * 6.00 in) / (figure's rendered width).
+# Two things make this per-figure rather than one global constant:
+#
+#   * the figures are not all the same width -- fig_storage is a single small
+#     panel, fig_model_spectra is the widest of the set;
+#   * `bbox_inches='tight'` means the rendered width is not the authored
+#     `figsize` either, because artists that overhang the canvas (a legend
+#     above the panels, long tick labels) widen the saved bounding box.
+#
+# The single global 1/0.632 used before the 2026-09-03 consistency pass assumed
+# every figure was 9.5 in included at \linewidth. That held for capture/gates/
+# design and failed for the rest: Fig. 5.7 rendered its axis labels at 14.3 pt
+# against 12 pt body text, and Fig. C.1's legend fell to 4.8 pt.
+#
+# These are measured from the rendered PDFs, so they are fixed points: changing
+# the type size changes the tight bbox, which changes the width, which changes
+# the right multiplier. After any layout change, re-measure with
+#   pdfinfo <fig>.pdf | grep 'Page size'
+# and recompute 1 / (frac * 433.62 / width_pt), then re-run.
+THESIS_FIG_SCALE = {
+    "fig_recon_capture":      1.55,  # 671 pt at 1.0\linewidth   (Fig. 5.3)
+    "fig_gates":              1.55,  # 671 pt at 1.0\linewidth   (Fig. 5.4)
+    "fig_design_experiments": 1.54,  # 670 pt at 1.0\linewidth   (Fig. 5.6)
+    "fig_storage":            1.10,  # 381 pt at 0.8\linewidth   (Fig. 5.7)
+    "fig_model_spectra":      1.55,  # 672 pt at 1.0\linewidth   (Fig. C.1)
+    "fig_spam_comparison":    1.55,  # 672 pt at 1.0\linewidth   (Fig. C.2)
+}
+
+FIG_SCALE = 1.0  # rebound per figure by use_scale() below
+
+
+def use_scale(name):
+    """Set the type scale for the figure about to be drawn.
+
+    Mirrors the same-named helper in the thesis repo's Chapter 4 generator
+    (``Figures/Chapter 4/src/make_figures.py``) so both figure pipelines are
+    retuned the same way: edit the table, not the individual ``fontsize=``
+    calls. Under the 'paper' target this is a no-op beyond the usual rcParams.
+    """
+    global FIG_SCALE
+    if FIG_TARGET != "thesis":
+        FIG_SCALE = 1.0
+        setup_pub_rcparams(RC_PRESET)
+        return
+    FIG_SCALE = THESIS_FIG_SCALE[name]
+    setup_pub_rcparams(RC_PRESET, thesis_scale=FIG_SCALE)
 
 
 def fs(size):
     """Scale an explicit ``fontsize=`` for the active output target."""
     return size * FIG_SCALE
+
+
+def legend_ncol(paper_ncol, thesis_ncol=2):
+    """Legend column count for the active target.
+
+    A `fig.legend` placed above the axes is not clipped to the canvas: with
+    enough columns it overhangs, and `bbox_inches='tight'` then saves a PDF
+    *wider* than its `figsize`. That couples the saved width to the type size,
+    and under the thesis target it does so faster than the text block grows --
+    so enlarging the type widens the figure, the page downscales it further,
+    and the rendered size does not move. Figs. C.1 and C.2 were stuck that way.
+    Keeping the thesis legend to 2 columns (as fig_recon_capture already does)
+    keeps it inside the canvas, so the saved width tracks `figsize` and the
+    THESIS_FIG_SCALE multiplier actually takes effect. The paper target keeps
+    its original wider legends: main_v10.tex is unaffected.
+    """
+    return thesis_ncol if FIG_TARGET == "thesis" else paper_ncol
 
 
 def panel_title(title):
@@ -167,6 +231,7 @@ def fig_model_spectra():
     selected at import time by QNS2Q_REGIME, asserted in __main__ below).
     Writes: fig_model_spectra.pdf.
     """
+    use_scale("fig_model_spectra")
     w = np.linspace(1e-3, np.pi / 4, 4000)   # fine grid for the smooth analytic curve
     # wk: the actual discrete frequencies (harmonics of a period-160tau comb) that
     # a QNS comb experiment samples -- overlaid as points on top of the smooth
@@ -236,8 +301,8 @@ def fig_model_spectra():
         for hi, li in zip(h, l):
             if li not in labels:
                 handles.append(hi); labels.append(li)
-    fig.legend(handles, labels, loc='lower center', ncol=3, frameon=False,
-               bbox_to_anchor=(0.5, 0.985), fontsize=fs(8.5))
+    fig.legend(handles, labels, loc='lower center', ncol=legend_ncol(3),
+               frameon=False, bbox_to_anchor=(0.5, 0.985), fontsize=fs(8.5))
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "fig_model_spectra.pdf"), bbox_inches='tight')
     plt.close(fig)
@@ -278,6 +343,7 @@ def fig_spam_comparison():
     is missing) plus the analytic truth via
     qns2q.characterize.systematics.analytic_spectra(). Writes: fig_spam_comparison.pdf.
     """
+    use_scale("fig_spam_comparison")
     from qns2q.characterize.systematics import analytic_spectra
 
     # robust included when present: its self-spectra carry the C_l,12=0 leakage
@@ -331,8 +397,8 @@ def fig_spam_comparison():
     for i in range(3):
         axs[i, 0].set_ylabel(r"$S(\omega)\,/\,\tau$")
     handles, labels = axs[0, 0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc='lower center', ncol=4, frameon=False,
-               bbox_to_anchor=(0.5, 0.99), fontsize=fs(8.5))
+    fig.legend(handles, labels, loc='lower center', ncol=legend_ncol(4),
+               frameon=False, bbox_to_anchor=(0.5, 0.99), fontsize=fs(8.5))
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "fig_spam_comparison.pdf"),
                 bbox_inches='tight')
@@ -349,6 +415,7 @@ def fig_recon_capture():
     the analytic truth via qns2q.characterize.systematics.analytic_spectra().
     Writes: fig_recon_capture.pdf.
     """
+    use_scale("fig_recon_capture")
     from qns2q.characterize.systematics import analytic_spectra
 
     d = np.load(os.path.join(RUN_GATES, "specs.npz"), allow_pickle=True)
@@ -482,6 +549,7 @@ def fig_gates():
     <RUN_GATES>/optimization_data_all_M<GATE_TAG>.npz (idle row, if present).
     Writes: fig_gates.pdf.
     """
+    use_scale("fig_gates")
     def _load_cz(tag):
         return np.load(os.path.join(RUN_GATES, "plotting_data",
                                     f"plotting_data_cz_v2{tag}.npz"),
@@ -690,6 +758,7 @@ def fig_design():
     FIGURE_PROVENANCE.md if the numbers here need to be re-derived from the
     underlying optimization runs. Writes: fig_design_experiments.pdf.
     """
+    use_scale("fig_design_experiments")
     dn = np.load(os.path.join(RUN_GATES, "design_numbers.npz"))
     fig, axs = plt.subplots(2, 2, figsize=(9.6, 6.8))
     _ladder_grouped(axs[0, 0], dn, 'cz_ladder', [320.0],
@@ -732,6 +801,7 @@ def fig_storage():
     Reads: <RUN_GATES>/storage_panel.npz, produced offline (not by this
     script) by scripts/showcase_storage_panel.py. Writes: fig_storage.pdf.
     """
+    use_scale("fig_storage")
     d = np.load(os.path.join(RUN_GATES, "storage_panel.npz"))
     tg = np.asarray(d['Tg'], dtype=float)
     fig, ax = plt.subplots(1, 1, figsize=(5.6, 3.6))
@@ -772,7 +842,8 @@ if __name__ == "__main__":
     # entire file assumes the showcase-regime spectra/run folders (see the
     # module docstring), so refuse to run under bland/featured.
     assert current_regime() == "showcase", "run with QNS2Q_REGIME=showcase"
-    setup_pub_rcparams(RC_PRESET)
+    # rcParams are set per figure by use_scale() at the top of each fig_*,
+    # since the thesis multiplier differs per figure (see THESIS_FIG_SCALE).
     # Optional CLI arg selects a single figure to (re)build (e.g.
     # `python report_showcase_figs.py gates`) instead of the full set --
     # convenient when only one panel changed and the others are slow/unneeded
