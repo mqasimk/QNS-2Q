@@ -804,15 +804,22 @@ def fig_storage():
     use_scale("fig_storage")
     d = np.load(os.path.join(RUN_GATES, "storage_panel.npz"))
     tg = np.asarray(d['Tg'], dtype=float)
-    fig, ax = plt.subplots(1, 1, figsize=(7.0, 3.55))
+    # Thesis: wider, shorter canvas with the legend above the axes, so the
+    # panel spans the full text block (see the legend call below). The paper
+    # keeps its original canvas and side legend -- main_v10.tex is frozen.
+    _thesis = FIG_TARGET == "thesis"
+    fig, ax = plt.subplots(1, 1,
+                           figsize=(7.0, 3.55) if _thesis else (5.6, 3.6))
     ax.plot(tg, d['fid_phi'], ':', color=C_RAW, marker='v', ms=4,
             label='free induction, $\\Phi^+$')
     ax.plot(tg, d['fid_psi'], '-.', color=C_RAW, marker='^', ms=4, mfc='none',
             label='free induction, $\\Psi^+$ (protected)')
     ax.plot(tg, d['sync_phi'], '-', color=C_MIT, marker='o', ms=4,
-            label='aligned pulses, $\\Phi^+$ ($y_2=+y_1$)')
+            label='aligned pulses, $\\Phi^+$'
+                  + (' ' if _thesis else '\n') + '($y_2=+y_1$)')
     ax.plot(tg, d['anti_phi'], '-', color=C_REF, marker='s', ms=4,
-            label='opposed pulses, $\\Phi^+$ ($y_2=-y_1$)')
+            label='opposed pulses, $\\Phi^+$'
+                  + (' ' if _thesis else '\n') + '($y_2=-y_1$)')
     ax.plot(tg, d['nt_phi'], '--', color=C_ROB, marker='D', ms=3.5,
             label='blind NT idle (avg.-fidelity winner)')
     ax.plot(tg, d['sync_phi_pred'], 'o', ms=7, mfc='none', color=C_MIT,
@@ -824,14 +831,19 @@ def fig_storage():
     ax.set_xlabel(r"storage time $T_G/\tau$")
     ax.set_ylabel(r"Bell-pair infidelity $1-F$")
     ax.grid(True, alpha=0.25)
-    # Legend above the axes, not beside them. Anchored to the right it took
-    # roughly half the canvas, so the panel it was labelling was the smaller
-    # half of the figure and the curves were unreadable at page size. On top,
-    # the panel gets the full width. Matches the other showcase figures.
-    ax.legend(frameon=False, fontsize=fs(7), loc='lower center',
-              bbox_to_anchor=(0.5, 1.01), ncol=legend_ncol(2),
-              handlelength=1.8, labelspacing=0.4, columnspacing=1.6,
-              borderaxespad=0.0)
+    # Thesis: legend above the axes. Anchored to the right (as the paper still
+    # has it) it took roughly half the canvas, so the panel it was labelling
+    # was the smaller half of the figure and seven series were crammed into a
+    # plot box narrower than its own legend. On top, the panel gets the full
+    # width -- the same arrangement as the other showcase figures.
+    if _thesis:
+        ax.legend(frameon=False, fontsize=fs(7), loc='lower center',
+                  bbox_to_anchor=(0.5, 1.01), ncol=2, handlelength=1.8,
+                  labelspacing=0.4, columnspacing=1.6, borderaxespad=0.0)
+    else:
+        ax.legend(frameon=False, fontsize=fs(7), loc='upper left',
+                  bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0,
+                  handlelength=1.8, labelspacing=0.6)
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "fig_storage.pdf"), bbox_inches='tight')
     plt.close(fig)
