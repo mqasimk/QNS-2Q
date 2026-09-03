@@ -219,6 +219,12 @@ def _sibling_spam_envelopes(data_folder):
     return {k: np.concatenate(v) for k, v in env.items() if v}
 
 
+# Thesis text block is \linewidth = 433.62 pt = 6.00 in; the showcase figures are
+# authored 9.5 in wide, so LaTeX scales them by 6.00/9.5 = 0.632 on the page.
+# Pre-multiplying type and line weights by the inverse restores the nominal sizes.
+THESIS_SCALE = 1 / 0.632
+
+
 def setup_pub_rcparams(font_scale='compact'):
     """Configure matplotlib rcParams for publication-quality figures.
 
@@ -234,13 +240,27 @@ def setup_pub_rcparams(font_scale='compact'):
     ----------
     font_scale : str
         'large' for standalone single-panel figures,
-        'compact' for multi-panel combined figures (APS style).
+        'compact' for multi-panel combined figures (APS style),
+        'thesis' for figures destined for the thesis text block.
+
+    The 'thesis' preset is 'compact' with every type size and line weight
+    multiplied by THESIS_SCALE. The showcase figures are authored on a 9.5 in
+    canvas but included in the thesis at ``\linewidth`` = 6.00 in, so the PDF is
+    downscaled by 0.632 on the page and 'compact' 8 pt tick labels land at about
+    5 pt against 11 pt body text -- the illegibility raised in Sekhar
+    Ramanathan's 2026-09-03 post-defense review. Pre-multiplying by the inverse
+    of that scale factor makes the rendered sizes come out at their nominal
+    values (ticks ~8 pt, labels ~10 pt) without disturbing any panel geometry.
     """
     sizes = {
         'large': {"font.size": 18, "axes.labelsize": 16, "axes.titlesize": 16,
                   "legend.fontsize": 16, "xtick.labelsize": 16, "ytick.labelsize": 16},
         'compact': {"font.size": 10, "axes.labelsize": 10, "axes.titlesize": 10,
                     "legend.fontsize": 8, "xtick.labelsize": 8, "ytick.labelsize": 8},
+        'thesis': {k: v * THESIS_SCALE for k, v in
+                   {"font.size": 10, "axes.labelsize": 10, "axes.titlesize": 10,
+                    "legend.fontsize": 8, "xtick.labelsize": 8,
+                    "ytick.labelsize": 8}.items()},
     }
     base = {
         "text.usetex": True,
@@ -258,6 +278,12 @@ def setup_pub_rcparams(font_scale='compact'):
         "grid.color": "grey",
     }
     base.update(sizes[font_scale])
+    if font_scale == 'thesis':
+        # Line weights have to grow with the type, or the strokes thin out to
+        # hairlines once the page scales the figure down.
+        for k in ("lines.linewidth", "lines.markersize", "axes.linewidth",
+                  "grid.linewidth"):
+            base[k] = base[k] * THESIS_SCALE
     plt.rcParams.update(base)
 
 

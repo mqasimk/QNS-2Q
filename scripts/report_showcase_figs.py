@@ -66,7 +66,40 @@ matplotlib.use('Agg')  # non-interactive backend: render straight to PDF, no dis
 import matplotlib.pyplot as plt
 import numpy as np
 
-from qns2q.characterize.reconstruct import setup_pub_rcparams
+from qns2q.characterize.reconstruct import setup_pub_rcparams, THESIS_SCALE
+
+# --- output target -------------------------------------------------------
+# QNS2Q_FIG_TARGET=thesis pre-scales type and line weights so the figures stay
+# legible after the thesis downscales them to \linewidth (see THESIS_SCALE and
+# setup_pub_rcparams' 'thesis' preset). Default 'paper' leaves the manuscript
+# figures in main_v10.tex exactly as they were.
+FIG_TARGET = os.environ.get("QNS2Q_FIG_TARGET", "paper").lower()
+if FIG_TARGET not in ("paper", "thesis"):
+    sys.exit(f"QNS2Q_FIG_TARGET must be 'paper' or 'thesis', got {FIG_TARGET!r}")
+FIG_SCALE = THESIS_SCALE if FIG_TARGET == "thesis" else 1.0
+RC_PRESET = "thesis" if FIG_TARGET == "thesis" else "compact"
+
+
+def fs(size):
+    """Scale an explicit ``fontsize=`` for the active output target."""
+    return size * FIG_SCALE
+
+
+def panel_title(title):
+    """Reduce a descriptive panel heading to its bare ``(a)``/``(b)``/... label.
+
+    From Sekhar Ramanathan's 2026-09-03 review: a panel carries the label and
+    the caption carries the description. These figures had both, so the caption
+    was effectively repeated inside the artwork at ~6 pt. The thesis captions
+    already describe every panel, so for the thesis target only the label is
+    drawn; the paper keeps the descriptive titles.
+    """
+    if FIG_TARGET != "thesis":
+        return title
+    label, sep, _ = title.partition(") ")
+    return label + ")" if sep else title
+
+
 from qns2q.noise.spectra import (S_11, S_22, S_1212, S_1_2, S_1_12, S_2_12,
                                  line_priors_per_channel)
 from qns2q.paths import current_regime, project_root
@@ -172,7 +205,7 @@ def fig_model_spectra():
             ax.plot(wk, np.imag(yk), 'o', ms=3.0, mfc='none', color=C_ROB)
             ax.plot([0.0], [np.real(ydc)], 'D', ms=4.5, mfc='none', color=C_MIT)
             ax.set_yscale('symlog', linthresh=1e-9, linscale=0.5)
-        ax.set_title(title, fontsize=9)
+        ax.set_title(title, fontsize=fs(9))
         ax.grid(True, alpha=0.25)
     # trap-line markers: defect-harmonic family on the qubit-local channels,
     # coupler resonance on the ZZ channel ONLY
@@ -186,7 +219,7 @@ def fig_model_spectra():
     axs[0, 2].axvline(zz_c, color=C_ROB, lw=1.1, alpha=0.9,
                       label='line on the exchange channel only')
     axs[0, 2].annotate('visible only to\ntwo-qubit QNS',
-                       xy=(0.42, 0.78), xycoords='axes fraction', fontsize=8,
+                       xy=(0.42, 0.78), xycoords='axes fraction', fontsize=fs(8),
                        color=C_ROB)
     # the shared-TLF line is correlated: it sits on S11/S22 (already marked) AND
     # in Re S_1_2 -- the cross-channel peak the decoupling train passes.
@@ -204,7 +237,7 @@ def fig_model_spectra():
             if li not in labels:
                 handles.append(hi); labels.append(li)
     fig.legend(handles, labels, loc='lower center', ncol=3, frameon=False,
-               bbox_to_anchor=(0.5, 0.985), fontsize=8.5)
+               bbox_to_anchor=(0.5, 0.985), fontsize=fs(8.5))
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "fig_model_spectra.pdf"), bbox_inches='tight')
     plt.close(fig)
@@ -285,7 +318,7 @@ def fig_spam_comparison():
             ax.set_yscale('log')
         else:
             ax.set_yscale('symlog', linthresh=1e-7, linscale=0.6)
-        ax.set_title(title, fontsize=9)
+        ax.set_title(title, fontsize=fs(9))
         ax.grid(True, alpha=0.25)
 
     for j, (key, lab) in enumerate(SELF):
@@ -299,7 +332,7 @@ def fig_spam_comparison():
         axs[i, 0].set_ylabel(r"$S(\omega)\,/\,\tau$")
     handles, labels = axs[0, 0].get_legend_handles_labels()
     fig.legend(handles, labels, loc='lower center', ncol=4, frameon=False,
-               bbox_to_anchor=(0.5, 0.99), fontsize=8.5)
+               bbox_to_anchor=(0.5, 0.99), fontsize=fs(8.5))
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "fig_spam_comparison.pdf"),
                 bbox_inches='tight')
@@ -346,7 +379,7 @@ def fig_recon_capture():
             ax.set_yscale('log')
         else:
             ax.set_yscale('symlog', linthresh=1e-8, linscale=0.5)
-        ax.set_title(title, fontsize=9)
+        ax.set_title(title, fontsize=fs(9))
         ax.grid(True, alpha=0.25)
 
     for j, (key, lab) in enumerate(SELF):
@@ -360,7 +393,7 @@ def fig_recon_capture():
         axs[i, 0].set_ylabel(r"$S(\omega)\,/\,\tau$")
     handles, labels = axs[0, 0].get_legend_handles_labels()
     fig.legend(handles, labels, loc='lower center', ncol=2, frameon=False,
-               bbox_to_anchor=(0.5, 0.99), fontsize=8.5)
+               bbox_to_anchor=(0.5, 0.99), fontsize=fs(8.5))
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "fig_recon_capture.pdf"),
                 bbox_inches='tight')
@@ -493,14 +526,14 @@ def fig_gates():
         ax.plot(x, known, '-', color=C_MIT, marker='o', ms=4, label='best CDD')
         ax.plot(x, opt, '--', color=C_REF, marker='s', ms=4, label='best NT')
         ax.axvline(T2_FID, color='k', lw=0.7, ls='-', alpha=0.35)
-        ax.text(T2_FID * 1.08, 0.04, r'$T_2^*$', fontsize=8, alpha=0.6,
+        ax.text(T2_FID * 1.08, 0.04, r'$T_2^*$', fontsize=fs(8), alpha=0.6,
                 transform=ax.get_xaxis_transform())
         ax.set_xscale('log'); ax.set_yscale('log')
         ax.set_xlabel(r"$T_G/\tau$")
         ax.set_ylabel(r"$1-F_\mathrm{pro}$ (true)")
         ax.grid(True, alpha=0.25)
-        ax.set_title(title, fontsize=9.5)
-        ax.legend(frameon=False, fontsize=8)
+        ax.set_title(panel_title(title), fontsize=fs(9.5))
+        ax.legend(frameon=False, fontsize=fs(8))
 
     def margin_panel(ax, mb, title):
         mb = [m for m in mb if m is not None]
@@ -517,13 +550,13 @@ def fig_gates():
         ax.set_xlabel(r"$T_G/\tau$")
         ax.set_ylabel(r"margin: best CDD\,/\,best NT")
         ax.grid(True, alpha=0.25, which='both')
-        ax.set_title(title, fontsize=9.5)
-        ax.legend(frameon=False, fontsize=8)
+        ax.set_title(panel_title(title), fontsize=fs(9.5))
+        ax.legend(frameon=False, fontsize=fs(8))
 
     curve_panel(axs[0, 0], tg, cz_np, cz_k, cz_o,
                 "(a) entangling (CZ) gate: infidelity vs gate time")
     axs[0, 0].text(0.965, 0.04, rf'$J_{{\max}}\tau = {JMAX_TAU:g}$',
-                   transform=axs[0, 0].transAxes, fontsize=8.5,
+                   transform=axs[0, 0].transAxes, fontsize=fs(8.5),
                    ha='right', va='bottom',
                    bbox=dict(boxstyle='round,pad=0.25', fc='white', ec='0.7',
                              lw=0.5))
@@ -574,16 +607,16 @@ def _arms_bars(ax, arms, title, ylabel=r"$1-F_\mathrm{pro}$ at $T_G=320\tau$"):
     # annotate the certification error (predicted vs the SPAM-invariant truth)
     for xi, v in zip(x + 0.12, ncv):
         pct = 100.0 * (v - true_val) / true_val
-        ax.text(xi, v * 1.05, f"{pct:+.0f}\\%", ha='center', fontsize=6.5,
+        ax.text(xi, v * 1.05, f"{pct:+.0f}\\%", ha='center', fontsize=fs(6.5),
                 color=(C_RAW if abs(pct) > 3 else '0.3'))
-    ax.set_xticks(x, [pretty[a] for a in order], fontsize=7.5)
+    ax.set_xticks(x, [pretty[a] for a in order], fontsize=fs(7.5))
     ax.set_ylabel(ylabel)
-    ax.set_title(title, fontsize=9.5)
+    ax.set_title(panel_title(title), fontsize=fs(9.5))
     # Headroom above the (near-equal-height) predicted bars and their +x%%
     # annotations, so the legend sits clear; loc='best' otherwise lands on top
     # of the right-column bars.
     ax.set_ylim(top=max(ncv) * 1.7)
-    ax.legend(frameon=False, fontsize=7.5, loc='upper left')
+    ax.legend(frameon=False, fontsize=fs(7.5), loc='upper left')
     ax.grid(True, alpha=0.25, axis='y')
 
 
@@ -628,15 +661,15 @@ def _ladder_grouped(ax, dn, prefix, tgs, title):
                alpha=0.55 if (len(tgs) == 2 and j == 0) else 0.95,
                label=f"$T_G={int(tg)}\\tau$")
         for xi, v in zip(x + off, vals):
-            ax.text(xi, v * 1.12, f"{v:.1e}", ha='center', fontsize=5.8,
+            ax.text(xi, v * 1.12, f"{v:.1e}", ha='center', fontsize=fs(5.8),
                     rotation=0)
     ax.set_yscale('log')
     ax.set_ylim(min(all_vals) / 2.5, max(all_vals) * 4.0)
-    ax.set_xticks(x, [l for _, l, _ in LADDER_LABELS], fontsize=7)
+    ax.set_xticks(x, [l for _, l, _ in LADDER_LABELS], fontsize=fs(7))
     ax.set_ylabel(r"true $1-F_\mathrm{pro}$")
-    ax.set_title(title, fontsize=9.5)
+    ax.set_title(panel_title(title), fontsize=fs(9.5))
     if len(tgs) == 2:
-        ax.legend(frameon=False, fontsize=7.5)
+        ax.legend(frameon=False, fontsize=fs(7.5))
     ax.grid(True, alpha=0.25, axis='y')
 
 
@@ -721,7 +754,7 @@ def fig_storage():
     ax.set_xlabel(r"storage time $T_G/\tau$")
     ax.set_ylabel(r"Bell-pair infidelity $1-F$")
     ax.grid(True, alpha=0.25)
-    ax.legend(frameon=False, fontsize=7, loc='upper left',
+    ax.legend(frameon=False, fontsize=fs(7), loc='upper left',
               bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0,
               handlelength=1.8, labelspacing=0.6)
     fig.tight_layout()
@@ -739,7 +772,7 @@ if __name__ == "__main__":
     # entire file assumes the showcase-regime spectra/run folders (see the
     # module docstring), so refuse to run under bland/featured.
     assert current_regime() == "showcase", "run with QNS2Q_REGIME=showcase"
-    setup_pub_rcparams('compact')
+    setup_pub_rcparams(RC_PRESET)
     # Optional CLI arg selects a single figure to (re)build (e.g.
     # `python report_showcase_figs.py gates`) instead of the full set --
     # convenient when only one panel changed and the others are slow/unneeded

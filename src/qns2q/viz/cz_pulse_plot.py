@@ -171,20 +171,26 @@ def generate_pulse_plot(folder=None, tag=""):
     FIG_WIDTH = 7.0
     FIG_HEIGHT = 4.0
 
+    # QNS2Q_FIG_TARGET=thesis pre-scales type and line weights so this stays
+    # legible after the thesis scales the 7.0 in canvas down to \linewidth =
+    # 6.00 in. See setup_pub_rcparams' 'thesis' preset for the rationale.
+    _target = os.environ.get("QNS2Q_FIG_TARGET", "paper").lower()
+    _s = FIG_WIDTH / 6.00 if _target == "thesis" else 1.0
+
     plt.rcParams.update({
         "text.usetex": True,             # render all text (labels, ticks) through a real LaTeX install so math like $y_{12}(t)$ typesets identically to the paper -- requires a working `latex` binary on PATH.
         "font.family": "serif",
         "font.serif": ["Computer Modern"],
-        "font.size": 10,
-        "axes.labelsize": 10,
-        "axes.titlesize": 10,
-        "xtick.labelsize": 8,
-        "ytick.labelsize": 8,
+        "font.size": 10 * _s,
+        "axes.labelsize": 10 * _s,
+        "axes.titlesize": 10 * _s,
+        "xtick.labelsize": 8 * _s,
+        "ytick.labelsize": 8 * _s,
         "xtick.direction": "in",
         "ytick.direction": "in",
         "figure.figsize": (FIG_WIDTH, FIG_HEIGHT),
-        "lines.linewidth": 1.5,
-        "axes.linewidth": 0.6,
+        "lines.linewidth": 1.5 * _s,
+        "axes.linewidth": 0.6 * _s,
     })
 
     # Okabe-Ito colorblind-safe palette (blue / vermillion): chosen so the two
@@ -255,7 +261,7 @@ def generate_pulse_plot(folder=None, tag=""):
     # --- Column 0: Known ---
     # Row 0: Qubit 1
     axs[0, 0].step(t_known_1, y_known_1, where='post', color=COLOR_KNOWN)
-    axs[0, 0].set_title("(a) Best CDD Sequence")
+    axs[0, 0].set_title("(a)" if _target == "thesis" else "(a) Best CDD Sequence")
 
     # Row 1: Qubit 2
     axs[1, 0].step(t_known_2, y_known_2, where='post', color=COLOR_KNOWN)
@@ -267,7 +273,7 @@ def generate_pulse_plot(folder=None, tag=""):
     # --- Column 1: Optimized ---
     # Row 0: Qubit 1
     axs[0, 1].step(t_opt_1, y_opt_1, where='post', color=COLOR_OPT)
-    axs[0, 1].set_title("(b) Best NT Sequence")
+    axs[0, 1].set_title("(b)" if _target == "thesis" else "(b) Best NT Sequence")
 
     # Row 1: Qubit 2
     axs[1, 1].step(t_opt_2, y_opt_2, where='post', color=COLOR_OPT)
