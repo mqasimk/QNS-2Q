@@ -1,0 +1,46 @@
+Running experiment for M = 5
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 13.33s ---
+Running experiment for M = 6
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 6.94s ---
+Running experiment for M = 7
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 7.22s ---
+Running experiment for M = 8
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 7.63s ---
+Running experiment for M = 9
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 8.07s ---
+Running experiment for M = 10
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 8.47s ---
+Running experiment for M = 11
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 8.82s ---
+Running experiment for M = 12
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 9.10s ---
+Running experiment for M = 13
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 9.49s ---
+Running experiment for M = 14
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 9.83s ---
+Running experiment for M = 15
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 10.02s ---
+Running experiment for M = 16
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 10.49s ---
+Running experiment for M = 17
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 10.77s ---
+Running experiment for M = 18
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 11.61s ---
+Running experiment for M = 19
+Running experiment: C_1_0_MT_1
+--- C_1_0_MT_1 completed in 11.51s ---
+Plot saved to C_1_0_MT_vs_M.pdf

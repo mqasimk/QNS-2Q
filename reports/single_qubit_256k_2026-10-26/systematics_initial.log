@@ -1,0 +1,32 @@
+......F........                                                          [100%]
+=================================== FAILURES ===================================
+____________________ test_selfconsistent_runs_without_truth ____________________
+
+systematic_result = ({'S11': array([-7.69185937e-06, -5.23443987e-06, -1.22663124e-05, -5.08732786e-09,
+       -1.37756076e-05,  5.7004845...40658945086007e-21, 'S112': 6.617444900424222e-24, 'S12': 1.5881867761018131e-22, 'S1212': 8.470329472543003e-22, ...})
+
+>   ???
+
+/home/mqasimk/IdeaProjects/QNS-2Q/reports/single_qubit_256k_2026-10-26/_runtime/tests/test_systematics.py:116: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+wk_full = array([0.        , 0.03926991, 0.07853982, 0.11780972, 0.15707963,
+       0.19634954, 0.23561945, 0.27488936, 0.31415927])
+recon = {'S11': array([6.44993827e-04, 1.10854453e-05, 9.46607013e-06, 1.11479095e-05,
+       1.17912420e-05, 5.03944754e-05, ...6, 6.33678553e-07,
+       3.77710082e-07, 1.27244336e-06, 7.18545076e-06, 1.16216385e-06,
+       1.23445687e-07]), ...}
+lines = None
+
+>   ???
+E   ModuleNotFoundError: No module named 'qns2q.control'
+
+/home/mqasimk/IdeaProjects/QNS-2Q/reports/single_qubit_256k_2026-10-26/_runtime/tests/../src/qns2q/characterize/systematics.py:871: ModuleNotFoundError
+=============================== warnings summary ===============================
+tests/test_systematics.py: 416 warnings
+  /home/mqasimk/IdeaProjects/QNS-2Q/reports/single_qubit_256k_2026-10-26/_runtime/tests/../src/qns2q/model/trajectories.py:634: DeprecationWarning: size requires ndarray or scalar arguments, got <class 'list'> at position 0. In a future JAX release this will be an error.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED reports/single_qubit_256k_2026-10-26/_runtime/tests/test_systematics.py::test_selfconsistent_runs_without_truth
+1 failed, 14 passed, 416 warnings in 182.27s (0:03:02)

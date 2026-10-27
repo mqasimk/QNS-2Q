@@ -1,0 +1,314 @@
+diff --git a/scripts/run_single_qubit.py b/scripts/run_single_qubit.py
+index 1146f5a..1766e08 100644
+--- a/scripts/run_single_qubit.py
++++ b/scripts/run_single_qubit.py
+@@ -1,19 +1,18 @@
+-"""Produces the standalone C_1_0_MT_vs_M.pdf paper figure: SPAM-robustness of the
++"""Produces the standalone C_1_0_MT_vs_M.pdf paper figure: scaling of the
+ C_1,0 correlation-function estimator vs. the number of dynamical-decoupling
+ blocks M, for a single qubit. Not part of the two-qubit Stage 1/2 pipeline -- a
+ self-contained simulation via qns2q.characterize.single_qubit. Run from the repo
+-root; regime via QNS2Q_REGIME. GPU-memory-hungry at the higher M values: noise
+-matrices grow with M, and on a 12 GB GPU this can raise a JAX RESOURCE_EXHAUSTED
+-error partway through even with nothing else running and
+-XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 set (verified: this is a real memory ceiling
+-on this hardware, not a bug -- it reproduces identically on an unmodified
+-checkout). If you hit it, you need a GPU with more headroom (16 GB+) for this
+-one figure; the other seven don't need nearly as much memory.
++root; regime via QNS2Q_REGIME. The default ensemble is 256,000 noise
++realizations per observable estimate, with projection noise excluded.
++Time-chunked filter contraction and batched noise draws bound GPU memory.
++The estimator corrects readout using the exact confusion matrix and retains
++preparation bias; this is a local-coefficient illustration, not the raw
++SPAM-robust twisting/wringing estimator.
+ 
+ This file is a thin shim: it just hands argv to that module's own __main__ block
+ via runpy.
+ 
+-    PYTHONPATH=src python scripts/run_single_qubit.py
++    QNS2Q_REGIME=showcase PYTHONPATH=src python scripts/run_single_qubit.py --output-dir reports/single_qubit_256k_2026-10-26
+ """
+ import os, sys, runpy
+ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
+diff --git a/src/qns2q/characterize/single_qubit.py b/src/qns2q/characterize/single_qubit.py
+index d3a7a65..005c78a 100644
+--- a/src/qns2q/characterize/single_qubit.py
++++ b/src/qns2q/characterize/single_qubit.py
+@@ -2,19 +2,12 @@
+ Single-qubit variant of the two-qubit QNS experiment runner -- used ONLY to
+ produce one standalone paper figure, not part of the main Stage 1/2 pipeline.
+ 
+-Physics purpose. The published figure ``C_1_0_MT_vs_M.pdf`` demonstrates that the
+-QNS reconstruction coefficient ``C_{1,0}(MT)`` (built here from qubit 1's raw,
+-SPAM-corrupted measurement statistics, WITHOUT dividing out the residual
+-state-prep error -- ``spMit=False`` below) grows LINEARLY in the number of
+-pulse-sequence repetitions ``M``. A linear fit's slope recovers the SPAM-free
+-noise estimate, while its y-intercept isolates exactly the leftover SPAM
+-contamination as a closed-form combination of the readout visibility alpha_M
+-and the state-prep error alpha_SP (see the companion paper's Eq.
+-C_approx_concise and the figure caption for the exact intercept formula). This
+-is the mathematical fact that motivates the package's SPAM-mitigated/robust
+-QNS protocols (CLAUDE.md's "SPAM pipeline" section): this module runs the
+-single-qubit toy experiment sweeping ``M`` that demonstrates it, and makes the
+-plot.
++Physics purpose. This figure illustrates the dependence of the local
++coefficient C_{1,0}(MT) on sequence repetitions M. The legacy estimator uses
++exact confusion-matrix readout correction, while spMit=False leaves the
++preparation bias. It is not the raw twisting/wringing robust estimator in
++characterize.spam; its intercept must not be identified with that estimator's
++alpha_M-dependent offset. The shared two-qubit noise model is retained.
+ 
+ Where this sits in the pipeline. It belongs conceptually to the "characterize"
+ arm (QNS experiment simulation -> spectral reconstruction) alongside
+@@ -35,10 +28,12 @@ parameter is a default on ``QNSExperimentConfig``, and the noise spectra come
+ from ``qns2q.noise.spectra`` at import time (whichever regime ``QNS2Q_REGIME``
+ selects -- see CLAUDE.md). Running ``main()`` (only via the ``__main__`` guard
+ at the bottom of this file) writes ``C_1_0_MT_vs_M.pdf`` and
+-``C_1_0_MT_vs_M.npz`` directly into the current working directory (NOT a
+-regime run-folder -- see FIGURE_PROVENANCE.md), so it must be launched from the
+-repo root; ``scripts/run_single_qubit.py`` does exactly that by executing this
+-file's ``__main__`` block via ``runpy``.
++``C_1_0_MT_vs_M.npz`` and per-M summaries into --output-dir (default: current
++working directory). --n-realizations defaults to 256000; projection sampling
++is excluded. The bounded-memory filter solver preserves the dense solver's
++noise keys and quadrature, up to floating-point reassociation. The plotted
++means use a fixed seed; the existing estimator's parametric-bootstrap errors
++are saved but its separate unseeded generator is deliberately unchanged.
+ 
+ The main components are:
+ - QNSExperimentConfig: A dataclass for storing all the experiment parameters.
+@@ -50,8 +45,11 @@ The main components are:
+ 
+ import os
+ import time
++import argparse
++from pathlib import Path
+ from dataclasses import dataclass, field
+ 
++import jax
+ import jax.numpy as jnp
+ import numpy as np
+ import matplotlib.pyplot as plt
+@@ -59,7 +57,10 @@ import matplotlib.pyplot as plt
+ from qns2q.model.observables import (make_c_12_0_mt, make_c_12_12_mt, make_c_a_0_mt,
+                          make_c_a_b_mt)
+ from qns2q.noise.spectra import S_11, S_22, S_1212
+-from qns2q.model.trajectories import make_noise_mat_arr, solver_prop
++from qns2q.model.trajectories import (make_noise_mat_arr,
++                                     _shot_coeffs_from_filters, phased_state)
++from qns2q.noise.spectra import MODEL_VERSION
++from qns2q.paths import current_regime
+ from qns2q.paths import project_root
+ 
+ # Fixed RNG seed. solver_prop() draws its per-shot noise keys from np.random,
+@@ -123,8 +124,8 @@ class QNSExperimentConfig:
+             `_make_noise_mats` below does not pass them. They are kept only
+             because `save_results` records the whole config for provenance;
+             they have no effect on the simulated physics.
+-        n_shots: Number of Monte-Carlo noise realizations averaged per data
+-            point (statistical/shot noise, not readout/projective noise).
++        n_shots: Number of Monte-Carlo noise realizations per observable estimate.
++            Projection noise is excluded.
+         fname: Output subfolder name under the repo root (only used if
+             `save_results` is called; `main()` below does not call it).
+         parent_dir: Unused by any path in this file (kept for parity with the
+@@ -154,7 +155,7 @@ class QNSExperimentConfig:
+     T: jnp.float32 = 160*tau
+     gamma: jnp.float32 = T / 14
+     gamma_12: jnp.float32 = T / 28
+-    n_shots: jnp.int32 = 2000
++    n_shots: jnp.int32 = 256000
+     fname: str = "DraftRun_MScaling"
+     parent_dir: str = os.pardir
+ 
+@@ -206,6 +207,62 @@ class QNSExperimentConfig:
+                 ]]))
+ 
+ 
++class StreamedNoise:
++    """Contract the original synthesis matrices in bounded time chunks.
++
++    This changes the evaluation order only: the spectra, frequency grid,
++    trapezoid integral and Gaussian keys are the same as the dense solver.
++    No ensemble averaging or measurement sampling occurs here.
++    """
++
++    def __init__(self, config, chunk_size=512, shot_batch=5000):
++        self.config = config
++        self.chunk_size = chunk_size
++        self.shot_batch = shot_batch
++        self.cached_y = None
++        self.cached_filters = None
++
++    def filters(self, y_uv):
++        y = np.asarray(y_uv)
++        if self.cached_y is not None and np.array_equal(y, self.cached_y):
++            return self.cached_filters
++        t = np.asarray(self.config.t_vec)
++        # Actual adjacent spacings also reproduce dense trapezoid quadrature
++        # when floating-point linspace spacings are not bitwise identical.
++        dt = np.diff(t)
++        weights = np.r_[dt[0] / 2, (dt[:-1] + dt[1:]) / 2, dt[-1] / 2]
++        ys = np.stack([y[a, a, :len(t)] for a in range(3)])
++        filters = None
++        for start in range(0, len(t), self.chunk_size):
++            stop = min(start + self.chunk_size, len(t))
++            mats = make_noise_mat_arr(
++                'make', t_vec=jnp.asarray(t[start:stop]),
++                w_grain=self.config.w_grain, wmax=self.config.wmax,
++                truncate=self.config.truncate)
++            part = jnp.einsum('at,cstw->acsw',
++                             jnp.asarray(.5 * ys[:, start:stop]
++                                         * weights[None, start:stop]), mats,
++                             precision=jax.lax.Precision.HIGHEST)
++            filters = part if filters is None else filters + part
++            filters.block_until_ready()
++        self.cached_y = y.copy()
++        self.cached_filters = filters
++        return filters
++
++
++def streamed_solver(y_uv, noise_mats, t_vec, rho, n_shots):
++    """Draw every realization with the pinned spectral-synthesis RNG scheme."""
++    filters = noise_mats.filters(y_uv)
++    coeffs = []
++    for start in range(0, n_shots, noise_mats.shot_batch):
++        count = min(noise_mats.shot_batch, n_shots - start)
++        keys = jnp.asarray(np.random.randint(0, 10000, (count, 2)))
++        batch = jax.vmap(_shot_coeffs_from_filters, in_axes=[None, 0])(filters, keys)
++        coeffs.append(batch)
++        batch.block_until_ready()
++    return phased_state(jnp.concatenate(coeffs), rho)
++
++
+ class ExperimentRunner:
+     """
+     Runs a series of single-qubit QNS toy experiments for one
+@@ -216,18 +273,15 @@ class ExperimentRunner:
+ 
+     def __init__(self, config: QNSExperimentConfig):
+         """
+-        Initializes the ExperimentRunner: stashes the config, ensures the
+-        (per-config) output folder exists, and eagerly synthesizes the noise
+-        trajectories for this config's time/frequency grid. This means
+-        constructing an ExperimentRunner does real (if cheap) work and
+-        creates a directory as a side effect -- see `_setup_output_directory`.
++        Stashes the config and prepares lazy, bounded-memory noise synthesis.
++        The legacy save_results directory is also created.
+ 
+         Args:
+             config: The configuration for the experiments.
+         """
+         self.config = config
+         self.path = self._setup_output_directory()
+-        self.noise_mats = self._make_noise_mats()
++        self.noise_mats = StreamedNoise(config)
+         self.results = {}
+ 
+     def _setup_output_directory(self):
+@@ -243,22 +297,6 @@ class ExperimentRunner:
+             os.mkdir(path)
+         return path
+ 
+-    def _make_noise_mats(self):
+-        """
+-        Precomputes this config's noise-synthesis matrices (sine/cosine basis
+-        for the classical noise trajectories), via
+-        `qns2q.model.trajectories.make_noise_mat_arr`. Shared across every
+-        `run_experiment` call on this runner so the (expensive) synthesis
+-        setup happens only once per M value.
+-        """
+-        return jnp.array(
+-            make_noise_mat_arr(
+-                'make',
+-                t_vec=self.config.t_vec,
+-                w_grain=self.config.w_grain,
+-                wmax=self.config.wmax,
+-                truncate=self.config.truncate))
+-
+     def run_experiment(self, exp_name: str, pulse_sequence: list,
+                        exp_type: str, **kwargs):
+         """
+@@ -295,7 +333,7 @@ class ExperimentRunner:
+ 
+         exp_func = exp_map[exp_type]
+         means, stderrs = exp_func(
+-            solver_prop,
++            streamed_solver,
+             pulse_sequence,
+             self.config.t_vec,
+             self.config.c_times,
+@@ -351,10 +389,21 @@ def main():
+     """
+     # Pin the RNG: solver_prop draws its per-shot noise keys from np.random,
+     # so seeding here makes the published figure reproducible.
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument('--n-realizations', type=int, default=256000)
++    parser.add_argument('--output-dir', type=Path, default=Path('.'))
++    parser.add_argument('--m-values', type=int, nargs='+', default=list(range(5, 20)))
++    args = parser.parse_args()
++    if args.n_realizations < 2 or min(args.m_values) < 1:
++        parser.error('Use at least two realizations and positive repetitions.')
++    args.output_dir.mkdir(parents=True, exist_ok=True)
++    jax.config.update('jax_enable_x64', False)  # original standalone precision
++    jax.config.update('jax_default_matmul_precision', 'highest')
+     np.random.seed(RANDOM_SEED)
+ 
+-    m_values = list(range(5, 20))
++    m_values = args.m_values
+     c_1_0_mt_1_results = []
++    c_1_0_mt_1_errors = []
+     l_index = 1  # measured qubit (subscript in C_{1,0}); NOT the harmonic index
+ 
+     # One full ExperimentRunner (its own noise-mat synthesis + Monte Carlo) per
+@@ -363,7 +412,7 @@ def main():
+     # share a single runner across different M values.
+     for m in m_values:
+         print(f"Running experiment for M = {m}")
+-        config = QNSExperimentConfig(M=m)
++        config = QNSExperimentConfig(M=m, n_shots=args.n_realizations)
+         runner = ExperimentRunner(config)
+ 
+         # 'C_1_0_MT_1' with pulse pair ['CDD1', 'CDD1-1/2'] and exp_type
+@@ -382,6 +431,19 @@ def main():
+         for exp_name, pulse_sequence, exp_type, kwargs in experiments:
+             runner.run_experiment(exp_name, pulse_sequence, exp_type, **kwargs)
+             c_1_0_mt_1_results.append(runner.results[exp_name])
++            c_1_0_mt_1_errors.append(runner.results[exp_name + '_err'])
++        np.savez(args.output_dir / f'M_{m:02d}.npz',
++                 means=runner.results['C_1_0_MT_1'],
++                 stderrs=runner.results['C_1_0_MT_1_err'],
++                 M=m, n_shots=config.n_shots, n_meas=0,
++                 t_vec=np.asarray(config.t_vec),
++                 t_b=np.asarray(config.t_b), c_times=np.asarray(config.c_times),
++                 T=config.T, tau=config.tau, t_grain=config.t_grain,
++                 w_grain=config.w_grain, wmax=config.wmax,
++                 truncate=config.truncate, a_sp=config.a_sp, c=config.c,
++                 a_m=config.a_m, delta=config.delta, CM=config.CM,
++                 spMit=config.spMit, seed=RANDOM_SEED,
++                 regime=current_regime(), model_version=MODEL_VERSION)
+         # runner.save_results() # Optional: decide if you want to save results for each M
+ 
+     c_1_0_mt_1_results = np.array(c_1_0_mt_1_results)
+@@ -417,15 +479,18 @@ def main():
+     # the literal filename "C_1_0_MT_vs_M" that the manuscript's LaTeX
+     # \includegraphics call and FIGURE_PROVENANCE.md both expect -- renaming
+     # it here would silently break the figure link in the paper build.
+-    np.savez("C_1_0_MT_vs_M.npz",
++    np.savez(args.output_dir / "C_1_0_MT_vs_M.npz",
+              M_values=np.array(m_values),
+              c_1_0_mt=c_1_0_mt_1_results,
++             c_1_0_mt_stderr=np.array(c_1_0_mt_1_errors),
++             n_shots=config.n_shots, n_meas=0,
++             regime=current_regime(), model_version=MODEL_VERSION,
+              c_times=np.array(config.c_times),
+              l_qubit=l_index,
+              seed=RANDOM_SEED)
+-    plt.savefig("C_1_0_MT_vs_M.pdf", format='pdf', bbox_inches='tight')
++    plt.savefig(args.output_dir / "C_1_0_MT_vs_M.pdf", format='pdf', bbox_inches='tight')
+     print("Plot saved to C_1_0_MT_vs_M.pdf")
+-    plt.show()
++    plt.close(fig)
+ 
+ 
+ if __name__ == "__main__":

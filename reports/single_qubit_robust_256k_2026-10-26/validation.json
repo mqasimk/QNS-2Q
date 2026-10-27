@@ -1,0 +1,68 @@
+{
+  "points": 75,
+  "max_standardized_residual": 2.8967912714945827,
+  "spam_intercept": 0.040458500385284424,
+  "fits": [
+    {
+      "n": 1,
+      "slope": 0.0009437953691593873,
+      "intercept": 0.0405103601804635,
+      "model_fit_slope": 0.0009465928471434311,
+      "model_fit_intercept": 0.04049210131452255,
+      "fit_difference_in_reported_standard_errors": [
+        -1.6033586250470993,
+        1.1030056601510494
+      ],
+      "finite_M_intercept_shift": 3.360092923812563e-05
+    },
+    {
+      "n": 2,
+      "slope": 0.0006716260424040042,
+      "intercept": 0.04068117594904477,
+      "model_fit_slope": 0.0006734632338427629,
+      "model_fit_intercept": 0.040657957234161185,
+      "fit_difference_in_reported_standard_errors": [
+        -1.434065498759059,
+        1.8776642036552884
+      ],
+      "finite_M_intercept_shift": 0.00019945684887676118
+    },
+    {
+      "n": 3,
+      "slope": 0.0008759009623041516,
+      "intercept": 0.040453401234314436,
+      "model_fit_slope": 0.00087566563112862,
+      "model_fit_intercept": 0.040454724185263934,
+      "fit_difference_in_reported_standard_errors": [
+        0.14662724325167478,
+        -0.08682142300771539
+      ],
+      "finite_M_intercept_shift": -3.776200020490228e-06
+    },
+    {
+      "n": 4,
+      "slope": 0.000763542556345071,
+      "intercept": 0.040542267629246426,
+      "model_fit_slope": 0.0007643128916083709,
+      "model_fit_intercept": 0.040536268342148525,
+      "fit_difference_in_reported_standard_errors": [
+        -0.5487956614385706,
+        0.4509083641147892
+      ],
+      "finite_M_intercept_shift": 7.776795686410126e-05
+    },
+    {
+      "n": 5,
+      "slope": 0.003270396930731842,
+      "intercept": 0.0395622510401498,
+      "model_fit_slope": 0.003266200302116518,
+      "model_fit_intercept": 0.039592973287019016,
+      "fit_difference_in_reported_standard_errors": [
+        0.7276747637512502,
+        -0.5719785483170399
+      ],
+      "finite_M_intercept_shift": -0.0008655270982654076
+    }
+  ],
+  "qualifier": "Reported errors are the retained parametric-bootstrap noise-ensemble errors. Finite-M extrapolation offsets are model effects, not SPAM-correction errors."
+}

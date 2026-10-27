@@ -1,0 +1,13 @@
+....                                                                     [100%]
+=============================== warnings summary ===============================
+tests/test_single_qubit.py::test_streamed_filters_match_dense[3-65-9]
+tests/test_single_qubit.py::test_streamed_filters_match_dense[3-65-9]
+tests/test_single_qubit.py::test_streamed_filters_match_dense[19-1500-8]
+tests/test_single_qubit.py::test_streamed_filters_match_dense[19-1500-8]
+tests/test_single_qubit.py::test_same_seed_nonzero_noise_states_match_dense
+tests/test_single_qubit.py::test_same_seed_nonzero_noise_states_match_dense
+  /home/mqasimk/IdeaProjects/QNS-2Q/tests/../src/qns2q/model/trajectories.py:634: DeprecationWarning: size requires ndarray or scalar arguments, got <class 'list'> at position 0. In a future JAX release this will be an error.
+    range(jnp.size(tk) - 1)]), axis=0)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+4 passed, 6 warnings in 46.36s

@@ -1,0 +1,12 @@
+[
+  {
+    "M": 5,
+    "max_quadrature_SEM_difference": 1.4805927821422642,
+    "note": "Dtype changes the Gaussian RNG draws; this is a distribution-level diagnostic, not a paired rounding-error bound."
+  },
+  {
+    "M": 6,
+    "max_quadrature_SEM_difference": 1.0839649235217172,
+    "note": "Dtype changes the Gaussian RNG draws; this is a distribution-level diagnostic, not a paired rounding-error bound."
+  }
+]

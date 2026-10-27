@@ -1,7 +1,7 @@
 # Figure provenance map
 
 Maps every figure the paper uses (`~/Noise_Tailored_2Q_Gates/figures/*.pdf`, referenced
-from `main_v10.tex`) to the exact **(run folder, data file, script, command)** that
+from the active `main_v12.tex`; older versions retain their historical sources) to the exact **(run folder, data file, script, command)** that
 produces it. Rewritten 2026-06-16 after the repo was leaned down to the machinery that
 regenerates the paper results (`CLEANUP-0616`); the pre-cleanup history of this file is in
 git.
@@ -63,8 +63,75 @@ paper copies are byte-identical renames:
 
 | Paper file | Command | Notes |
 |---|---|---|
-| `C_1_0_MT_vs_M.pdf` | `python scripts/run_single_qubit.py` | self-contained seeded single-qubit SPAM-robustness sim; no run folder needed (writes `C_1_0_MT_vs_M.pdf` directly) |
+| `C_1_0_MT_vs_M.pdf` | see the 2026-10-26 command below | 256k realizations; corrected N=1 raw twisted estimator, CPMG controls, source data and provenance retained |
 | `showcase_pulse_sequences.pdf` | `python scripts/run_cz_pulse_plot.py --folder DraftRun_NoSPAM_showcase_cap --tag _cap` | best-known vs best-NT CZ pulse comparison; faithful regeneration |
+
+### Single-qubit SPAM-robust illustration: corrected 256k run (2026-10-26)
+
+The current paper figure uses the N=1 protocol from Sec. IV.D: one +X
+fiducial preparation, raw X/Y probabilities and an X_1 flip after the basis
+rotation, followed by C_hat = -1/2 log[(E_X^-)^2 + (E_Y^-)^2]. There is no
+confusion-matrix inversion or preparation/visibility division. Each X/Y
+observable has 256,000 independent noise realizations; raw and flipped
+probabilities are paired on those realizations, following the pinned robust
+simulation convention. Projection sampling remains off (`n_meas=0`).
+
+Only the zeta_1 Z_1 term couples. Its marginal spectrum is S_11 of the pinned
+current `showcase` model, as Qasim requested. Spectator and auxiliary factors
+in the shared solver are uncoupled identities. CPMG/CDD2 controls use five
+cycle counts n=1,...,5, with M=5,...,19, T=160 tau, t_grain=1500,
+w_grain=1000 and the existing SPAM parameters. The plot shows ensemble
+estimates/errors, free linear fits and the known-model SPAM-offset reference.
+Known SPAM values and exact Gaussian ensemble coefficients are diagnostics;
+they are not supplied to the estimator or used to correct the fitted slope.
+Finite-M filter effects can shift an extrapolated intercept relative to the
+pure SPAM contribution; that distinction is retained in the caption.
+
+Exact regeneration from this checkout:
+
+```bash
+QNS2Q_REGIME=showcase XLA_PYTHON_CLIENT_PREALLOCATE=false MPLBACKEND=Agg \
+  venv/bin/python -u reports/single_qubit_robust_256k_2026-10-26/_runtime/scripts/run_single_qubit.py \
+  --n-realizations 256000 \
+  --output-dir /home/mqasimk/IdeaProjects/QNS-2Q/reports/single_qubit_robust_256k_2026-10-26
+```
+
+The user subsequently requested integer M tick labels. The simulations use
+only M=5,6,...,19; the continuous curves are regression fits. Regenerate the
+final plot from the saved numerical data, without another simulation, with:
+
+```bash
+QNS2Q_REGIME=showcase MPLBACKEND=Agg \
+  PYTHONPATH=reports/single_qubit_robust_256k_2026-10-26/_runtime/src \
+  venv/bin/python reports/single_qubit_robust_256k_2026-10-26/plot_source.py \
+  --plot-only --output-dir reports/single_qubit_robust_256k_2026-10-26
+```
+
+The current stock entry point also supports `--plot-only` and integer ticks.
+`plot_source.py` preserves the exact final rendering source; its hash is in
+the manifest. Numerical NPZ hashes were unchanged by this axis correction.
+
+The runtime is exported from 4241fbf plus the standalone protocol/streaming
+patch. `provenance.json` records exact hashes; `implementation.patch` and
+`_runtime/` retain the executed source. `M_XX.npz` records configuration,
+twisted means/errors and the independently calculated model coefficient;
+`C_1_0_MT_vs_M.npz` contains plotted data and free-fit results. The existing
+parametric bootstrap remains unseeded, so saved errors/fit weights have
+bootstrap-level variability; noise draws and point estimates use seed
+20260608. Float32 arrays use full matrix-multiply precision.
+
+Tests cover the nonzero-noise streamed/dense equivalence, the N=1 reduction,
+exact Gaussian/SPAM-offset normalization, asymmetry cancellation, retention of
+readout visibility, spectator independence and free-intercept slope recovery.
+
+**Superseded first attempt.** `reports/single_qubit_256k_2026-10-26/` preserved
+the legacy readout-corrected two-qubit local estimator. Retitling that result
+as a local-coefficient illustration did not fulfill the intended paper
+protocol; Qasim identified this mismatch and the corrected run above replaces
+it. Keep the earlier outputs for audit, not as the paper's single-qubit result.
+The original November-2025 PDF also predates the pinned current noise model;
+its exact numerical source was absent. The two-qubit reconstruction and gate
+results remain unchanged by either standalone rerun.
 
 The `--folder`/`--tag` arguments were added in `CLEANUP-0616` so these stock entry points
 target the `_cap` folder/filenames directly (the showcase data carries a vestigial `_cap`

@@ -1,0 +1,35 @@
+Completed 2026-10-26: M=5,...,19, five controls, 75 plotted points.
+256000 noise realizations per observable estimate; n_meas=0 throughout.
+All per-M counts/configuration checked; aggregate means/errors match per-M summaries exactly.
+All results finite; all saved coefficient standard errors positive.
+Runtime source hashes verified against provenance.json.
+
+Validation:
+- 4 new solver tests passed (one runs three float32 checks in a fresh process).
+  They check nonzero-noise filters, complete per-realization density matrices,
+  and unchanged random-key consumption across batching boundaries.
+- 53 pinned SPAM/observable/spectral-inversion tests passed.
+- 15 pinned systematics tests passed across the full run and targeted recheck.
+  The initial run had 14 passes and one temporary missing-module error because
+  its exported directory was moved during execution. The one affected test
+  passed on recheck at its stable path; no scientific test was skipped.
+- Wrapper dry-run and Python compilation passed.
+- Float64 M=5,6 points are preserved in precision_check_float64/.
+  Their means differ from the final float32 means by at most 1.49 times the
+  quadrature combination of the reported standard errors. Dtype changes
+  the random draws; this is not a paired error bound.
+
+Model: showcase-trap-20260616, scientific base 4241fbf.
+Current checkout HEAD 5598b09 is not itself the execution pin; the local
+standalone patch and complete imported source snapshot are retained.
+No physical measurement covariance, projection sampling, PSD scaling, gate
+optimization, or two-qubit reconstruction changes were introduced.
+
+Final manuscript validation (2026-10-26): the full LaTeX/BibTeX build succeeds
+(39 pages). The replacement figure is pixel-identical to its generated source;
+the figure page and sampling-method page were rendered and checked. The frozen
+v10/v11 sources, bibliography, and all other figure assets are unchanged.
+The three inherited missing-reference keys remain: app::bellsplit,
+eq::CZ_constraint_pi4, sec::storage; the existing overfull box at source
+line 506 is unchanged. The 12 open-comment/citation-marker lines are retained.
+Both repositories pass git diff --check.

@@ -8,9 +8,11 @@ reports/spectral_scale_forecast_2026-10-26/** -text
 reports/single_qubit_256k_2026-10-26/** -text
 reports/single_qubit_robust_256k_2026-10-26/** -text
 
-# Frozen execution snapshots and patches retain their original whitespace.
+# Frozen execution snapshots, patches and logs retain their original whitespace.
 reports/repetition_forecast_2026-10-26/_pinned_runtime/** -whitespace
-reports/single_qubit_256k_2026-10-26/_runtime/** -whitespace
-reports/single_qubit_robust_256k_2026-10-26/_runtime/** -whitespace
-reports/single_qubit_256k_2026-10-26/*.patch -whitespace
-reports/single_qubit_robust_256k_2026-10-26/*.patch -whitespace
+reports/single_qubit_256k_2026-10-26/**/_runtime/** -whitespace
+reports/single_qubit_robust_256k_2026-10-26/**/_runtime/** -whitespace
+reports/single_qubit_256k_2026-10-26/**/*.patch -whitespace
+reports/single_qubit_robust_256k_2026-10-26/**/*.patch -whitespace
+reports/single_qubit_256k_2026-10-26/**/*.log -whitespace
+reports/single_qubit_robust_256k_2026-10-26/**/*.log -whitespace

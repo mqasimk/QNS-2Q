@@ -69,13 +69,10 @@ ASSEMBLE_STEPS = [
      "storage, gates)",
      [sys.executable, "scripts/report_showcase_figs.py"],
      {"SHOWCASE_FIGS_DIR": SHOWCASE_FIGS_DIR}),
-    # This step synthesizes noise trajectories out to a fairly large M and is
-    # the most GPU-memory-hungry of the three (see run_carrier_battery_0616.sh's
-    # comment on this exact script): give it a larger fraction of GPU memory
-    # than JAX's default, and don't run anything else on the GPU at the same time.
-    ("C_1_0_MT_vs_M.pdf (standalone single-qubit SPAM-robustness figure)",
+    # The standalone 256k run streams time chunks and batches noise draws.
+    ("C_1_0_MT_vs_M.pdf (single-qubit SPAM-robust illustration, 256k realizations)",
      [sys.executable, "scripts/run_single_qubit.py"],
-     {"XLA_PYTHON_CLIENT_MEM_FRACTION": "0.9"}),
+     {"XLA_PYTHON_CLIENT_PREALLOCATE": "false"}),
     ("showcase_pulse_sequences.pdf (best-known vs best-NT CZ pulse comparison)",
      [sys.executable, "scripts/run_cz_pulse_plot.py",
       "--folder", CAP_FOLDER, "--tag", "_cap"], {}),
@@ -89,7 +86,7 @@ def run_step(label, argv, extra_env, dry_run):
     skipped -- see the two call sites in main() for why that differs between
     the full-regen prefix (each step's output feeds the next) and the
     assemble steps (each reads independent, already-on-disk data, so one
-    failing -- e.g. a GPU too small for run_single_qubit.py's memory needs --
+    failing -- for example, an unavailable GPU runtime --
     shouldn't cost you the other seven figures)."""
     env = dict(os.environ)
     env["QNS2Q_REGIME"] = "showcase"
@@ -151,8 +148,8 @@ def main():
     if failed:
         sys.exit("\nFailed: " + "; ".join(failed) +
                   "\nThe other figures above still succeeded. Re-run just the "
-                  "failed one(s) once you've addressed the cause (e.g. a "
-                  "too-small GPU for run_single_qubit.py -- see its docstring).")
+                  "failed one(s) once you've addressed the cause (e.g. an "
+                  "unavailable GPU runtime).")
     print("\nAll figures generated.")
 
 

@@ -1,0 +1,8 @@
+.....................................................                    [100%]
+=============================== warnings summary ===============================
+tests/test_spam.py: 28 warnings
+  /home/mqasimk/IdeaProjects/QNS-2Q/reports/single_qubit_256k_2026-10-26/_runtime/tests/../src/qns2q/model/trajectories.py:634: DeprecationWarning: size requires ndarray or scalar arguments, got <class 'list'> at position 0. In a future JAX release this will be an error.
+    range(jnp.size(tk) - 1)]), axis=0)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+53 passed, 28 warnings in 3.34s

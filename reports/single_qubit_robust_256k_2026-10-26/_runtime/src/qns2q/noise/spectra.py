@@ -1,0 +1,620 @@
+"""
+Experimentally-anchored two-qubit dephasing noise model (PSD definitions).
+
+**Units: the minimum pulse separation tau is the unit of time (tau = 1).**
+Frequencies are dimensionless angular frequencies w~ = w*tau, spectra are
+dimensionless S~ = tau*S. ``_TAU_SI`` (25 ns for bland/featured, 5 ns for
+showcase -- see where it is set below) is a conversion constant only, used to
+quote SI-equivalent numbers in printouts/captions; it never enters the
+dimensionless physics computed by the functions in this file.
+
+Construction (see ``NOISE_MODEL_SPEC.md`` for the full provenance ledger; every
+parameter is tagged there [M]easured / [E]xtrapolated / [C]hoice):
+
+Two partially-correlated local electric-field processes e_A, e_B plus two
+qubit-local nuclear processes n_1, n_2 build the three dephasing channels
+
+    zeta_1  = e_A + n_1
+    zeta_2  = e_B + n_2
+    zeta_12 = A_J * e_A - B_J * e_B        # J couples to the field *difference*
+
+with cross(e_A, e_B) = C2_SHARE * sqrt(S_el_A S_el_B) * exp(-i w DT_SHIFT).
+This mirrors the susceptibility model validated in Yoneda et al., Nat. Phys. 19,
+1793 (2023), which measured all six auto-/cross-PSDs of (nu_A, nu_B, J) in a
+Si/SiGe qubit pair: the (+, +, -) sign pattern of the three coherences is
+impossible with a single fully-shared source. Achieved in-band values here
+(calibration script retired -- see git history): |c_12| = 0.67, c_1,12 = 0.28+0.50j,
+c_2,12 = -0.43+0.44j at w~ = 0.35 [measured at <~ Hz: 0.7 / +0.8 / -(0.3-0.6)].
+
+Spectral shapes (broken-power-law exponents measured in-band, 10 kHz-1 MHz):
+  S_el_A ~ w^-0.7, S_el_B ~ w^-0.4   [Rojas-Arias et al., npj QI (2025)]
+  S_nuc  ~ w^-1.2 (local, uncorrelated; heavier on qubit 2)  [Yoneda 2023]
+  S_1212: in-band ratio S_1212/sqrt(S_11 S_22) = 0.10 at w~ = 0.35 -- gate-
+  operating-point exchange noise [Dial et al., PRL 110, 146804 (2013)]
+  IR cutoff W_IR regularizes S(0) (finite for the FID-slope DC protocol).
+Amplitudes solve T2*(FID) = 800 tau per qubit (purified-28Si target, 20 us at
+the 25 ns anchor; Yoneda et al., Nat. Nanotech. 13, 102 (2018)). Retargeted
+from the initial 260 tau (PRApplied 20, 054024 devices) after the 2026-06-10
+acceptance-gate run: at 260 tau the 320-640 tau gate times sit at 1.4-2.8 T2*
+(bare gate unrescuable, DC fit below the shot floor); see NOISE_MODEL_SPEC.md.
+
+Three regimes, selected ONCE at import time from the ``QNS2Q_REGIME``
+environment variable (see ``qns2q.paths.current_regime()``): every ``if
+_REGIME == ...:`` block below runs exactly once, when this module is first
+imported, and picks which Python function body gets bound to a given public
+name (e.g. ``S_nuc_1``) for the rest of the process. There is no way to
+switch regimes inside a running process -- start a fresh process with a
+different ``QNS2Q_REGIME`` instead.
+
+* ``bland``    -- Class M (monotonic): the construction above, no lines.
+* ``featured`` -- Class F: Class M + the nuclear-Larmor-difference line triplet
+  (two near-degenerate lines + one at twice the frequency, positions ~ B_eff =
+  600 mT; Malinowski et al., Nat. Nanotech. 12, 16 (2017)) on the *qubit-local*
+  nuclear components only -- J-noise is electrical [Yoneda 2023], so S_1212
+  carries no lines and the coherence c_12(w) dips at the line frequencies.
+* ``showcase`` -- a third, purpose-built regime used only for the paper's
+  showcase figures. Unlike ``bland``/``featured`` it is NOT fit to the
+  measurement ledger in ``NOISE_MODEL_SPEC.md``: it is an engineered,
+  stylized noise landscape (its own constants block below, plus
+  ``scripts/calibrate_showcase.py``) deliberately shaped so that noise-
+  tailored (NT) pulse designs and standard CPMG/CDD designs are clearly
+  separated in performance, and so single-qubit vs two-qubit QNS visibly
+  differ (some structure -- the coupler defect line, the shared-TLF line --
+  is invisible to single-qubit spectroscopy by construction).
+
+The public API (S_11, S_22, S_1212 self-spectra and S_1_2, S_1_12, S_2_12
+cross-spectra) is shared by the synthesis (model.trajectories), the QNS forward
+model, the reconstruction overlays, and the gate optimizers. Cross-spectra take
+NO lag argument: their phases are internal to the model (DT_SHIFT). The
+trajectory synthesis (model.trajectories.make_channel_trajs) uses the component
+spectra and mixing constants exported here, so synthesized trajectories and the
+analytic spectra agree by construction.
+
+Pipeline role: this module IS the noise, not a measurement of it -- it defines
+"ground truth" as pure functions of frequency and has no disk I/O of its own
+(other than the optional ``__main__`` block below). Downstream:
+
+* Stage 1 (``characterize.experiments``, via
+  ``model.trajectories.make_channel_trajs``) Monte-Carlo-samples noise
+  trajectories FROM these spectra to synthesize simulated QNS measurement data.
+* Stage 2 (``characterize.reconstruct``, ``characterize.systematics``) tries
+  to recover these same six spectra blindly from that simulated data -- this
+  module is the answer key the reconstruction is graded against, not an input
+  to it.
+* The optimizers (``control.cz``, ``control.idle``) use either these analytic
+  spectra directly (``--simulated``) or their Stage-2 reconstruction as the
+  noise model to optimize gate/idle pulse sequences against.
+
+Running this file directly (``python -m qns2q.noise.spectra``, see the
+``__main__`` block at the bottom) is the one place it does its own I/O: it
+evaluates the six spectra on the QNS comb grid and writes
+``simulated_spectra.npz`` + ``input_spectra.pdf`` into the active regime's run
+folder (``qns2q.paths.run_folder()``) -- the "known ground truth" file the
+optimizers' ``--simulated`` flag reads instead of a Stage-2 reconstruction.
+"""
+
+import jax
+import jax.numpy as jnp
+
+from qns2q.paths import current_regime, run_folder, project_root
+
+# Read once, at import time (see the module docstring): this fixes which
+# regime-specific function bodies get defined for the rest of the process.
+_REGIME = current_regime()
+
+# SI anchor: conversion constant only. The anchored classes display at the
+# legacy tau = 25 ns; the showcase regime displays at tau = 5 ns (Ge-hole /
+# fast-Rabi anchor, where T2* = 3500 tau = 17.6 us matches Hendrickx 2024).
+_TAU_SI = 5.0e-9 if _REGIME == "showcase" else 2.5e-8
+
+# A version string baked into every saved specs/simulated-spectra file (see
+# characterize.reconstruct and characterize.experiments) so a downstream
+# consumer can tell which noise model produced a given run folder and warn if,
+# e.g., a gate optimizer is about to be graded against a stale/mismatched
+# model version (see CLAUDE.md's note on mixed-model states).
+MODEL_VERSION = ("showcase-trap-20260616" if _REGIME == "showcase"
+                 else "anchored-tarucha-20260610")
+
+
+# @jax.jit (used throughout this file): asks JAX to trace this function once
+# for a given input shape/dtype and cache a compiled, fused version of it, so
+# repeated calls (e.g. evaluating a spectrum on a big frequency grid) run as
+# fast vectorized array math instead of interpreted Python. This is why every
+# spectrum function below is written as plain array expressions -- no Python
+# `if`/`for` branching on the *values* inside `w` -- JIT tracing needs the
+# control flow to not depend on the array's runtime contents.
+@jax.jit
+def L(w, w0, tc):
+    """Symmetric Lorentzian: peak at +/-w0, width set by correlation time tc."""
+    return 0.5*(1/(1+(tc**2)*(w-w0)**2)+1/(1+(tc**2)*(w+w0)**2))
+
+
+@jax.jit
+def Gauss(w, w0, sig):
+    """Symmetric (non-normalized) Gaussian: peak at +/-w0, std dev sig."""
+    return 0.5*(jnp.exp(-(w-w0)**2/(2*sig**2))+jnp.exp(-(w+w0)**2/(2*sig**2)))
+
+
+# --- Calibrated constants (bland/featured; calibration script in git history) ----
+# Targets and provenance: NOISE_MODEL_SPEC.md sections 3-5. Each [M]/[E]/[C]
+# tag below follows that file's provenance ledger (see the module docstring):
+# [M] = pinned to a measured number, [E] = extrapolated from a measurement,
+# [C] = a free modeling choice.
+
+W_IR = 0.02                      # IR cutoff [C, constrained by the DC protocol]
+# "IR" (infrared) cutoff: the power laws below (see `_plaw`) diverge as w->0,
+# which is unphysical and would blow up any w=0 sample. W_IR caps that
+# divergence to a finite plateau below this frequency, which is what makes the
+# DC (zero-frequency) point of the FID-slope protocol well-defined.
+_G_EL_1, _G_EL_2 = 0.7, 0.4      # in-band charge-noise exponents [M, npj 2025]
+# These are the paper's gamma_1, gamma_2 (electrical-noise power-law slopes for
+# qubit 1 / qubit 2 respectively); NOISE_MODEL_SPEC.md section 3.
+_G_NUC = 1.2                     # local nuclear slope [M, sub-Hz hyperfine]
+
+A_EL_1 = 1.067936e-04            # amplitudes: T2*(FID) = 800 tau per qubit with
+A_EL_2 = 1.565736e-04            # electrical fractions 0.88 / 0.80 at w~ = 0.35
+A_NUC_1 = 8.622470e-06
+A_NUC_2 = 1.692308e-05
+# A_EL_*/A_NUC_* are overall PSD amplitudes (not exponents): they were solved
+# numerically so that each qubit's total dephasing (electrical + nuclear)
+# gives a free-induction-decay coherence time T2* = 800 tau, matching the
+# purified-28Si target quoted in the module docstring -- see
+# NOISE_MODEL_SPEC.md section 2 for why 800 tau was chosen over the earlier
+# 260 tau anchor.
+
+C2_SHARE = 0.8                   # shared fraction of the electrical noise power
+# This is the paper's c_E^2 (NOISE_MODEL_SPEC.md section 5): the fraction of
+# each qubit's electrical-field variance that comes from the common source
+# g0(t) shared between qubits 1 and 2, vs. each qubit's own independent draw.
+# C2_SHARE=0.8 means 80% shared power, giving the measured cross-qubit
+# electrical coherence level.
+A_J = 4.270645e-01               # J difference-coupling weights; B_J/A_J = 1.05
+B_J = 4.484177e-01               # (B_J > A_J*C2_SHARE makes c_{2,12} anti-phase);
+                                 # overall scale sets S_1212/sqrt(S11 S22) = 0.10
+# A_J, B_J are the paper's (chi_J*a, chi_J*b) in zeta_12 = chi_J*(a*e_A -
+# b*e_B) (NOISE_MODEL_SPEC.md section 5): they set how strongly the exchange
+# (ZZ) channel couples to each qubit's electrical field, and their asymmetry
+# is what flips the sign of the qubit-2/ZZ coherence relative to qubit-1/ZZ
+# (the measured (+, +, -) sign pattern discussed in the module docstring).
+DT_SHIFT = 4.0 if _REGIME == "showcase" else 1.5
+# DT_SHIFT is the paper's causal lag delta-t-tilde (NOISE_MODEL_SPEC.md
+# section 3): a shared noise source that reaches qubit B slightly later than
+# qubit A (e.g. finite signal propagation) turns the qubit-qubit cross-
+# spectrum from purely real into complex, i.e. it is literally what generates
+# a nonzero Im(S_1_2) -- with DT_SHIFT=0 the cross-spectra would be exactly
+# real and the imaginary-part reconstruction test would have nothing to check.
+# [C, Im-part generator]. Anchored classes keep the documented knob-4 value
+# 1.5 (NOISE_MODEL_SPEC.md).
+# 2026-06-16 (showcase only): raised 1.5 -> 4.0 so the lagged quiet-floor cross
+# term gives a clean single Im lobe (|Im S_1_2|/|Re| ~ 1 at the NT parking
+# window, ~2.4x the prior in-band Im) with NO in-band sign reversal (DT >= 5
+# introduces one) and PSD positivity intact (min eig of the 3x3 ~1e-8 > 0). The
+# common-mode carrier + shared-TLF line stay zero-lag/real, so the
+# average-fidelity invariance (the storage-split story) is untouched.
+
+# Class-F lines: GaAs nuclear-difference triplet at B_eff = 600 mT
+# [Malinowski 2017]. Absolute amplitudes (the x3.2 / x8 peak-over-smooth-total
+# factors are already folded in), qubit-local only. 2026-06-10: factors
+# reduced from x8/x20 -- at x20 the comb harmonic ON the line decays to
+# coherence ~1e-4 (unmeasurable); at x8 the at-line coefficient is C ~ 1.8
+# (coherence ~3e-2, measurable at 64k shots). In plain terms: the QNS
+# simulation only runs a finite number of shots (64k here), so any signal
+# that decays below roughly 1/sqrt(n_shots) is statistical noise, not a
+# reconstructible feature -- x20 line height would have put the line's
+# reconstruction signal below that floor, x8 keeps it comfortably above.
+# Reserved knob #2 of NOISE_MODEL_SPEC.md; gate-side NT margin to be re-checked.
+_LINE_CENTERS = jnp.array([0.261, 0.273, 0.534])
+_LINE_SIGMA = 0.02
+_LINE_AMP_Q1 = jnp.array([1.011e-03, 9.770e-04, 5.880e-04])
+_LINE_AMP_Q2 = jnp.array([2.817e-03, 2.744e-03, 1.897e-03])
+
+_LINES_ON = (_REGIME != "bland")
+
+# --- SHOWCASE regime constants -----------------------------------------------------
+# The third regime (see the module docstring for why it exists as a distinct,
+# non-measurement-fit landscape). Engineered trap landscape, solved by
+# scripts/calibrate_showcase.py (see its header for the full design
+# rationale). Composition per qubit: quasistatic
+# hyperfine (carries T2* = 3500 tau), a Connors-type local TLF knee (catches
+# CDD1-2, whose passbands at the featured Tg = 320 tau sit below comb tooth 1),
+# a defect-harmonic line family w0..4*w0 (catches CDD3-5 + the CPMG-16 gap)
+# plus a top-window line at 0.365 (catches the densest trains AND any
+# line-blind design fleeing up the falling floor under the min-sep = 8 tau
+# control-bandwidth scenario), all over a quiet 1/f^0.9 electrical floor that
+# sets the noise-tailored target ~2e-4. The ZZ channel additionally carries an
+# independent coupler TLF resonance + knee (j(t) in zeta_12) that ONLY the
+# two-qubit spectra can reveal -- the ablation-ladder rung-(c) channel.
+_SC_G_QS, _SC_W_QS = 2.0, 2.5e-3   # slow-bath exponent / IR cutoff (2.5e-3 =
+                                   # 400 tau correlation: keeps the FID-slope
+                                   # DC protocol inside its linear window)
+_SC_G_FL = 0.9                     # electrical-floor exponent (W_IR shared)
+_SC_W_TLF = 0.025                  # TLF knee position [Connors 2022 shape]
+_SC_A_FL_1 = 3.390594e-08          # floor amplitudes: the stylized "quiet
+_SC_A_FL_2 = 4.407772e-08          # electrical environment" contrast knob
+_SC_A_QS_1 = 4.023249e-09          # quasistatic amplitudes: T2* = 3500 tau.
+_SC_A_QS_2 = 4.020375e-09          # NOTE: with W_QS = 2.5e-3 the QS in-band
+                                   # tail alone punishes CDD1/2 (~2e-2/6e-3)
+                                   # -- no self-spectra TLF knee needed; its
+                                   # w^-2 tail was the dominant NT-window toll
+# NT parking window between the 4*w0 line's +3 sigma and the top line's
+# -3 sigma: [0.258, 0.312] (probe-iterated 2026-06-12; wider flanks left the
+# NT winner on a 2.5-sigma shoulder paying ~2x floor).
+_SC_LINE_CENTERS = jnp.array([0.051, 0.102, 0.153, 0.204, 0.372])
+# Flanking mines (4 w0, top) are CONSTANT-AREA narrowed (probe iteration 7):
+# CDD's wide filter lobes feel the line AREA, NT's parking feels the TAILS --
+# narrower-but-taller keeps CDD trapped while the window shoulders collapse.
+_SC_LINE_SIGMAS = jnp.array([0.016, 0.020, 0.018, 0.014, 0.015])
+_SC_LINE_AMP_Q1 = jnp.array([2.05e-05, 2.45e-05, 2.25e-05, 1.15e-04, 9.10e-05])
+_SC_LINE_AMP_Q2 = jnp.array([2.75e-05, 3.15e-05, 2.85e-05, 1.44e-04, 1.13e-04])
+_SC_ZZ_W0, _SC_ZZ_SIG = 0.2356, 0.020
+_SC_H_ZZ_LINE = 1.4e-05            # coupler TLF resonance (2Q-only structure)
+_SC_H_ZZ_KNEE = 1.4e-05            # raised from an earlier, weaker calibration
+                                   # (0.5e-06) so that the LOW-frequency ZZ
+                                   # exposure this knee forces is ~58% of the
+                                   # CZ gate's residual infidelity -- i.e. any
+                                   # CZ pulse design must contend with it
+                                   # (dc_12 >= pi/(4*Jmax) is unavoidable), so
+                                   # certifying the CZ gate genuinely requires
+                                   # two-qubit QNS (a single-qubit-only
+                                   # characterization would miss this channel).
+# Shared slow carrier (cross-spectra story): the slow bath that
+# carries the coherence budget is COMMON-MODE between the qubits at fraction
+# _SC_C2_QS (global field/thermal/charge drift; the measured class -- Yoneda
+# 2023 |c_12| up to 0.7 at low f), with the remainder qubit-local. This adds
+# the carrier to Re S_1_2 ONLY: S_11/S_22 keep the same totals (the carrier
+# power per qubit is unchanged), and zeta_12 = A_J e_A - B_J e_B + j never
+# sees it (a common-mode drift cancels in the interdot-tilt difference
+# coupling), so S_1212, S_1_12, S_2_12 are bit-identical too. Downstream this
+# is FIRST-ORDER INVISIBLE to average gate fidelity (the DQ/ZQ cross terms
+# cancel over the PTM) -- it is load-bearing only for element-resolved
+# quantities (which Bell coherence survives an idle), which is exactly the
+# cross-spectra demonstration the showcase report carries.
+_SC_C2_QS = 0.95                   # shared (common-mode) fraction of the
+                                   # carrier power = its inter-qubit coherence.
+                                   # Raised from an earlier calibration (0.85):
+                                   # 0.95 keeps a small safety margin below 1
+                                   # (PSD positivity requires strictly < 1;
+                                   # 0.97 sat too close to that boundary).
+# Shared-TLF defect line (cross-spectra story): the top-window
+# defect line (index _SC_SHLINE_IDX of the _SC_LINE_* arrays) is NOT a local
+# trap but a SHARED two-level fluctuator -- one defect coupling to both dots
+# (a barrier charge trap / shared phonon mode; the measured correlated-defect
+# class). It is common-mode, exactly like the slow carrier: it moves out of the
+# strictly-local line family (synthesis streams 3/4) into the shared component
+# S_qs (streams 6/7, fraction _SC_C2_QS), so the per-qubit SELF power is
+# UNCHANGED (the line stays in S_11/S_22 at full height -- average-fidelity
+# margins are bit-for-bit invariant, same theorem as the carrier) while a
+# correlated peak appears in Re S_1_2 at the line frequency. Because that
+# frequency sits in the decoupling train's PASSBAND (unlike the DC carrier the
+# train suppresses), the element-resolved Bell-storage split inherits the line's
+# contrast: a robust ~9x in-phase/anti-phase plateau instead of the carrier-only
+# 1.2-3.3x. Invisible to single-qubit QNS and to average fidelity; measurable
+# only by the two-qubit cross-spectrum -- the idle's analogue of the CZ's
+# S_12_12 design necessity.
+_SC_SHLINE_IDX = 4
+
+# Regime "capability flags": model.trajectories reads these via
+# getattr(..., False) (rather than a plain import) specifically so it keeps
+# working if an older/other regime module doesn't define them at all -- True
+# only tells it the extra sixth/seventh noise-synthesis streams (the coupler
+# defect j(t) and the shared common-mode carrier, respectively) exist to draw.
+HAS_ZZ_EXTRA = (_REGIME == "showcase")
+HAS_QS_SHARED = (_REGIME == "showcase")
+
+
+def line_priors():
+    """(centers, sigma) of the known qubit-local line set, or None (bland).
+
+    The experimentally-known part of the line fingerprint only: the centers are
+    set by the defect/nuclear species (and B field) and the width is the comb's
+    resolution limit. Heights are deliberately NOT exposed -- a line-aware
+    reconstruction model must fit them from its own reconstructed data (see
+    ``characterize.systematics``). For per-line widths and the per-channel
+    structure (showcase: the ZZ channel carries its own line) use
+    ``line_priors_per_channel``; this legacy form quotes the smallest width.
+    """
+    import numpy as np
+    if _REGIME == "showcase":
+        return (np.asarray(_SC_LINE_CENTERS, dtype=float),
+                float(np.min(np.asarray(_SC_LINE_SIGMAS))))
+    if not _LINES_ON:
+        return None
+    return np.asarray(_LINE_CENTERS, dtype=float), float(_LINE_SIGMA)
+
+
+def line_priors_per_channel():
+    """{spectrum key: (centers, sigmas)} of known line content, or None (bland).
+
+    Per-channel, per-line generalization of ``line_priors`` (same height-blind
+    contract). The anchored featured class carries the nuclear-difference
+    triplet on the qubit-local channels only; the showcase class adds its
+    defect-harmonic family on S11/S22, the coupler TLF resonance on S1212, and
+    the shared-TLF line on S12 (so the systematic model fits it as a line rather
+    than mis-reading the cross-channel resonance as smooth background).
+    """
+    import numpy as np
+    if _REGIME == "showcase":
+        c = np.asarray(_SC_LINE_CENTERS, dtype=float)
+        s = np.asarray(_SC_LINE_SIGMAS, dtype=float)
+        i = _SC_SHLINE_IDX
+        return {'S11': (c, s), 'S22': (c, s),
+                'S1212': (np.array([_SC_ZZ_W0]), np.array([_SC_ZZ_SIG])),
+                'S12': (np.array([c[i]]), np.array([s[i]]))}
+    if not _LINES_ON:
+        return None
+    c = np.asarray(_LINE_CENTERS, dtype=float)
+    s = np.full(c.size, float(_LINE_SIGMA))
+    return {'S11': (c, s), 'S22': (c, s)}
+
+
+def _plaw(w, g, wir=W_IR):
+    """IR-regularized power law (w^2 + wir^2)^(-g/2); finite at w = 0."""
+    return (w**2 + wir**2)**(-g/2)
+
+
+def _knee(w, h, wc):
+    """Lorentzian TLF knee: plateau h below wc, falling w^-2 above."""
+    return h/(1 + (w/wc)**2)
+
+
+def _lines(w, amps):
+    """Sum of the three Class-F nuclear-difference-triplet Gaussians (bland/
+    featured regimes) at the fixed centers ``_LINE_CENTERS``, each qubit
+    supplying its own ``amps`` heights (``_LINE_AMP_Q1``/``_LINE_AMP_Q2``)."""
+    out = jnp.zeros_like(w)
+    for i in range(3):
+        out = out + amps[i]*Gauss(w, _LINE_CENTERS[i], _LINE_SIGMA)
+    return out
+
+
+def _sc_lines(w, amps):
+    """Strictly-local defect-line family. The shared-TLF line (_SC_SHLINE_IDX)
+    is carried by the shared component S_qs instead, so it is excluded here --
+    its self-spectrum power is restored through S_qs (variance c + (1-c) = 1),
+    leaving S_11/S_22 unchanged."""
+    out = jnp.zeros_like(w)
+    for i in range(5):
+        if i == _SC_SHLINE_IDX:
+            continue
+        out = out + amps[i]*Gauss(w, _SC_LINE_CENTERS[i], _SC_LINE_SIGMAS[i])
+    return out
+
+
+def _sc_shline(w, amps):
+    """The single shared-TLF defect line (common-mode), carried by S_qs."""
+    i = _SC_SHLINE_IDX
+    return amps[i]*Gauss(w, _SC_LINE_CENTERS[i], _SC_LINE_SIGMAS[i])
+
+
+# --- Component spectra (consumed by the trajectory synthesis) ---------------------
+# The if/elif/else below is the regime-branching pattern flagged in the
+# module docstring, but here it picks entire function DEFINITIONS rather than
+# a scalar value: e.g. ``S_el_A`` is one Python function if ``_REGIME ==
+# "showcase"`` and a completely different one otherwise, and whichever branch
+# ran at import time is the only one that ever exists as ``spectra.S_el_A``
+# for the rest of the process.
+
+if _REGIME == "showcase":
+    @jax.jit
+    def S_el_A(w):
+        """Quiet electrical floor at qubit 1 (showcase contrast knob)."""
+        return _SC_A_FL_1*_plaw(w, _SC_G_FL)
+
+    @jax.jit
+    def S_el_B(w):
+        """Quiet electrical floor at qubit 2."""
+        return _SC_A_FL_2*_plaw(w, _SC_G_FL)
+
+    @jax.jit
+    def S_qs_1(w):
+        """Qubit-1 shared common-mode PSD: the slow T2* carrier (whose in-band
+        w^-2 tail also punishes CDD1-2) PLUS the shared-TLF defect line. Both are
+        shared between the qubits at fraction _SC_C2_QS; the synthesis carries
+        this whole component as its own shared+local stream pair, so its power
+        appears (real) in Re S_1_2. The line left the local family, so the qubit
+        SELF total is unchanged."""
+        return _SC_A_QS_1*_plaw(w, _SC_G_QS, _SC_W_QS) + _sc_shline(w, _SC_LINE_AMP_Q1)
+
+    @jax.jit
+    def S_qs_2(w):
+        """Qubit-2 shared common-mode PSD (carrier amplitude solved for
+        T2* = 3500 tau, plus the same shared-TLF line at its qubit-2 height)."""
+        return _SC_A_QS_2*_plaw(w, _SC_G_QS, _SC_W_QS) + _sc_shline(w, _SC_LINE_AMP_Q2)
+
+    @jax.jit
+    def S_lines_1(w):
+        """Qubit-1 trap-line family (strictly local defect structure)."""
+        return _sc_lines(w, _SC_LINE_AMP_Q1)
+
+    @jax.jit
+    def S_lines_2(w):
+        """Qubit-2 trap-line family (strictly local defect structure)."""
+        return _sc_lines(w, _SC_LINE_AMP_Q2)
+
+    @jax.jit
+    def S_nuc_1(w):
+        """Qubit-1 local low-frequency + featured component (showcase):
+        slow carrier + trap-line family. Total is UNCHANGED by the carrier's
+        shared/local split -- only S_1_2 sees the split."""
+        return S_qs_1(w) + S_lines_1(w)
+
+    @jax.jit
+    def S_nuc_2(w):
+        """Qubit-2 local low-frequency + featured component (showcase)."""
+        return S_qs_2(w) + S_lines_2(w)
+
+    @jax.jit
+    def S_zz_extra(w):
+        """Independent coupler-defect PSD j(t) on the ZZ channel ONLY
+        (zeta_12 = A_J e_A - B_J e_B + j): TLF resonance + knee. Structure
+        invisible to single-qubit QNS -- the rung-(c) ablation channel."""
+        return (_SC_H_ZZ_LINE*Gauss(w, _SC_ZZ_W0, _SC_ZZ_SIG)
+                + _knee(w, _SC_H_ZZ_KNEE, _SC_W_TLF))
+else:
+    @jax.jit
+    def S_el_A(w):
+        """Electrical (charge-noise) PSD seen at qubit 1. w, S in tau units."""
+        return A_EL_1*_plaw(w, _G_EL_1)
+
+    @jax.jit
+    def S_el_B(w):
+        """Electrical (charge-noise) PSD seen at qubit 2."""
+        return A_EL_2*_plaw(w, _G_EL_2)
+
+    # bland/featured have no coupler-defect or shared-carrier streams, but
+    # other modules (model.trajectories) access these names as plain module
+    # attributes (``spectra.S_zz_extra`` etc.) regardless of regime, so they
+    # are defined here as None rather than left undefined -- that lets a
+    # caller do ``kwargs.get('zz_extra', spectra.S_zz_extra)`` uniformly
+    # across all three regimes instead of needing a regime-specific check.
+    S_zz_extra = None
+    S_qs_1 = S_qs_2 = S_lines_1 = S_lines_2 = None
+
+    if _LINES_ON:
+        @jax.jit
+        def S_nuc_1(w):
+            """Local nuclear PSD at qubit 1 (Class F: smooth + reduced line triplet)."""
+            return A_NUC_1*_plaw(w, _G_NUC) + _lines(w, _LINE_AMP_Q1)
+
+        @jax.jit
+        def S_nuc_2(w):
+            """Local nuclear PSD at qubit 2 (Class F: smooth + full line triplet)."""
+            return A_NUC_2*_plaw(w, _G_NUC) + _lines(w, _LINE_AMP_Q2)
+    else:
+        @jax.jit
+        def S_nuc_1(w):
+            """Local nuclear PSD at qubit 1 (Class M: smooth)."""
+            return A_NUC_1*_plaw(w, _G_NUC)
+
+        @jax.jit
+        def S_nuc_2(w):
+            """Local nuclear PSD at qubit 2 (Class M: smooth)."""
+            return A_NUC_2*_plaw(w, _G_NUC)
+
+
+# --- Public six spectra ------------------------------------------------------------
+
+@jax.jit
+def S_11(w):
+    """Self-spectrum of qubit 1: electrical + local nuclear."""
+    return S_el_A(w) + S_nuc_1(w)
+
+
+@jax.jit
+def S_22(w):
+    """Self-spectrum of qubit 2: electrical + local nuclear."""
+    return S_el_B(w) + S_nuc_2(w)
+
+
+@jax.jit
+def _cross_el(w):
+    """Cross-PSD of the two electrical fields (shared fraction, lag DT_SHIFT)."""
+    return C2_SHARE*jnp.sqrt(S_el_A(w)*S_el_B(w))*jnp.exp(-1j*w*DT_SHIFT)
+
+
+@jax.jit
+def S_1212(w):
+    """Self-spectrum of the ZZ (Ising) channel.
+
+    zeta_12 = A_J e_A - B_J e_B (+ the independent coupler defect j(t) in the
+    showcase regime, whose PSD S_zz_extra appears here and ONLY here -- j is
+    independent of e_A/e_B, so the cross-spectra are untouched)."""
+    base = (A_J**2*S_el_A(w) + B_J**2*S_el_B(w)
+            - 2*A_J*B_J*jnp.real(_cross_el(w)))
+    if HAS_ZZ_EXTRA:
+        base = base + S_zz_extra(w)
+    return base
+
+
+@jax.jit
+def S_1_2(w):
+    """Cross-spectrum of qubits 1 and 2: the shared electrical part, plus (in
+    the showcase regime) the common-mode shared component S_qs -- the slow
+    carrier AND the shared-TLF defect line. Both terms are REAL and positive
+    (a common-mode source hits both qubits with no lag), so Re S_1_2 carries a
+    low-frequency carrier rise AND a resonant peak at the shared-line frequency.
+    Its sign decides which Bell coherence an idle protects; the line, unlike the
+    DC carrier, sits in the decoupling passband, so its contrast survives the
+    pulse train -- the storage panel's robust split."""
+    base = _cross_el(w)
+    if HAS_QS_SHARED:
+        base = base + _SC_C2_QS*jnp.sqrt(S_qs_1(w)*S_qs_2(w))
+    return base
+
+
+@jax.jit
+def S_1_12(w):
+    """Cross-spectrum of qubit 1 and the ZZ channel."""
+    return A_J*S_el_A(w) - B_J*_cross_el(w)
+
+
+@jax.jit
+def S_2_12(w):
+    """Cross-spectrum of qubit 2 and the ZZ channel."""
+    return A_J*jnp.conj(_cross_el(w)) - B_J*S_el_B(w)
+
+
+if __name__ == "__main__":
+    # `if __name__ == "__main__":` -- everything below only runs when this
+    # file is executed directly (``python -m qns2q.noise.spectra``), NOT when
+    # another module does ``from qns2q.noise.spectra import S_11`` etc.; this
+    # is where the module does its one piece of disk I/O (see the module
+    # docstring's "Pipeline role" section): it plots the six spectra and
+    # saves ``simulated_spectra.npz`` for the optimizers' ``--simulated`` mode.
+    #
+    # float64 for the saved file: this block runs in its own process, so
+    # enabling x64 here cannot perturb the record/replay pipeline numerics.
+    # Layout note: the grid is two-sided [-wmax, wmax] (41 points, w=0 at the
+    # CENTER, index 0 = -wmax) -- consumers that look for a DC sample at wk[0]
+    # correctly treat this file as DC-less (there is deliberately no w=0
+    # point on this grid; a separate DC/Ramsey-slope protocol supplies that).
+    jax.config.update("jax_enable_x64", True)
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import os
+
+    # Comb parameters (QNSExperimentConfig defaults; tau units)
+    T = 160.0
+    truncate = 20
+
+    w = jnp.linspace(-2*np.pi*truncate/T, 2*np.pi*truncate/T, 5001)
+    wk = jnp.linspace(-2*np.pi*truncate/T, 2*np.pi*truncate/T, 2*truncate + 1)
+
+    spectra = {"S_11": S_11(w), "S_22": S_22(w), "S_1212": S_1212(w),
+               "S_1_2": S_1_2(w), "S_1_12": S_1_12(w), "S_2_12": S_2_12(w)}
+    spectra_k = {"S_11": S_11(wk), "S_22": S_22(wk), "S_1212": S_1212(wk),
+                 "S_1_2": S_1_2(wk), "S_1_12": S_1_12(wk), "S_2_12": S_2_12(wk)}
+
+    fig, axs = plt.subplots(2, 3, figsize=(15, 8))
+    for ax, (name, vals) in zip(axs.ravel(), spectra.items()):
+        vals_np = np.array(vals)
+        ax.plot(np.array(w), np.real(vals_np), 'r--', lw=1)
+        if np.iscomplexobj(vals_np):
+            ax.plot(np.array(w), np.imag(vals_np), 'b--', lw=1)
+        ax.plot(np.array(wk), np.real(np.array(spectra_k[name])), 'r^', ms=4)
+        ax.set_title(name)
+        ax.set_xlabel(r'$\omega\tau$')
+        ax.set_yscale('asinh')
+        ax.tick_params(direction='in')
+        ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+    fname = run_folder()
+    path = os.path.join(project_root(), fname)
+    if not os.path.exists(path):
+        os.mkdir(path)
+
+    key_map = {"S_11": "S11", "S_22": "S22", "S_1212": "S1212",
+               "S_1_2": "S12", "S_1_12": "S112", "S_2_12": "S212"}
+    save_data = {key_map[k]: np.array(v) for k, v in spectra_k.items()}
+    save_data['wk'] = np.array(wk)
+    save_data['T'] = T
+    save_data['truncate'] = truncate
+    save_data['dt_shift'] = DT_SHIFT
+    save_data['model_version'] = MODEL_VERSION
+
+    np.savez(os.path.join(path, 'simulated_spectra.npz'), **save_data)
+    fig.savefig(os.path.join(path, 'input_spectra.pdf'))
+    print(f"Simulated spectra saved to {os.path.join(path, 'simulated_spectra.npz')}")

@@ -1,0 +1,4 @@
+SUPERSEDED as the manuscript single-qubit figure.
+This run retained the legacy readout-corrected local estimator, not the N=1
+SPAM-robust protocol. The corrected run is ../single_qubit_robust_256k_2026-10-26/.
+Retained for audit; do not use it to regenerate the paper figure.

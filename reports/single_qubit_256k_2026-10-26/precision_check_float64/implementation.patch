@@ -1,0 +1,187 @@
+diff --git a/src/qns2q/characterize/single_qubit.py b/src/qns2q/characterize/single_qubit.py
+index d3a7a65..4eaddfc 100644
+--- a/src/qns2q/characterize/single_qubit.py
++++ b/src/qns2q/characterize/single_qubit.py
+@@ -50,8 +50,11 @@ The main components are:
+ 
+ import os
+ import time
++import argparse
++from pathlib import Path
+ from dataclasses import dataclass, field
+ 
++import jax
+ import jax.numpy as jnp
+ import numpy as np
+ import matplotlib.pyplot as plt
+@@ -59,7 +62,10 @@ import matplotlib.pyplot as plt
+ from qns2q.model.observables import (make_c_12_0_mt, make_c_12_12_mt, make_c_a_0_mt,
+                          make_c_a_b_mt)
+ from qns2q.noise.spectra import S_11, S_22, S_1212
+-from qns2q.model.trajectories import make_noise_mat_arr, solver_prop
++from qns2q.model.trajectories import (make_noise_mat_arr,
++                                     _shot_coeffs_from_filters, phased_state)
++from qns2q.noise.spectra import MODEL_VERSION
++from qns2q.paths import current_regime
+ from qns2q.paths import project_root
+ 
+ # Fixed RNG seed. solver_prop() draws its per-shot noise keys from np.random,
+@@ -154,7 +160,7 @@ class QNSExperimentConfig:
+     T: jnp.float32 = 160*tau
+     gamma: jnp.float32 = T / 14
+     gamma_12: jnp.float32 = T / 28
+-    n_shots: jnp.int32 = 2000
++    n_shots: jnp.int32 = 256000
+     fname: str = "DraftRun_MScaling"
+     parent_dir: str = os.pardir
+ 
+@@ -206,6 +212,61 @@ class QNSExperimentConfig:
+                 ]]))
+ 
+ 
++class StreamedNoise:
++    """Contract the original synthesis matrices in bounded time chunks.
++
++    This changes the evaluation order only: the spectra, frequency grid,
++    trapezoid integral and Gaussian keys are the same as the dense solver.
++    No ensemble averaging or measurement sampling occurs here.
++    """
++
++    def __init__(self, config, chunk_size=512, shot_batch=1000):
++        self.config = config
++        self.chunk_size = chunk_size
++        self.shot_batch = shot_batch
++        self.cached_y = None
++        self.cached_filters = None
++
++    def filters(self, y_uv):
++        y = np.asarray(y_uv)
++        if self.cached_y is not None and np.array_equal(y, self.cached_y):
++            return self.cached_filters
++        t = np.asarray(self.config.t_vec)
++        # Actual adjacent spacings also reproduce dense trapezoid quadrature
++        # when floating-point linspace spacings are not bitwise identical.
++        dt = np.diff(t)
++        weights = np.r_[dt[0] / 2, (dt[:-1] + dt[1:]) / 2, dt[-1] / 2]
++        ys = np.stack([y[a, a, :len(t)] for a in range(3)])
++        filters = None
++        for start in range(0, len(t), self.chunk_size):
++            stop = min(start + self.chunk_size, len(t))
++            mats = make_noise_mat_arr(
++                'make', t_vec=jnp.asarray(t[start:stop]),
++                w_grain=self.config.w_grain, wmax=self.config.wmax,
++                truncate=self.config.truncate)
++            part = jnp.einsum('at,cstw->acsw',
++                             jnp.asarray(.5 * ys[:, start:stop]
++                                         * weights[None, start:stop]), mats)
++            filters = part if filters is None else filters + part
++            filters.block_until_ready()
++        self.cached_y = y.copy()
++        self.cached_filters = filters
++        return filters
++
++
++def streamed_solver(y_uv, noise_mats, t_vec, rho, n_shots):
++    """Draw every realization with the pinned spectral-synthesis RNG scheme."""
++    filters = noise_mats.filters(y_uv)
++    coeffs = []
++    for start in range(0, n_shots, noise_mats.shot_batch):
++        count = min(noise_mats.shot_batch, n_shots - start)
++        keys = jnp.asarray(np.random.randint(0, 10000, (count, 2)))
++        batch = jax.vmap(_shot_coeffs_from_filters, in_axes=[None, 0])(filters, keys)
++        coeffs.append(batch)
++        batch.block_until_ready()
++    return phased_state(jnp.concatenate(coeffs), rho)
++
++
+ class ExperimentRunner:
+     """
+     Runs a series of single-qubit QNS toy experiments for one
+@@ -227,7 +288,7 @@ class ExperimentRunner:
+         """
+         self.config = config
+         self.path = self._setup_output_directory()
+-        self.noise_mats = self._make_noise_mats()
++        self.noise_mats = StreamedNoise(config)
+         self.results = {}
+ 
+     def _setup_output_directory(self):
+@@ -295,7 +356,7 @@ class ExperimentRunner:
+ 
+         exp_func = exp_map[exp_type]
+         means, stderrs = exp_func(
+-            solver_prop,
++            streamed_solver,
+             pulse_sequence,
+             self.config.t_vec,
+             self.config.c_times,
+@@ -351,10 +412,20 @@ def main():
+     """
+     # Pin the RNG: solver_prop draws its per-shot noise keys from np.random,
+     # so seeding here makes the published figure reproducible.
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument('--n-realizations', type=int, default=256000)
++    parser.add_argument('--output-dir', type=Path, default=Path('.'))
++    parser.add_argument('--m-values', type=int, nargs='+', default=list(range(5, 20)))
++    args = parser.parse_args()
++    if args.n_realizations < 2 or min(args.m_values) < 1:
++        parser.error('Use at least two realizations and positive repetitions.')
++    args.output_dir.mkdir(parents=True, exist_ok=True)
++    jax.config.update('jax_enable_x64', True)
+     np.random.seed(RANDOM_SEED)
+ 
+-    m_values = list(range(5, 20))
++    m_values = args.m_values
+     c_1_0_mt_1_results = []
++    c_1_0_mt_1_errors = []
+     l_index = 1  # measured qubit (subscript in C_{1,0}); NOT the harmonic index
+ 
+     # One full ExperimentRunner (its own noise-mat synthesis + Monte Carlo) per
+@@ -363,7 +434,7 @@ def main():
+     # share a single runner across different M values.
+     for m in m_values:
+         print(f"Running experiment for M = {m}")
+-        config = QNSExperimentConfig(M=m)
++        config = QNSExperimentConfig(M=m, n_shots=args.n_realizations)
+         runner = ExperimentRunner(config)
+ 
+         # 'C_1_0_MT_1' with pulse pair ['CDD1', 'CDD1-1/2'] and exp_type
+@@ -382,6 +453,19 @@ def main():
+         for exp_name, pulse_sequence, exp_type, kwargs in experiments:
+             runner.run_experiment(exp_name, pulse_sequence, exp_type, **kwargs)
+             c_1_0_mt_1_results.append(runner.results[exp_name])
++            c_1_0_mt_1_errors.append(runner.results[exp_name + '_err'])
++        np.savez(args.output_dir / f'M_{m:02d}.npz',
++                 means=runner.results['C_1_0_MT_1'],
++                 stderrs=runner.results['C_1_0_MT_1_err'],
++                 M=m, n_shots=config.n_shots, n_meas=0,
++                 t_vec=np.asarray(config.t_vec),
++                 t_b=np.asarray(config.t_b), c_times=np.asarray(config.c_times),
++                 T=config.T, tau=config.tau, t_grain=config.t_grain,
++                 w_grain=config.w_grain, wmax=config.wmax,
++                 truncate=config.truncate, a_sp=config.a_sp, c=config.c,
++                 a_m=config.a_m, delta=config.delta, CM=config.CM,
++                 spMit=config.spMit, seed=RANDOM_SEED,
++                 regime=current_regime(), model_version=MODEL_VERSION)
+         # runner.save_results() # Optional: decide if you want to save results for each M
+ 
+     c_1_0_mt_1_results = np.array(c_1_0_mt_1_results)
+@@ -417,13 +501,16 @@ def main():
+     # the literal filename "C_1_0_MT_vs_M" that the manuscript's LaTeX
+     # \includegraphics call and FIGURE_PROVENANCE.md both expect -- renaming
+     # it here would silently break the figure link in the paper build.
+-    np.savez("C_1_0_MT_vs_M.npz",
++    np.savez(args.output_dir / "C_1_0_MT_vs_M.npz",
+              M_values=np.array(m_values),
+              c_1_0_mt=c_1_0_mt_1_results,
++             c_1_0_mt_stderr=np.array(c_1_0_mt_1_errors),
++             n_shots=config.n_shots, n_meas=0,
++             regime=current_regime(), model_version=MODEL_VERSION,
+              c_times=np.array(config.c_times),
+              l_qubit=l_index,
+              seed=RANDOM_SEED)
+-    plt.savefig("C_1_0_MT_vs_M.pdf", format='pdf', bbox_inches='tight')
++    plt.savefig(args.output_dir / "C_1_0_MT_vs_M.pdf", format='pdf', bbox_inches='tight')
+     print("Plot saved to C_1_0_MT_vs_M.pdf")
+     plt.show()
+ 

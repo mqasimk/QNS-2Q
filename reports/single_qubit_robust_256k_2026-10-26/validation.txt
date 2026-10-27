@@ -1,0 +1,19 @@
+Corrected N=1 SPAM-robust run completed 2026-10-26.
+49 targeted solver/SPAM/observable tests passed (validation_tests.log).
+All 75 points use 256000 noise realizations; n_meas=0 and readout_correction=False.
+All sampled M values are integers 5,...,19; there are five CPMG/CDD2 controls.
+The Ising and spectator channels are absent from the coupled Hamiltonian.
+Points and fit parameters were checked against the exact finite-M Gaussian
+reference; see validation.json. Maximum point deviation: 2.8968 reported SEMs.
+Maximum fitted-parameter deviation: 1.8777 reported standard errors.
+Finite-M filter effects shift extrapolated intercepts relative to b_SPAM;
+this does not imply a failure of the raw twisted SPAM-offset relation.
+
+The integer-axis correction used --plot-only and changed no numerical NPZ.
+Both the original executed runtime and final plot-source hashes were verified.
+The copied manuscript figure is pixel-identical to the final rendered output.
+Full LaTeX/BibTeX build succeeds (39 pages); figure/method pages visually checked.
+The three inherited missing references remain: app::bellsplit,
+eq::CZ_constraint_pi4, sec::storage. The line-506 overfull box is unchanged.
+Frozen v10/v11, bibliography, other figures and 12 open-marker lines preserved.
+Both repositories pass git diff --check; wrapper dry-run and syntax checks pass.
