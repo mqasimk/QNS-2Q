@@ -1,0 +1,14 @@
+{
+  "DraftRun_NoSPAM_showcase_cap/params.npz": "27d3cdd220e2dbcfd8b0224abbc91ad1b3b5972dfcc94ddafb76f075d370ca2c",
+  "DraftRun_NoSPAM_showcase_cap/results.npz": "1ad8e7ec51d8df13fd55a1a9e9d3c229a5eda357cdad658a0276280adfc0c10f",
+  "DraftRun_NoSPAM_showcase_cap/specs.npz": "89301c475ddea50505c80fec41b0d43883a298e5f5baed7ea3dd4b90bed91df1",
+  "DraftRun_SPAM_showcase_reference/params.npz": "3047bef0199cc6c7f732b44bc8fb7d9c6dedc09d258b8315377f1710564e6e41",
+  "DraftRun_SPAM_showcase_reference/results.npz": "ebea0140f4bccf53598ce1cca64d483d67985279eeaba21d2aae02c57565b587",
+  "DraftRun_SPAM_showcase_reference/specs.npz": "8bef5ced5bb6c73e298b296edd37be4f82291d807c5ab265b42c44c335a1cedc",
+  "DraftRun_SPAM_showcase_raw/params.npz": "d08f8c9bd95f60d094be4eb319138cfda517ada1d7e9ec0c88873787215d1231",
+  "DraftRun_SPAM_showcase_raw/results.npz": "9771335a73461223764b39056bcb3836fc4970dec8bbaf3fecc5082425788fb3",
+  "DraftRun_SPAM_showcase_raw/specs.npz": "f89d4db307c79debd426de10d82569aef4beb5993ee4bbed071069e126753790",
+  "DraftRun_SPAM_showcase_mitigated/params.npz": "cdd811931bb39d7e6b618e8e3a4e67ccbdba1aa082133ff8bb715e8998981eda",
+  "DraftRun_SPAM_showcase_mitigated/results.npz": "1ac965ac7fdd4715886479e7f6312c3292efefea4fc5e6f11ee750b4ccdb2177",
+  "DraftRun_SPAM_showcase_mitigated/specs.npz": "e64eda4c3d8f46e4f9b6aaf7976329eb65814b0b4a708d6c4a6b4918cf5903d6"
+}

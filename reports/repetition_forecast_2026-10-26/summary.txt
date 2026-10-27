@@ -1,0 +1,40 @@
+Repetition sensitivity forecast, 256,000 independent measurements per setting
+Pinned Gaussian showcase model; no new trajectories or outcome draws.
+Statistical sensitivity only; significance/coverage and systematic corrections are not certified.
+
+capture
+  harmonic 13 S12 real: baseline SNR 0.01159; first M>=3: 4375; first M>=5: 7851; best 22.66 at M=81407
+  harmonic 13 S12 imag: baseline SNR 0.02193; first M>=3: 2438; first M>=5: 3892; best 56.41 at M=102858
+  harmonic 13 S112 real: baseline SNR 3.08; first M>=3: 16; first M>=5: 41; best 125.4 at M=57319
+  harmonic 13 S112 imag: baseline SNR 0.9367; first M>=3: 166; first M>=5: 422; best 54.57 at M=115618
+  harmonic 13 S212 real: baseline SNR 3.587; first M>=3: 13; first M>=5: 32; best 134.8 at M=49152
+  harmonic 13 S212 imag: baseline SNR 0.8134; first M>=3: 209; first M>=5: 599; best 43.68 at M=102858
+mitigated
+  harmonic 13 S12 real: baseline SNR 0.006478; first M>=3: 4918; first M>=5: 8825; best 20.26 at M=81407
+  harmonic 13 S12 imag: baseline SNR 0.01226; first M>=3: 2740; first M>=5: 4375; best 50.38 at M=102858
+  harmonic 13 S112 real: baseline SNR 0.2377; first M>=3: 147; first M>=5: 235; best 119.1 at M=57319
+  harmonic 13 S112 imag: baseline SNR 0.05866; first M>=3: 599; first M>=5: 1209; best 51.74 at M=115618
+  harmonic 13 S212 real: baseline SNR 0.09771; first M>=3: 334; first M>=5: 533; best 120.2 at M=57319
+  harmonic 13 S212 imag: baseline SNR 0.01849; first M>=3: 1930; first M>=5: 3072; best 39.18 at M=102858
+
+Adaptive M per acquisition:
+  capture S12 real: first max M>=3: 4375; >=5: 7851; best SNR 22.66; own M 81407; comb bias/SE 5.122
+  capture S12 imag: first max M>=3: 2438; >=5: 3892; best SNR 56.41; own M 102858; comb bias/SE 2.388
+  capture S112 real: first max M>=3: 16; >=5: 41; best SNR 125.4; own M 57319; comb bias/SE 0.1954
+  capture S112 imag: first max M>=3: 166; >=5: 422; best SNR 54.57; own M 115618; comb bias/SE -2.31
+  capture S212 real: first max M>=3: 13; >=5: 32; best SNR 134.8; own M 49152; comb bias/SE -1.455
+  capture S212 imag: first max M>=3: 209; >=5: 599; best SNR 43.68; own M 102858; comb bias/SE -1.849
+  mitigated S12 real: first max M>=3: 4918; >=5: 8825; best SNR 20.26; own M 81407; comb bias/SE 4.581
+  mitigated S12 imag: first max M>=3: 2740; >=5: 4375; best SNR 50.38; own M 102858; comb bias/SE 2.132
+  mitigated S112 real: first max M>=3: 147; >=5: 235; best SNR 119.1; own M 57319; comb bias/SE 0.1856
+  mitigated S112 imag: first max M>=3: 599; >=5: 1209; best SNR 51.74; own M 115618; comb bias/SE -2.19
+  mitigated S212 real: first max M>=3: 334; >=5: 533; best SNR 120.2; own M 57319; comb bias/SE -1.297
+  mitigated S212 imag: first max M>=3: 1930; >=5: 3072; best SNR 39.18; own M 102858; comb bias/SE -1.659
+
+Maximum normalized covariance difference, grid doubled: 9.774221566201826e-08
+Maximum normalized covariance difference, bandwidth doubled: 0.9999991059569603
+Baseline largest difference in old MC SE units: 3.7676608245794356
+
+Higher M increases experiment duration at fixed shots; no fixed-wall-time claim.
+Large-M results use a refined continuous spectrum, not the coarse discrete simulation frequency grid.
+Ideal instantaneous pulses omit pulse errors, relaxation, and drift.

@@ -1,0 +1,59 @@
+Uniform PSD-scaling sensitivity forecast at harmonic 13
+All six spectral functions are multiplied by the same positive alpha.
+Gaussian phase covariance scales exactly by alpha at fixed M; no trajectories or outcomes sampled.
+Original model parameters, run files, manuscript, and figures are unchanged.
+256,000 measurements per setting. Ideal pulse controls and exact SPAM calibration.
+Criterion: |alpha S| > 3 SE + |modeled raw comb-inversion bias|.
+These are planning forecasts, not coverage/significance validation.
+
+capture M=10 real S12: first scale None; best score -0.003315 at scale 1
+capture M=10 imag S12: first scale 251.18864315095797; best score 47.54 at scale 9261
+capture M=16 real S12: first scale None; best score 0.0852 at scale 4642
+capture M=16 imag S12: first scale 146.7799267622069; best score 49.75 at scale 5843
+capture M=32 real S12: first scale 398.1071705534973; best score 8.402 at scale 2512
+capture M=32 imag S12: first scale 73.56422544596414; best score 51.83 at scale 3162
+capture M=64 real S12: first scale 125.89254117941675; best score 12.87 at scale 1259
+capture M=64 imag S12: first scale 36.869450645195755; best score 52.9 at scale 1585
+capture M=128 real S12: first scale 54.116952654646376; best score 15.17 at scale 631
+capture M=128 imag S12: first scale 18.478497974222908; best score 53.45 at scale 794.3
+capture M=256 real S12: first scale 25.118864315095795; best score 16.35 at scale 316.2
+capture M=256 imag S12: first scale 9.261187281287935; best score 53.73 at scale 398.1
+capture M=512 real S12: first scale 11.659144011798316; best score 16.94 at scale 158.5
+capture M=512 imag S12: first scale 4.641588833612778; best score 53.88 at scale 199.5
+capture M=768 real S12: first scale 7.943282347242816; best score 17.15 at scale 108
+capture M=768 imag S12: first scale 3.1622776601683795; best score 53.93 at scale 135.9
+capture M=1024 real S12: first scale 5.843414133735175; best score 17.24 at scale 79.43
+capture M=1024 imag S12: first scale 2.326305067153626; best score 53.95 at scale 100
+mitigated M=10 real S12: first scale None; best score -0.002966 at scale 1
+mitigated M=10 imag S12: first scale 271.2272579332027; best score 42.47 at scale 9261
+mitigated M=16 real S12: first scale None; best score 0.07622 at scale 4642
+mitigated M=16 imag S12: first scale 171.1328304161781; best score 44.45 at scale 5843
+mitigated M=32 real S12: first scale 464.15888336127773; best score 7.516 at scale 2512
+mitigated M=32 imag S12: first scale 85.76958985908941; best score 46.3 at scale 3162
+mitigated M=64 real S12: first scale 146.7799267622069; best score 11.51 at scale 1259
+mitigated M=64 imag S12: first scale 42.986623470822764; best score 47.25 at scale 1585
+mitigated M=128 real S12: first scale 58.434141337351754; best score 13.57 at scale 631
+mitigated M=128 imag S12: first scale 21.544346900318832; best score 47.74 at scale 794.3
+mitigated M=256 real S12: first scale 27.12272579332028; best score 14.62 at scale 316.2
+mitigated M=256 imag S12: first scale 10.797751623277094; best score 47.99 at scale 398.1
+mitigated M=512 real S12: first scale 13.593563908785255; best score 15.15 at scale 158.5
+mitigated M=512 imag S12: first scale 5.411695265464636; best score 48.12 at scale 199.5
+mitigated M=768 real S12: first scale 9.261187281287935; best score 15.34 at scale 108
+mitigated M=768 imag S12: first scale 3.4145488738336014; best score 48.17 at scale 135.9
+mitigated M=1024 real S12: first scale 6.812920690579613; best score 15.42 at scale 79.43
+mitigated M=1024 imag S12: first scale 2.712272579332028; best score 48.18 at scale 100
+
+Fixed alpha*M = 6144 comparison (no SPAM; harmonic 13 Re S12):
+  M=16, alpha=384: SNR=4.1089, bias/SE=4.0919, guarded score=0.017054
+  M=32, alpha=192: SNR=4.1254, bias/SE=2.5202, guarded score=1.6053
+  M=64, alpha=96: SNR=4.1337, bias/SE=1.7295, guarded score=2.4042
+  M=128, alpha=48: SNR=4.1379, bias/SE=1.333, guarded score=2.8048
+
+Interpretation:
+Uniform scaling preserves spectral shape, relative cross-correlations, and PSD-matrix positivity.
+In the comb regime covariance is approximately proportional to alpha*M. Finite-M filtering means this is not an exact equivalence.
+At fixed M, relative comb-inversion bias does not shrink with alpha. Short-M leakage and cancellation can defeat the apparent statistical gain.
+Uniform scaling also strengthens the peaks and increases decoherence in all gate experiments. Gate fidelities and optimal controls were not recalculated here.
+An admissible global model change must also check the strong-feature settings; this study tests harmonic 13 only.
+Increasing only selected cross-spectra is not covered and can violate spectral-matrix positivity.
+SPAM robust remains excluded. No adoption of a rescaled manuscript model is implied.

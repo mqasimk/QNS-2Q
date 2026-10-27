@@ -1,0 +1,132 @@
+Decision 30: analytic finite-measurement postprocessing
+Scientific code/data pin: 4241fbf457ba2fabb9a0c5e1d936dec95c231a25
+Physical measurements per observable/preparation/readout setting: 256000
+
+Completed for capture, reference, raw and mitigated. SPAM-robust is excluded.
+Original run data, manuscript source and paper figures were not replaced.
+No trajectories, noise realizations or detector outcomes were generated; no gate optimization was run.
+
+Statistical model:
+  The saved ensemble-averaged readout probabilities define independent multinomial acquisitions.
+  Different observable and preparation settings, including repeated settings in different coefficient families, receive independent shot budgets.
+  Readout inversion and preparation correction use the saved exact SPAM calibration.
+  The physical covariance replaces the trajectory-only Monte Carlo covariance; it is not added to it.
+  Second-order Taylor propagation uses exact second/third/fourth multinomial moments.
+  Nonlinear finite-shot biases are saved separately; the probability-averaged coefficient central values are retained.
+  Gaussian quadrature is only a deterministic check of log-Taylor truncation, not a coverage test.
+
+Reconstruction:
+  The pinned harmonic inversion, adaptive uncertainty-weighted DC fits, two-step comb-bias correction and existing residual-error prescription were rerun.
+  The inherited correction uncertainty uses the pinned simultaneous-one-sigma-shift prescription. This pass does not validate it as a full joint covariance treatment.
+  Harmonic correlations across derived spectra and their use in later gate uncertainty bands have not been newly validated.
+  Inherited line-prior/model assumptions and later review decisions remain open.
+
+Validation and comparison:
+
+DraftRun_NoSPAM_showcase_cap
+  Median statistical SE multiplier over all 180 real harmonic components: 64.873.
+  Recovered coefficient points: 400; maximum discrepancy 4.885e-15.
+  Physical acquisition settings: 1600; assumed total measurements: 409600000 (calibration excluded).
+  Settings needing more than a first-order diagnostic: 65; second-order terms are included.
+  Maximum Gaussian-quadrature/Taylor variance discrepancy: 0.00045312.
+  Maximum baseline error scaled to its channel harmonic scale: 4.2729e-07.
+  S11 real: median statistical SE multiplier 60.17; maximum 122.4.
+  S22 real: median statistical SE multiplier 62.53; maximum 128.
+  S1212 real: median statistical SE multiplier 48.88; maximum 102.1.
+  S12 real: median statistical SE multiplier 1824; maximum 7342.
+  S12 imag: median statistical SE multiplier 3560; maximum 2.174e+04.
+  S112 real: median statistical SE multiplier 52.91; maximum 82.85.
+  S112 imag: median statistical SE multiplier 59.8; maximum 127.8.
+  S212 real: median statistical SE multiplier 47.62; maximum 75.49.
+  S212 imag: median statistical SE multiplier 55.66; maximum 117.5.
+  DC S11: fit 0.00056756903 +/- 1.1732e-06, reliable=False, indices=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15] -> 0.00056240855 +/- 2.2237e-06, reliable=True, indices=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15].
+  DC S22: fit 0.00056640266 +/- 1.1717e-06, reliable=False, indices=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15] -> 0.0005621393 +/- 2.2236e-06, reliable=True, indices=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15].
+  DC S1212: fit 1.4100327e-05 +/- 3.2722e-08, reliable=True, indices=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15] -> 1.4112101e-05 +/- 3.0109e-07, reliable=True, indices=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15].
+  DC S12: fit 0.00054395969 +/- 1.8852e-06, reliable=False, indices=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15] -> 0.00054165973 +/- 5.1714e-06, reliable=True, indices=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15].
+  DC S112: fit -1.7002029e-09 +/- 5.9792e-07, reliable=False, indices=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15] -> -7.3375801e-08 +/- 1.1379e-06, reliable=False, indices=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15].
+  DC S212: fit -4.7213426e-07 +/- 6.0648e-07, reliable=False, indices=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15] -> -5.6204746e-07 +/- 1.1385e-06, reliable=False, indices=[6, 7, 8, 9, 10, 11, 12, 13, 14, 15].
+
+DraftRun_SPAM_showcase_reference
+  Median statistical SE multiplier over all 180 real harmonic components: 80.267.
+  Recovered coefficient points: 340; maximum discrepancy 2.9837e-15.
+  Physical acquisition settings: 1360; assumed total measurements: 348160000 (calibration excluded).
+  Settings needing more than a first-order diagnostic: 79; second-order terms are included.
+  Maximum Gaussian-quadrature/Taylor variance discrepancy: 7.7373e-05.
+  Maximum baseline error scaled to its channel harmonic scale: 1.4053e-07.
+  S11 real: median statistical SE multiplier 69.02; maximum 156.3.
+  S22 real: median statistical SE multiplier 71.2; maximum 163.7.
+  S1212 real: median statistical SE multiplier 53.72; maximum 126.6.
+  S12 real: median statistical SE multiplier 2509; maximum 1.175e+04.
+  S12 imag: median statistical SE multiplier 3662; maximum 3.786e+04.
+  S112 real: median statistical SE multiplier 62.45; maximum 100.5.
+  S112 imag: median statistical SE multiplier 71.31; maximum 163.8.
+  S212 real: median statistical SE multiplier 56.92; maximum 94.59.
+  S212 imag: median statistical SE multiplier 64.36; maximum 146.5.
+  DC S11: fit 0.00058390753 +/- 1.0368e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9] -> 0.00058994852 +/- 2.4784e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9].
+  DC S22: fit 0.00058481303 +/- 1.067e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9] -> 0.00059005269 +/- 2.4779e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9].
+  DC S1212: fit 1.4063371e-05 +/- 3.3009e-08, reliable=True, indices=[3, 4, 5, 6, 7, 8, 9] -> 1.4057695e-05 +/- 3.9465e-07, reliable=True, indices=[3, 4, 5, 6, 7, 8, 9].
+  DC S12: fit 0.00055375781 +/- 1.3013e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9] -> 0.00055909313 +/- 4.4785e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9].
+  DC S112: fit 3.3809924e-07 +/- 5.4165e-07, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9] -> 3.4342594e-07 +/- 1.2636e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9].
+  DC S212: fit -9.9215103e-07 +/- 5.3561e-07, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9] -> -8.4968771e-07 +/- 1.2641e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9].
+
+DraftRun_SPAM_showcase_raw
+  Median statistical SE multiplier over all 180 real harmonic components: 293.8.
+  Recovered coefficient points: 340; maximum discrepancy 3.2196e-15.
+  Physical acquisition settings: 1360; assumed total measurements: 348160000 (calibration excluded).
+  Settings needing more than a first-order diagnostic: 0; second-order terms are included.
+  Maximum Gaussian-quadrature/Taylor variance discrepancy: 7.379e-05.
+  Maximum baseline error scaled to its channel harmonic scale: 1.4183e-07.
+  S11 real: median statistical SE multiplier 604.9; maximum 1241.
+  S22 real: median statistical SE multiplier 603.6; maximum 1132.
+  S1212 real: median statistical SE multiplier 447.3; maximum 878.3.
+  S12 real: median statistical SE multiplier 2277; maximum 7552.
+  S12 imag: median statistical SE multiplier 2914; maximum 9452.
+  S112 real: median statistical SE multiplier 148.8; maximum 306.7.
+  S112 imag: median statistical SE multiplier 169.7; maximum 408.
+  S212 real: median statistical SE multiplier 672.6; maximum 1590.
+  S212 imag: median statistical SE multiplier 777.3; maximum 2098.
+  DC S11: fit 0.00056338703 +/- 1.0123e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9] -> 0.0005681277 +/- 2.4996e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9].
+  DC S22: fit 0.00060060511 +/- 1.0794e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9] -> 0.0006083205 +/- 3.2048e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9].
+  DC S1212: fit 1.362124e-05 +/- 3.657e-08, reliable=True, indices=[3, 4, 5, 6, 7, 8, 9] -> 1.3621036e-05 +/- 7.7032e-07, reliable=True, indices=[3, 4, 5, 6, 7, 8, 9].
+  DC S12: fit 0.00054655031 +/- 1.294e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9] -> 0.00055129033 +/- 5.0001e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9].
+  DC S112: fit 2.4908903e-07 +/- 5.2124e-07, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9] -> 2.7022153e-07 +/- 1.2732e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9].
+  DC S212: fit -1.0327328e-06 +/- 5.6338e-07, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9] -> -8.1050045e-07 +/- 1.6269e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9].
+
+DraftRun_SPAM_showcase_mitigated
+  Median statistical SE multiplier over all 180 real harmonic components: 931.12.
+  Recovered coefficient points: 340; maximum discrepancy 2.498e-15.
+  Physical acquisition settings: 1360; assumed total measurements: 348160000 (calibration excluded).
+  Settings needing more than a first-order diagnostic: 0; second-order terms are included.
+  Maximum Gaussian-quadrature/Taylor variance discrepancy: 7.7343e-05.
+  Maximum baseline error scaled to its channel harmonic scale: 1.4058e-07.
+  S11 real: median statistical SE multiplier 1273; maximum 6479.
+  S22 real: median statistical SE multiplier 1340; maximum 6989.
+  S1212 real: median statistical SE multiplier 772.8; maximum 3868.
+  S12 real: median statistical SE multiplier 2711; maximum 1.319e+04.
+  S12 imag: median statistical SE multiplier 4079; maximum 4.128e+04.
+  S112 real: median statistical SE multiplier 415.2; maximum 1298.
+  S112 imag: median statistical SE multiplier 507.8; maximum 2788.
+  S212 real: median statistical SE multiplier 1050; maximum 3355.
+  S212 imag: median statistical SE multiplier 1291; maximum 6627.
+  DC S11: fit 0.00058458286 +/- 1.0508e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9] -> 0.00059025978 +/- 2.6015e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9].
+  DC S22: fit 0.00058524121 +/- 1.0369e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9] -> 0.0005921473 +/- 3.1154e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9].
+  DC S1212: fit 1.4064843e-05 +/- 3.4051e-08, reliable=True, indices=[3, 4, 5, 6, 7, 8, 9] -> 1.4057128e-05 +/- 7.9341e-07, reliable=True, indices=[3, 4, 5, 6, 7, 8, 9].
+  DC S12: fit 0.00055406618 +/- 1.3204e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9] -> 0.00055896161 +/- 5.0761e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9].
+  DC S112: fit 3.4150045e-07 +/- 5.4999e-07, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9] -> 3.509038e-07 +/- 1.3525e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9].
+  DC S212: fit -1.0177922e-06 +/- 5.4507e-07, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9] -> -7.9704525e-07 +/- 1.5971e-06, reliable=False, indices=[3, 4, 5, 6, 7, 8, 9].
+
+Fourier quadratures: 268 cached filters; maximum discrepancy against pinned quadrature probes 7.7814e-11.
+
+Interpretation limits:
+  These are predicted finite-shot uncertainties around probability-averaged means, not a newly sampled experimental data set.
+  A changed DC reliability flag reflects the existing uncertainty-dependent detection rule; it does not by itself establish a more linear physical regime.
+  Expected finite-shot nonlinear bias can matter at nearly ideal contrasts; inspect observable_statistics.npz before making precision/coverage claims.
+  No robust-arm conclusions or updated gate predictions/optimizations are supplied.
+
+Outputs in each run folder:
+  params.npz: unchanged pinned configuration; results.npz: original means with revised physical-shot SEs.
+  observable_statistics.npz: primitive probabilities/weights, derivatives, first/second-order errors, finite-shot bias and curvature diagnostics.
+  raw_spectra.npz: inversion before comb-bias correction; specs.npz: revised pinned Stage-2 result.
+  dc_fits.json: actual DC fit indices, errors and reliability flags.
+  baseline/: unchanged pinned inputs and independently reproduced old-uncertainty reconstruction.
+Root provenance, checksums and spectral_comparison.csv record assumptions and changes.

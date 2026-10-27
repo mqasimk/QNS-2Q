@@ -1,0 +1,445 @@
+{
+  "uncertainty_multiplier": 1,
+  "error_field": "*_errtot",
+  "spatial_offsets": "SPAM arms only, for visibility",
+  "axes": "paired asinh axes with common limits; negative bounds retained",
+  "original": "pinned original summaries, redrawn on matching signed axes",
+  "revised": "analytic multinomial measurement errors, second-order propagation",
+  "outputs": [
+    {
+      "image": "capture_comparison.png",
+      "title": "Capture reconstruction",
+      "panels": [
+        {
+          "spectrum": "S11",
+          "component": "real",
+          "y_limits": [
+            -1.652803714078634e-08,
+            0.0015010795734875266
+          ],
+          "asinh_linear_width": 1.691194334930421e-08
+        },
+        {
+          "spectrum": "S22",
+          "component": "real",
+          "y_limits": [
+            -1.9020377837733126e-08,
+            0.0014769938375605667
+          ],
+          "asinh_linear_width": 2.0523220298778738e-08
+        },
+        {
+          "spectrum": "S1212",
+          "component": "real",
+          "y_limits": [
+            -6.081508624878645e-07,
+            3.4727195374745667e-05
+          ],
+          "asinh_linear_width": 1.0877639418943595e-08
+        },
+        {
+          "spectrum": "S12",
+          "component": "real",
+          "y_limits": [
+            -1.2562705657057373e-05,
+            0.002472393889920759
+          ],
+          "asinh_linear_width": 7.948525184745937e-09
+        },
+        {
+          "spectrum": "S112",
+          "component": "real",
+          "y_limits": [
+            -3.126457204313765e-06,
+            2.7501932432658575e-06
+          ],
+          "asinh_linear_width": 4.297869039095883e-09
+        },
+        {
+          "spectrum": "S212",
+          "component": "real",
+          "y_limits": [
+            -4.152360802841205e-06,
+            1.4423987699228562e-06
+          ],
+          "asinh_linear_width": 5.751803314699064e-09
+        },
+        {
+          "spectrum": "S12",
+          "component": "imag",
+          "y_limits": [
+            -8.672604215841345e-06,
+            8.290963972136786e-06
+          ],
+          "asinh_linear_width": 8.955447606225845e-09
+        },
+        {
+          "spectrum": "S112",
+          "component": "imag",
+          "y_limits": [
+            -9.526397262202894e-07,
+            1.5184111140647015e-06
+          ],
+          "asinh_linear_width": 4.015781218054299e-09
+        },
+        {
+          "spectrum": "S212",
+          "component": "imag",
+          "y_limits": [
+            -1.4288122996022265e-06,
+            1.4331858913664301e-06
+          ],
+          "asinh_linear_width": 3.824553754229037e-09
+        }
+      ]
+    },
+    {
+      "image": "spam_comparison.png",
+      "title": "SPAM comparison: reference, raw and mitigated",
+      "panels": [
+        {
+          "spectrum": "S11",
+          "component": "real",
+          "y_limits": [
+            -5.3958923016034915e-05,
+            0.0026040282039523958
+          ],
+          "asinh_linear_width": 1.691194334930421e-08
+        },
+        {
+          "spectrum": "S22",
+          "component": "real",
+          "y_limits": [
+            -4.073068259965951e-05,
+            0.0026106598898142023
+          ],
+          "asinh_linear_width": 2.0523220298778738e-08
+        },
+        {
+          "spectrum": "S1212",
+          "component": "real",
+          "y_limits": [
+            -2.7326080201489827e-06,
+            3.980085629849745e-05
+          ],
+          "asinh_linear_width": 1.0877639418943595e-08
+        },
+        {
+          "spectrum": "S12",
+          "component": "real",
+          "y_limits": [
+            -8.924860705814915e-05,
+            0.0028348227507732013
+          ],
+          "asinh_linear_width": 7.948525184745937e-09
+        },
+        {
+          "spectrum": "S112",
+          "component": "real",
+          "y_limits": [
+            -2.6531470354571086e-06,
+            4.486107694129494e-06
+          ],
+          "asinh_linear_width": 4.297869039095883e-09
+        },
+        {
+          "spectrum": "S212",
+          "component": "real",
+          "y_limits": [
+            -6.231137795978464e-06,
+            2.1167517400000335e-06
+          ],
+          "asinh_linear_width": 5.751803314699064e-09
+        },
+        {
+          "spectrum": "S12",
+          "component": "imag",
+          "y_limits": [
+            -1.6584700869682246e-05,
+            1.670011545538756e-05
+          ],
+          "asinh_linear_width": 8.955447606225845e-09
+        },
+        {
+          "spectrum": "S112",
+          "component": "imag",
+          "y_limits": [
+            -1.6990458624851179e-06,
+            2.483847486092398e-06
+          ],
+          "asinh_linear_width": 4.015781218054299e-09
+        },
+        {
+          "spectrum": "S212",
+          "component": "imag",
+          "y_limits": [
+            -4.911081499323958e-06,
+            5.152996896424567e-06
+          ],
+          "asinh_linear_width": 3.824553754229037e-09
+        }
+      ]
+    },
+    {
+      "image": "reference_comparison.png",
+      "title": "SPAM-free reference",
+      "panels": [
+        {
+          "spectrum": "S11",
+          "component": "real",
+          "y_limits": [
+            -5.188541210415552e-05,
+            0.0025969188651268956
+          ],
+          "asinh_linear_width": 1.691194334930421e-08
+        },
+        {
+          "spectrum": "S22",
+          "component": "real",
+          "y_limits": [
+            -3.829100050213643e-05,
+            0.002516870148177365
+          ],
+          "asinh_linear_width": 2.0523220298778738e-08
+        },
+        {
+          "spectrum": "S1212",
+          "component": "real",
+          "y_limits": [
+            -9.30523116785742e-07,
+            3.586048427624185e-05
+          ],
+          "asinh_linear_width": 1.0877639418943595e-08
+        },
+        {
+          "spectrum": "S12",
+          "component": "real",
+          "y_limits": [
+            -8.913821449368124e-05,
+            0.0028345779757713613
+          ],
+          "asinh_linear_width": 7.948525184745937e-09
+        },
+        {
+          "spectrum": "S112",
+          "component": "real",
+          "y_limits": [
+            -2.4099880254184617e-06,
+            4.189591760816055e-06
+          ],
+          "asinh_linear_width": 4.297869039095883e-09
+        },
+        {
+          "spectrum": "S212",
+          "component": "real",
+          "y_limits": [
+            -5.108974042099918e-06,
+            1.0431928765422087e-06
+          ],
+          "asinh_linear_width": 5.751803314699064e-09
+        },
+        {
+          "spectrum": "S12",
+          "component": "imag",
+          "y_limits": [
+            -1.458522462680355e-05,
+            1.469868980492535e-05
+          ],
+          "asinh_linear_width": 8.955447606225845e-09
+        },
+        {
+          "spectrum": "S112",
+          "component": "imag",
+          "y_limits": [
+            -1.2207395750155696e-06,
+            1.9743894110371203e-06
+          ],
+          "asinh_linear_width": 4.015781218054299e-09
+        },
+        {
+          "spectrum": "S212",
+          "component": "imag",
+          "y_limits": [
+            -1.6678889472330247e-06,
+            2.015121521803022e-06
+          ],
+          "asinh_linear_width": 3.824553754229037e-09
+        }
+      ]
+    },
+    {
+      "image": "raw_comparison.png",
+      "title": "Raw SPAM reconstruction",
+      "panels": [
+        {
+          "spectrum": "S11",
+          "component": "real",
+          "y_limits": [
+            -4.9165853506579785e-05,
+            0.002587182713801243
+          ],
+          "asinh_linear_width": 1.691194334930421e-08
+        },
+        {
+          "spectrum": "S22",
+          "component": "real",
+          "y_limits": [
+            -3.923324499537269e-05,
+            0.002603846376953839
+          ],
+          "asinh_linear_width": 2.0523220298778738e-08
+        },
+        {
+          "spectrum": "S1212",
+          "component": "real",
+          "y_limits": [
+            -2.726173382246089e-06,
+            3.847841072270272e-05
+          ],
+          "asinh_linear_width": 1.0877639418943595e-08
+        },
+        {
+          "spectrum": "S12",
+          "component": "real",
+          "y_limits": [
+            -8.789135029233538e-05,
+            0.0028317935326970575
+          ],
+          "asinh_linear_width": 7.948525184745937e-09
+        },
+        {
+          "spectrum": "S112",
+          "component": "real",
+          "y_limits": [
+            -2.63377572085893e-06,
+            4.038810550436691e-06
+          ],
+          "asinh_linear_width": 4.297869039095883e-09
+        },
+        {
+          "spectrum": "S212",
+          "component": "real",
+          "y_limits": [
+            -6.231137795978464e-06,
+            2.1167517400000335e-06
+          ],
+          "asinh_linear_width": 5.751803314699064e-09
+        },
+        {
+          "spectrum": "S12",
+          "component": "imag",
+          "y_limits": [
+            -1.6460394417800756e-05,
+            1.6500382939297396e-05
+          ],
+          "asinh_linear_width": 8.955447606225845e-09
+        },
+        {
+          "spectrum": "S112",
+          "component": "imag",
+          "y_limits": [
+            -1.6313514249806881e-06,
+            2.363843496273658e-06
+          ],
+          "asinh_linear_width": 4.015781218054299e-09
+        },
+        {
+          "spectrum": "S212",
+          "component": "imag",
+          "y_limits": [
+            -4.911081499323958e-06,
+            5.152996896424567e-06
+          ],
+          "asinh_linear_width": 3.824553754229037e-09
+        }
+      ]
+    },
+    {
+      "image": "mitigated_comparison.png",
+      "title": "SPAM-mitigated reconstruction",
+      "panels": [
+        {
+          "spectrum": "S11",
+          "component": "real",
+          "y_limits": [
+            -5.3958923016034915e-05,
+            0.0026040282039523958
+          ],
+          "asinh_linear_width": 1.691194334930421e-08
+        },
+        {
+          "spectrum": "S22",
+          "component": "real",
+          "y_limits": [
+            -4.064847184402699e-05,
+            0.002536140424774692
+          ],
+          "asinh_linear_width": 2.0523220298778738e-08
+        },
+        {
+          "spectrum": "S1212",
+          "component": "real",
+          "y_limits": [
+            -2.454408982519912e-06,
+            3.95038260523114e-05
+          ],
+          "asinh_linear_width": 1.0877639418943595e-08
+        },
+        {
+          "spectrum": "S12",
+          "component": "real",
+          "y_limits": [
+            -8.924860705814915e-05,
+            0.0028348227507732013
+          ],
+          "asinh_linear_width": 7.948525184745937e-09
+        },
+        {
+          "spectrum": "S112",
+          "component": "real",
+          "y_limits": [
+            -2.6477650129881774e-06,
+            4.485472192874412e-06
+          ],
+          "asinh_linear_width": 4.297869039095883e-09
+        },
+        {
+          "spectrum": "S212",
+          "component": "real",
+          "y_limits": [
+            -6.103790189972644e-06,
+            2.069143166878236e-06
+          ],
+          "asinh_linear_width": 5.751803314699064e-09
+        },
+        {
+          "spectrum": "S12",
+          "component": "imag",
+          "y_limits": [
+            -1.6584700869682246e-05,
+            1.670011545538756e-05
+          ],
+          "asinh_linear_width": 8.955447606225845e-09
+        },
+        {
+          "spectrum": "S112",
+          "component": "imag",
+          "y_limits": [
+            -1.6990458624851179e-06,
+            2.483847486092398e-06
+          ],
+          "asinh_linear_width": 4.015781218054299e-09
+        },
+        {
+          "spectrum": "S212",
+          "component": "imag",
+          "y_limits": [
+            -4.805725394986721e-06,
+            5.075538334039105e-06
+          ],
+          "asinh_linear_width": 3.824553754229037e-09
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "new_statistical_tests": 17,
+  "pinned_spam_inversion_dc_tests": 33,
+  "total_passed": 50,
+  "new_test_command": "JAX_PLATFORMS=cpu QNS2Q_REGIME=showcase venv/bin/python -m pytest -q tests/test_shot_noise.py",
+  "pinned_tests": [
+    "test_spam.py",
+    "test_spectral_inversion.py",
+    "test_systematics.py::test_ramsey_fit_dc_recovers_linear_slope",
+    "test_systematics.py::test_ramsey_fit_dc_flags_quasistatic"
+  ],
+  "original_data_checksums_verified": 12,
+  "implementation_sha256": {
+    "scripts/postprocess_shot_noise.py": "fb9206b70cbd57a82fc8947b74403ecc6fe9a829ccf3baf5952438b487418a75",
+    "src/qns2q/characterize/shot_noise.py": "57a25fa12350866fd1cd4f386f26f45163a3f176164f2b71dc99177bfb5eef4d",
+    "tests/test_shot_noise.py": "f731d116e53419e226c45630b0a24343b1c50035d325357d70fc44a129933d21"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "coefficient_points": 340,
+  "physical_measurement_settings": 1360,
+  "total_physical_shots": 348160000,
+  "maximum_saved_value_discrepancy": 2.4980018054066022e-15,
+  "nonlinear_flags": [],
+  "estimator_approximation": "second-order Taylor; exact multinomial central moments",
+  "maximum_quadrature_variance_discrepancy": 7.734262777332296e-05,
+  "original_means_preserved": true
+}

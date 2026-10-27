@@ -1,0 +1,13 @@
+spectrum,component,arm,first_M_statistical_3,first_M_with_bias_3,first_M_statistical_5,first_M_with_bias_5
+S12,real,capture,4375,6144,7851,11150
+S12,real,mitigated,4918,6984,8825,12288
+S12,imag,capture,2438,2438,3892,4096
+S12,imag,mitigated,2740,2740,4375,4918
+S112,real,capture,16,16,41,41
+S112,real,mitigated,147,147,235,235
+S112,imag,capture,166,166,422,474
+S112,imag,mitigated,599,674,1209,1209
+S212,real,capture,13,13,32,32
+S212,real,mitigated,334,334,533,599
+S212,imag,capture,209,235,599,674
+S212,imag,mitigated,1930,1930,3072,3463

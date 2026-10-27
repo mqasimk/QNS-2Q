@@ -149,6 +149,39 @@ python scripts/run_capture_arm.py    # NoSPAM arm (also runs Stage 2); run_spam_
 
 **Configuration:** Edit `QNSExperimentConfig` in the script.
 
+### Analytic finite-shot errors from saved showcase phases
+
+This is an exploratory analysis, not the uncertainty convention adopted by the
+manuscript. The paper retains errors from finite noise-realization ensembles
+with exact readout probabilities and no projection sampling.
+
+`scripts/postprocess_shot_noise.py` reprocesses the existing capture, reference,
+raw and mitigated data without generating trajectories or measurement outcomes.
+It excludes the SPAM-robust arm. Run with the repository venv:
+
+```bash
+venv/bin/python scripts/postprocess_shot_noise.py --pin 4241fbf --shots 256000 \
+    --output reports/decision30_analytic_shots_2026-10-25
+```
+
+This uses **256,000 independent physical measurements per observable/preparation
+setting**, retaining exact saved SPAM calibration. It computes multinomial
+moments, propagates through the nonlinear estimators to second order, and runs
+the pinned spectral inversion, uncertainty-weighted DC fits and existing comb
+bias-correction procedure. Original run data and paper figures are preserved.
+Read the separate output's `summary.txt`, `provenance.json` and
+`spectral_comparison.csv` before using the revised `specs.npz` files. These
+describe expected finite-shot uncertainty around probability-averaged means;
+they are not newly sampled experimental results or a coverage validation.
+The two local `phases.npz` caches are required and are not committed. A completed
+output retains their small ensemble phase moments for reproducible reprocessing.
+
+For review plots against the original data, run
+`venv/bin/python scripts/plot_shot_noise_comparison.py`. It writes matched-axis
+capture, combined SPAM and individual-arm PNGs under the analysis output's
+`plots/` directory, using the original showcase figure's total-error multiplier.
+It preserves the original paper figures and excludes the SPAM-robust arm.
+
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `T` | Total experiment time per block | `160 * tau` |

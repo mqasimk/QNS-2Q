@@ -1,0 +1,16 @@
+*.pdf binary
+reports/**/*.csv whitespace=cr-at-eol
+
+# Preserve the exact bytes of saved analysis/provenance artifacts.
+reports/decision30_analytic_shots_2026-10-25/** -text
+reports/repetition_forecast_2026-10-26/** -text
+reports/spectral_scale_forecast_2026-10-26/** -text
+reports/single_qubit_256k_2026-10-26/** -text
+reports/single_qubit_robust_256k_2026-10-26/** -text
+
+# Frozen execution snapshots and patches retain their original whitespace.
+reports/repetition_forecast_2026-10-26/_pinned_runtime/** -whitespace
+reports/single_qubit_256k_2026-10-26/_runtime/** -whitespace
+reports/single_qubit_robust_256k_2026-10-26/_runtime/** -whitespace
+reports/single_qubit_256k_2026-10-26/*.patch -whitespace
+reports/single_qubit_robust_256k_2026-10-26/*.patch -whitespace

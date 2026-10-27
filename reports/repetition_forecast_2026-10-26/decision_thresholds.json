@@ -1,0 +1,110 @@
+[
+  {
+    "spectrum": "S12",
+    "component": "real",
+    "arm": "capture",
+    "first_M_statistical_3": 4375,
+    "first_M_with_bias_3": 6144,
+    "first_M_statistical_5": 7851,
+    "first_M_with_bias_5": 11150
+  },
+  {
+    "spectrum": "S12",
+    "component": "real",
+    "arm": "mitigated",
+    "first_M_statistical_3": 4918,
+    "first_M_with_bias_3": 6984,
+    "first_M_statistical_5": 8825,
+    "first_M_with_bias_5": 12288
+  },
+  {
+    "spectrum": "S12",
+    "component": "imag",
+    "arm": "capture",
+    "first_M_statistical_3": 2438,
+    "first_M_with_bias_3": 2438,
+    "first_M_statistical_5": 3892,
+    "first_M_with_bias_5": 4096
+  },
+  {
+    "spectrum": "S12",
+    "component": "imag",
+    "arm": "mitigated",
+    "first_M_statistical_3": 2740,
+    "first_M_with_bias_3": 2740,
+    "first_M_statistical_5": 4375,
+    "first_M_with_bias_5": 4918
+  },
+  {
+    "spectrum": "S112",
+    "component": "real",
+    "arm": "capture",
+    "first_M_statistical_3": 16,
+    "first_M_with_bias_3": 16,
+    "first_M_statistical_5": 41,
+    "first_M_with_bias_5": 41
+  },
+  {
+    "spectrum": "S112",
+    "component": "real",
+    "arm": "mitigated",
+    "first_M_statistical_3": 147,
+    "first_M_with_bias_3": 147,
+    "first_M_statistical_5": 235,
+    "first_M_with_bias_5": 235
+  },
+  {
+    "spectrum": "S112",
+    "component": "imag",
+    "arm": "capture",
+    "first_M_statistical_3": 166,
+    "first_M_with_bias_3": 166,
+    "first_M_statistical_5": 422,
+    "first_M_with_bias_5": 474
+  },
+  {
+    "spectrum": "S112",
+    "component": "imag",
+    "arm": "mitigated",
+    "first_M_statistical_3": 599,
+    "first_M_with_bias_3": 674,
+    "first_M_statistical_5": 1209,
+    "first_M_with_bias_5": 1209
+  },
+  {
+    "spectrum": "S212",
+    "component": "real",
+    "arm": "capture",
+    "first_M_statistical_3": 13,
+    "first_M_with_bias_3": 13,
+    "first_M_statistical_5": 32,
+    "first_M_with_bias_5": 32
+  },
+  {
+    "spectrum": "S212",
+    "component": "real",
+    "arm": "mitigated",
+    "first_M_statistical_3": 334,
+    "first_M_with_bias_3": 334,
+    "first_M_statistical_5": 533,
+    "first_M_with_bias_5": 599
+  },
+  {
+    "spectrum": "S212",
+    "component": "imag",
+    "arm": "capture",
+    "first_M_statistical_3": 209,
+    "first_M_with_bias_3": 235,
+    "first_M_statistical_5": 599,
+    "first_M_with_bias_5": 674
+  },
+  {
+    "spectrum": "S212",
+    "component": "imag",
+    "arm": "mitigated",
+    "first_M_statistical_3": 1930,
+    "first_M_with_bias_3": 1930,
+    "first_M_statistical_5": 3072,
+    "first_M_with_bias_5": 3463
+  }
+]

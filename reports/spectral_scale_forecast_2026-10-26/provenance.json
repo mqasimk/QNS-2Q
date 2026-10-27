@@ -1,0 +1,10 @@
+{
+  "pin": "4241fbf",
+  "source_covariances": "/home/mqasimk/IdeaProjects/QNS-2Q/reports/repetition_forecast_2026-10-26/phase_covariances.npz",
+  "shots_per_setting": 256000,
+  "operation": "all self- and cross-spectra scaled uniformly by alpha; phase covariance scaled by alpha",
+  "trajectories_generated": false,
+  "outcomes_sampled": false,
+  "gate_optimization": false,
+  "spectrum_parameters_changed": false
+}

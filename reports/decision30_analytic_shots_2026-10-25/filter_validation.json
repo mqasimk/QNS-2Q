@@ -1,0 +1,5 @@
+{
+  "cached_filters": 268,
+  "maximum_probe_discrepancy": 7.7814322027754e-11,
+  "method": "segmented discrete trapezoid, checked against pinned quadrature"
+}

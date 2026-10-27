@@ -1,0 +1,60 @@
+Repetition forecast: decision notes
+Question: can more sequence repetitions resolve weak correlations at 256k physical shots, without new simulations?
+
+Yes for many components in the specified ideal Gaussian model. A uniform modest increase is not enough.
+The strongest line settings should retain shorter sequences; each acquisition can use its own M.
+All results use 256,000 independent physical measurements per observable/preparation/readout setting.
+
+Harmonic 13 (omega*tau = 13*2*pi/160 = 0.51050881): first tested M satisfying |S| > 3*SE + |comb bias|.
+These are grid-bracketed planning thresholds, not experimentally validated detection significances.
+  capture   S12  real: M=6144; statistical-only threshold M=4375
+  mitigated S12  real: M=6984; statistical-only threshold M=4918
+  capture   S12  imag: M=2438; statistical-only threshold M=2438
+  mitigated S12  imag: M=2740; statistical-only threshold M=2740
+  capture   S112 real: M=16; statistical-only threshold M=16
+  mitigated S112 real: M=147; statistical-only threshold M=147
+  capture   S112 imag: M=166; statistical-only threshold M=166
+  mitigated S112 imag: M=674; statistical-only threshold M=599
+  capture   S212 real: M=13; statistical-only threshold M=13
+  mitigated S212 real: M=334; statistical-only threshold M=334
+  capture   S212 imag: M=235; statistical-only threshold M=209
+  mitigated S212 imag: M=1930; statistical-only threshold M=1930
+
+Number of the 120 cross-spectrum components satisfying the same criterion:
+  capture   M <=     16: 19/120
+  capture   M <=    128: 27/120
+  capture   M <=   1024: 51/120
+  capture   M <=   4096: 69/120
+  capture   M <=   8192: 72/120
+  capture   M <=  16384: 74/120
+  capture   M <= 262144: 75/120
+  mitigated M <=     16: 2/120
+  mitigated M <=    128: 4/120
+  mitigated M <=   1024: 40/120
+  mitigated M <=   4096: 66/120
+  mitigated M <=   8192: 71/120
+  mitigated M <=  16384: 73/120
+  mitigated M <= 262144: 75/120
+
+Method and validation:
+  Scientific input: commit 4241fbf, showcase PSD and saved SPAM parameters.
+  The saved phase moments alone cannot determine the response of a different sequence.
+  Gaussian phase covariance is integrated deterministically with finite-M periodic filters.
+  The covariance-to-readout and second-order multinomial propagation are the prior saved-data implementation.
+  The exact ideal-control harmonic inverse is used; the pinned quadrature inverse differs by at most 0.172% in max-entry normalized error.
+  The original coarse-grid, sampled-toggle model was evaluated separately at M=10/16: 240 cross coefficients agree with saved values within 3.77 original Monte Carlo SE.
+  Doubling the frequency/lag resolution changes the checked valid coefficient SEs by at most 1.48e-08 relative.
+  Doubling the modeled bandwidth changes checked harmonic-13 coefficient SEs by up to 4.49%; use rounded planning thresholds.
+
+Limits and interpretation:
+  This is a model-dependent forecast, not new experimental data, a calibrated coverage test, or revised paper results.
+  The main scan preserves the original noise bandwidth, 0 <= omega*tau <= pi/2, while replacing its coarse frequency discretization by a converged continuum integral.
+  Pulse timings are ideal continuous library sequences; original sampled-toggle and coarse-grid artifacts are not extrapolated.
+  M is the number of T=160*tau blocks. Raising M from 16 to 6144 lengthens that setting by 384x at fixed shot count.
+  Pulse imperfections, relaxation, calibration error, and experimental drift are absent; large M must be checked against those limits.
+  Bias allowance uses the known input model: finite-M plus harmonic-truncation bias of the raw linear inverse. No DC refit or existing nonlinear comb-bias correction was run.
+  The choice of M is informed by the known showcase model. A blind experiment would need a pilot/adaptive procedure and its acquisition cost.
+  SPAM robust is excluded. Raw biased reconstructions are not treated as detections. No gate optimization or figure replacement.
+
+Outputs: repetition_sensitivity.png; decision_thresholds.csv; adaptive_sensitivity.csv; spectral_sensitivity.csv;
+         coefficient_sensitivity.npz; phase_covariances.npz; baseline/integration/inverse validation JSON; provenance.json.

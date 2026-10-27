@@ -1,0 +1,17 @@
+{
+  "pin": "4241fbf457ba2fabb9a0c5e1d936dec95c231a25",
+  "shots_per_setting": 256000,
+  "runs": [
+    "DraftRun_NoSPAM_showcase_cap",
+    "DraftRun_SPAM_showcase_reference",
+    "DraftRun_SPAM_showcase_raw",
+    "DraftRun_SPAM_showcase_mitigated"
+  ],
+  "uncertainty_model": "analytic_multinomial_independent_settings_delta2",
+  "calibration": "saved exact calibration; no calibration-shot uncertainty",
+  "systematics": "pinned unfolding and residual-error prescription retained",
+  "noise_generation": false,
+  "measurement_outcome_sampling": false,
+  "optimization": false,
+  "figure_generation": false
+}

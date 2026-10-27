@@ -1,0 +1,11 @@
+{
+  "forecast_and_statistical_tests_passed": 24,
+  "pinned_tests_passed": 33,
+  "total_passed": 57,
+  "original_data_hashes_verified": 12,
+  "implementation_sha256": {
+    "scripts/forecast_repetition_sensitivity.py": "c83b174091a92e3979911425c72784998595358ed8714bd4267f99739ff3f426",
+    "scripts/report_repetition_forecast.py": "ca91077391fe01ecd5c764164a3040320180b6b51cf35d4505d1e4b4957f2aa6",
+    "tests/test_repetition_forecast.py": "a86957c64eb9b9c9c995b3d7f08fd74e3cbb2330aa8b157a29ae9a737547d802"
+  }
+}

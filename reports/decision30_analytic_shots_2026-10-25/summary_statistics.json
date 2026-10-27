@@ -1,0 +1,18 @@
+{
+  "DraftRun_NoSPAM_showcase_cap": {
+    "real_harmonic_components": 180,
+    "median_statistical_error_multiplier": 64.87265792833495
+  },
+  "DraftRun_SPAM_showcase_reference": {
+    "real_harmonic_components": 180,
+    "median_statistical_error_multiplier": 80.26733296214323
+  },
+  "DraftRun_SPAM_showcase_raw": {
+    "real_harmonic_components": 180,
+    "median_statistical_error_multiplier": 293.7988112126891
+  },
+  "DraftRun_SPAM_showcase_mitigated": {
+    "real_harmonic_components": 180,
+    "median_statistical_error_multiplier": 931.1151941690084
+  }
+}
